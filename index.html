@@ -1,0 +1,1793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Work Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sticky steel app bar (brand, user, tabs) over a single column of cards, max 1000px.
+   Steel blue drives actions; copper marks the brand and the current position in the day. */
+:root{
+  --bg:#ffffff; --card:#f6f6f6; --soft:#ffffff; --ink:#1d1d1d; --muted:#686868; --line:#e1e1e1;
+  --bar:#0d2a63; --bar-2:rgba(255,255,255,.12); --bar-ink:#ffffff; --bar-muted:rgba(255,255,255,.74);
+  --accent:#1a5ed4; --accent-hover:#154db0; --accent-ink:#ffffff; --accent-soft:#e7effc;
+  --brand:#f15928; --brand-soft:#fdebe3;
+  --imp:#b4400a; --imp-bg:#fff0e6; --mod:#855700; --mod-bg:#fcf2d6; --daily:#0d6b64; --daily-bg:#e0f3f0;
+  --emg:#c42b1c; --emg-bg:#fde8e6; --ok:#17733c; --ok-bg:#e3f3e9; --lock:#4b4b4b; --lock-bg:#ececec;
+  --asg:#1a5ed4; --asg-bg:#e7effc;
+  --demo-bg:#fff9e8; --demo-line:#e3cb80;
+  --f-display:"Uncut Sans","Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-body:"Uncut Sans","Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"Uncut Sans","Hanken Grotesk",system-ui,sans-serif;
+  --r:22px; --r-s:14px;
+  --shadow:none;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0d10; --card:#15181d; --soft:#0f1216; --ink:#f2f2f2; --muted:#a3a7ae; --line:#2a2f37;
+    --bar:#0a1a3d; --bar-2:rgba(255,255,255,.1); --bar-ink:#ffffff; --bar-muted:rgba(255,255,255,.7);
+    --accent:#6d9cf5; --accent-hover:#8db2f7; --accent-ink:#0b0d10; --accent-soft:#16233b;
+    --brand:#ff7a4d; --brand-soft:#3a2117;
+    --imp:#ff9d62; --imp-bg:#3a2216; --mod:#efc35c; --mod-bg:#342a12; --daily:#56d2c2; --daily-bg:#12322f;
+    --emg:#ff8a80; --emg-bg:#3b1816; --ok:#62d493; --ok-bg:#15301f; --lock:#b8bcc3; --lock-bg:#23272e;
+    --asg:#8db2f7; --asg-bg:#16233b;
+    --demo-bg:#2a2614; --demo-line:#5c5124;
+    --shadow:none; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+    --bg:#0b0d10; --card:#15181d; --soft:#0f1216; --ink:#f2f2f2; --muted:#a3a7ae; --line:#2a2f37;
+    --bar:#0a1a3d; --bar-2:rgba(255,255,255,.1); --bar-ink:#ffffff; --bar-muted:rgba(255,255,255,.7);
+    --accent:#6d9cf5; --accent-hover:#8db2f7; --accent-ink:#0b0d10; --accent-soft:#16233b;
+    --brand:#ff7a4d; --brand-soft:#3a2117;
+    --imp:#ff9d62; --imp-bg:#3a2216; --mod:#efc35c; --mod-bg:#342a12; --daily:#56d2c2; --daily-bg:#12322f;
+    --emg:#ff8a80; --emg-bg:#3b1816; --ok:#62d493; --ok-bg:#15301f; --lock:#b8bcc3; --lock-bg:#23272e;
+    --asg:#8db2f7; --asg-bg:#16233b;
+    --demo-bg:#2a2614; --demo-line:#5c5124;
+    --shadow:none; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body)}
+.wrap{max-width:1000px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+h1,h2{font-family:var(--f-display);letter-spacing:.01em;text-wrap:balance}
+h1{font-size:22px;font-weight:700;margin:0;line-height:1.1}
+h2{font-size:20px;font-weight:600;margin:0;line-height:1.2}
+h3.sub{font:600 12px var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:20px 0 8px}
+a{color:var(--accent)}
+
+/* prototype bars */
+.demo,.trial{border-radius:var(--r-s);padding:10px 12px;margin-bottom:12px;font-size:13px}
+.demo{background:var(--demo-bg);border:1px dashed var(--demo-line)}
+.trial{background:var(--emg-bg);border:1.5px solid var(--emg)}
+.demo .row,.trial .row{gap:8px;align-items:center}
+.demo b,.trial b.t{font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+.trial b.t{color:var(--emg)}
+.demo input,.demo select,.trial input,.trial select{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);max-width:100%}
+.trial label{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:100%}
+.trial details{margin-top:8px}.trial summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.trial ol{margin:6px 0 0;padding-left:20px;color:var(--ink)}
+.trial li{margin:3px 0}
+.demo .hint{margin-top:6px}
+.demo .btn.sm,.trial .btn.sm{min-height:32px}
+
+/* app bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;
+  background:var(--bar);color:var(--bar-ink);border-radius:var(--r);padding:12px 14px 10px;margin-bottom:16px;box-shadow:0 6px 20px rgba(10,15,20,.18)}
+.top>.row{display:contents}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.mark{flex:none;width:38px;height:38px;border-radius:10px;background:var(--brand);color:#fff;display:grid;place-items:center;font:700 16px var(--f-display);letter-spacing:.04em}
+.clock{color:var(--bar-muted);font:500 12.5px var(--f-mono);font-variant-numeric:tabular-nums;margin-top:2px}
+.top .who{grid-column:2;grid-row:1;justify-self:end}
+.top .tabs{grid-column:1/-1}
+.who{display:flex;align-items:center;gap:8px;font-size:14px;min-width:0;max-width:100%}
+.who select{max-width:100%;min-width:0}
+.whoname{font-size:14px;line-height:1.2;text-align:right}.whoname small{color:var(--bar-muted)}
+.top .btn.ghost{background:transparent;color:var(--bar-ink);border-color:rgba(255,255,255,.22)}
+.top .btn.ghost:hover{background:rgba(255,255,255,.08)}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;background:var(--bar-2);border-radius:var(--r-s);padding:4px;max-width:100%}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:0;background:none;padding:8px 14px;border-radius:8px;cursor:pointer;color:var(--bar-muted);font-weight:500;white-space:nowrap}
+.tabs button:hover{color:var(--bar-ink)}
+.tabs button.on{background:var(--card);color:var(--ink);box-shadow:inset 0 -2px 0 var(--brand)}
+.bell{display:inline-flex;align-items:center;gap:6px;position:relative}
+.bell .cnt{background:var(--emg);color:#fff;border-radius:99px;font-size:11px;font-weight:700;padding:0 6px;line-height:18px}
+.sel{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card)}
+
+/* day timeline */
+.tl{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-bottom:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.st{padding:12px 14px;display:flex;flex-direction:column;position:relative;border-right:1px solid var(--line)}
+.st:last-child{border-right:0}
+.st b{font:600 16px var(--f-display)}.st span{font:500 12px var(--f-mono);color:var(--muted)}
+.st.on{background:var(--brand-soft)}
+.st.on::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--brand)}
+.st.on b::after{content:" · now";color:var(--brand);font-weight:600}
+.st.done{opacity:.55}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:var(--shadow);min-width:0}
+.sec-h{display:flex;justify-content:space-between;align-items:center;gap:8px 12px;margin-bottom:12px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;border-radius:99px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.open{background:var(--ok-bg);color:var(--ok)}
+.pill.locked{background:var(--lock-bg);color:var(--lock)}
+.pill.soon{background:var(--mod-bg);color:var(--mod)}
+.pill.miss{background:var(--emg-bg);color:var(--emg)}
+.note{background:var(--soft);border:1px solid var(--line);border-radius:var(--r-s);padding:11px 13px;color:var(--muted);font-size:14px;display:flex;gap:8px;align-items:center}
+.note svg{flex:none}
+.note.bad{background:var(--emg-bg);color:var(--emg);border-color:transparent}
+.empty{color:var(--muted);font-size:14px;padding:6px 0}
+.ok-msg{background:var(--ok-bg);color:var(--ok);border-radius:var(--r-s);padding:10px 12px;font-size:14px;margin-bottom:12px;font-weight:600}
+.hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+
+/* forms */
+.tform{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:var(--soft);margin-bottom:8px}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+.row.end{justify-content:flex-end;margin-top:10px}
+.f{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:500;color:var(--muted);margin:0 0 12px;border:0;padding:0;min-width:0}
+.f.grow{flex:1;min-width:200px}
+.f input,.f textarea,.f select{padding:10px 12px;min-height:44px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card);color:var(--ink);width:100%;font-weight:400}
+.f input:focus,.f textarea:focus,.f select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.f textarea{resize:vertical;min-height:72px}
+.f.days{width:150px}
+legend{padding:0;margin-bottom:5px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg label{cursor:pointer;position:relative}
+.seg input,.f .seg input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;min-height:0;padding:0;border:0}
+.seg span{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card);color:var(--ink);font-size:14px;font-weight:500}
+.seg input:checked+span{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.seg input:focus-visible+span{outline:2px solid var(--brand);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:0 18px;border-radius:var(--r-s);cursor:pointer;font-weight:600;transition:background .15s}
+.btn:hover{background:var(--accent-hover)}
+.btn.ghost{background:var(--card);color:var(--ink);border-color:var(--line);font-weight:500}
+.btn.ghost:hover{background:var(--soft)}
+.btn.sm{min-height:34px;padding:0 12px;font-size:13px}
+.btn.danger{color:var(--emg)}
+.btn[disabled]{opacity:.6;cursor:wait}
+.err{color:var(--emg);font-size:13px;margin-top:4px}
+.req{color:var(--emg);font-weight:400}
+
+/* tasks */
+.task{border:1px solid var(--line);border-radius:var(--r-s);padding:12px 14px;margin-bottom:8px;background:var(--card)}
+.task-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.task-title{font-weight:600}
+.task-det{color:var(--muted);font-size:14px;margin-top:2px;white-space:pre-wrap}
+.acts{display:flex;gap:6px;flex-shrink:0}
+.lockic{color:var(--lock);flex-shrink:0;display:inline-flex}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.b{font-size:12px;padding:2px 8px;border-radius:6px;background:var(--lock-bg);color:var(--lock);white-space:nowrap}
+.b.p-Important{background:var(--imp-bg);color:var(--imp);font-weight:600}
+.b.p-Moderate{background:var(--mod-bg);color:var(--mod);font-weight:600}
+.b.p-Daily{background:var(--daily-bg);color:var(--daily);font-weight:600}
+.b.p-Emergency,.b.emg{background:var(--emg-bg);color:var(--emg);font-weight:600}
+.b.asg{background:var(--asg-bg);color:var(--asg);font-weight:600}
+.bar{margin-top:8px;font-size:12px;color:var(--muted)}
+.bar .trk{height:6px;background:var(--lock-bg);border-radius:99px;overflow:hidden;margin-top:4px}
+.bar .fil{height:100%;background:var(--accent)}
+.bar .fil.full{background:var(--ok)}
+
+/* closure rows */
+.crow{border:1px solid var(--line);border-radius:var(--r-s);padding:14px;margin-bottom:10px;background:var(--card);min-width:0}
+.crow.bad{border-color:var(--emg);box-shadow:0 0 0 3px var(--emg-bg)}
+.ctitle{font-weight:600;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.prog{display:flex;align-items:center;gap:10px;margin:12px 0 4px}
+.prog input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+.prog input[type=number]{width:76px;min-height:40px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card)}
+.just{margin-top:8px}
+.wc{font-size:12px;color:var(--emg);text-align:right;margin-top:-8px}
+.wc.ok{color:var(--ok)}
+
+/* reports */
+.rep{width:100%;border-collapse:collapse;font-size:14px}
+.rep th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:8px}
+.rep td{border-bottom:1px solid var(--line);padding:10px 8px;vertical-align:top}
+.rep .pct,.pct{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pct.full{color:var(--ok)}.pct.part{color:var(--imp)}
+.sum{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+.sum div{background:var(--soft);border:1px solid var(--line);border-radius:var(--r-s);padding:7px 12px;font-size:13px;color:var(--muted)}
+.sum b{color:var(--ink);font:700 18px var(--f-display);margin-right:4px}
+.review{margin-top:12px;border-left:3px solid var(--brand);background:var(--soft);padding:10px 12px;border-radius:0 var(--r-s) var(--r-s) 0}
+.review .meta{font-size:12px;color:var(--muted)}
+.review p{margin:4px 0 0;white-space:pre-wrap}
+.tscroll{overflow-x:auto}
+
+/* dashboard */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.tile{background:var(--soft);border:1px solid var(--line);border-radius:var(--r-s);padding:12px 14px;min-width:0}
+.tile .v{font:700 28px/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile.warn{background:var(--emg-bg);border-color:transparent}
+.tile.warn .v{color:var(--emg)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.filters input,.filters select{min-height:40px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card)}
+.filters input[type=search]{flex:1;min-width:160px}
+.filters select,.filters label{max-width:100%;min-width:0}
+.att{list-style:none;margin:0;padding:0}
+.att li{display:block;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.att li:last-child{border-bottom:0}
+.team-h{font:600 12px var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:18px 0 8px}
+.prow{border:1px solid var(--line);border-radius:var(--r-s);margin-bottom:6px;background:var(--card);overflow:hidden;max-width:100%}
+.prow>summary,.phead{display:grid;grid-template-columns:minmax(180px,2fr) 170px repeat(4,minmax(60px,1fr)) 24px;gap:8px;align-items:center}
+.prow>summary{list-style:none;cursor:pointer;padding:10px 14px}
+.prow>summary:hover{background:var(--soft)}
+.prow>summary::-webkit-details-marker{display:none}
+.prow>summary .chev{transition:transform .15s;color:var(--muted)}
+.prow[open]>summary .chev{transform:rotate(90deg)}
+.prow .nm b{display:block}.prow .nm span{font-size:12px;color:var(--muted)}
+.prow .num{font-size:14px;text-align:center;font-variant-numeric:tabular-nums}.prow .num small{display:block;font-size:11px;color:var(--muted)}
+.prow .body{padding:0 14px 12px;border-top:1px solid var(--line)}
+.phead{padding:0 14px 6px;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.phead span:not(:first-child){text-align:center}
+.mini{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.mini td,.mini th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.mini th{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+
+/* field + meetings */
+.geo{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft),var(--shadow)}
+.geo-btn{min-height:52px;font-size:16px;padding:0 22px;border-radius:12px}
+.ci{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.ci:last-child{border-bottom:0}
+.ci .tm{font:600 14px var(--f-mono);min-width:52px;font-variant-numeric:tabular-nums}
+.mtg .review{margin-top:8px}
+.login{max-width:460px;margin:28px auto}
+.login .mark{width:48px;height:48px;font-size:20px;margin-bottom:12px}
+.login-gate{text-align:center}
+.login-gate .geo-btn{width:100%;min-height:60px;font-size:17px}
+#toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:calc(16px + env(safe-area-inset-top,0px));max-width:360px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:var(--r-s);padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:2px;z-index:50;font-size:14px;cursor:pointer}
+#toast b{color:var(--brand)} #toast small{color:var(--muted)}
+#toast .x{align-self:flex-end;font-size:12px;color:var(--muted);text-decoration:underline}
+
+/* clock-face time picker */
+.clk{display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;width:100%;max-width:300px}
+.clk-top{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}
+.clk-read{font:600 26px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+.clk-ap{display:flex;gap:4px}
+.clk-ap button{min-height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:pointer;font-weight:600;font-size:13px}
+.clk-ap button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.clk-face{width:100%;max-width:240px;aspect-ratio:1;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.clk-bg{fill:var(--soft);stroke:var(--line);stroke-width:2}
+.clk-tk{stroke:var(--muted);stroke-width:1;opacity:.5}
+.clk-tk.big{stroke-width:2.5;opacity:.9}
+.clk-n{fill:var(--ink);font:600 15px var(--f-body);text-anchor:middle;dominant-baseline:central}
+.clk-hl{stroke:var(--ink);stroke-width:7;stroke-linecap:round}
+.clk-ml{stroke:var(--accent);stroke-width:4;stroke-linecap:round}
+.clk-hk{fill:var(--ink)} .clk-mk{fill:var(--accent)}
+.hand{cursor:grab;outline:none}
+.hand:focus-visible .clk-hk,.hand:focus-visible .clk-mk{stroke:var(--brand);stroke-width:4}
+.clk-c{fill:var(--brand)}
+.clk-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+
+
+/* meeting diary + login chip */
+.chat{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;padding:10px;background:var(--soft);border:1px solid var(--line);border-radius:var(--r-s);margin-bottom:8px}
+.bub{align-self:flex-end;max-width:85%;background:var(--accent-soft);border:1px solid var(--line);border-radius:12px 12px 4px 12px;padding:7px 10px}
+.bub p{margin:0;white-space:pre-wrap;font-size:14px}
+.bub span{display:block;text-align:right;font:500 11px var(--f-mono);color:var(--muted);margin-top:2px}
+.chatf{display:flex;gap:8px;align-items:flex-end}
+.chatf textarea{flex:1;min-width:0;min-height:44px;max-height:140px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card);resize:vertical}
+.chatf textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.lgchip{font:600 12.5px var(--f-mono);font-variant-numeric:tabular-nums;background:rgba(255,255,255,.1);color:var(--bar-ink);border:1px solid rgba(255,255,255,.18);border-radius:99px;padding:5px 11px;white-space:nowrap}
+.lgchip.late{color:#ffb4a8;border-color:rgba(255,140,120,.5)}
+
+/* ===== Corporate style layer: white page, grey rounded panels, blue pill buttons with arrow, orange rule ===== */
+body{letter-spacing:-.005em}
+h1,h2{font-weight:500;letter-spacing:-.025em}
+h2{font-size:25px;line-height:1.1}
+h1{font-size:23px}
+h3.sub,.team-h{font:500 14px var(--f-body);text-transform:none;letter-spacing:0;color:var(--ink);display:flex;align-items:center;gap:8px}
+h3.sub::before,.team-h::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.card{background:var(--card);border:0;border-radius:var(--r);box-shadow:none;padding:24px}
+.sec-h{padding-bottom:14px;border-bottom:1px solid var(--brand);margin-bottom:18px}
+.crow,.task,.prow,.clk,.tform,.chat{background:var(--bg);border-color:var(--line)}
+.crow,.task,.prow{border-radius:var(--r-s)}
+.tform{border:0;border-radius:18px}
+.f input,.f textarea,.f select,.chatf textarea,.filters input,.filters select,.sel,.prog input[type=number],.demo input,.demo select,.trial input,.trial select{background:var(--card);border-color:transparent;border-radius:12px}
+.card .f input,.card .f textarea,.card .f select,.card .filters input,.card .filters select,.card .sel{background:var(--bg);border-color:var(--line)}
+.card .crow .f input,.card .crow .f textarea,.card .crow .f select,.tform .f input,.tform .f textarea,.tform .f select,.chatf textarea{background:var(--card);border-color:transparent}
+.f input:focus,.f textarea:focus,.f select:focus,.chatf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:var(--bg)}
+.btn{border-radius:999px;font-weight:500;padding:0 22px;min-height:46px}
+.btn:not(.ghost):not(.sm){padding:0 7px 0 22px;gap:14px}
+.btn:not(.ghost):not(.sm)::after{content:"";flex:none;width:32px;height:32px;border-radius:50%;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a5ed4' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M9 7h8v8'/%3E%3C/svg%3E") center/15px no-repeat}
+.btn.ghost{background:transparent;border:1px solid var(--ink);color:var(--ink)}
+.btn.ghost:hover{background:var(--ink);color:var(--bg)}
+.btn.ghost.danger{border-color:var(--emg);color:var(--emg)}
+.btn.sm{min-height:36px;padding:0 14px}
+.seg span{border-radius:999px;background:var(--bg)}
+.b{border-radius:999px;padding:2px 10px}
+.note{background:var(--bg);border:0;border-radius:var(--r-s)}
+.sum div{background:var(--bg);border:0;border-radius:999px}
+.review{border-left-color:var(--accent);background:var(--card);border-radius:0 12px 12px 0}
+.crow .review,.task .review{background:var(--card)}
+/* app bar like a hero band */
+.top{background:linear-gradient(115deg,#0a1f4d 0%,#123f94 55%,#1a5ed4 100%);border-radius:var(--r);box-shadow:none;padding:14px 16px 12px}
+.mark{border-radius:50%;background:#fff;color:#1a5ed4;font-family:var(--f-display)}
+.login .mark{background:var(--accent);color:var(--accent-ink)}
+.top .btn.ghost{border-color:rgba(255,255,255,.55);color:#fff;background:transparent}
+.top .btn.ghost:hover{background:rgba(255,255,255,.14);color:#fff}
+.tabs{background:var(--bar-2);border-radius:999px;padding:4px}
+.tabs button{border-radius:999px;color:rgba(255,255,255,.82)}
+.tabs button.on{background:#fff;color:#1d1d1d;box-shadow:none}
+.lgchip{border-radius:999px}
+/* day timeline */
+.tl{background:var(--card);border:0;border-radius:var(--r)}
+.st{border-color:var(--line)}
+.st b{font:500 17px var(--f-display);letter-spacing:-.01em}
+.st span{font:400 13px var(--f-body)}
+.st.on{background:var(--bg)}
+.st.on::before{background:var(--brand)}
+.st.on b::after{color:var(--brand)}
+/* stats like big figures with a rule */
+.tiles{gap:4px 22px}
+.tile{background:transparent;border:0;border-bottom:1px solid var(--ink);border-radius:0;padding:10px 0 12px}
+.tile .v{font:500 36px/1.05 var(--f-display);letter-spacing:-.035em}
+.tile.warn{background:transparent;border-bottom-color:var(--emg)}
+.sum b{font:600 18px var(--f-display)}
+/* accordion rows with a blue plus */
+.prow>summary:hover{background:var(--card)}
+.prow .chev{font-size:0;line-height:1;transition:transform .2s}
+.prow .chev::after{content:"+";font:400 26px/1 var(--f-body);color:var(--accent)}
+.prow[open]>summary .chev{transform:rotate(45deg)}
+/* meetings */
+.geo{border:1.5px solid var(--accent);box-shadow:none}
+.geo-btn{border-radius:999px}
+.bub{background:var(--accent);color:var(--accent-ink);border:0;border-radius:16px 16px 4px 16px}
+.bub span{color:inherit;opacity:.75}
+.chat{border:0;background:var(--card)}
+.clk{border:0;background:var(--card)}
+.clk-bg{fill:var(--bg);stroke:var(--line)}
+.clk-read{font:500 30px var(--f-display);letter-spacing:-.02em}
+.clk-ap button{border-radius:999px;background:var(--bg)}
+.ci .tm{font:600 14px var(--f-body)}
+.clock{font:400 13px var(--f-body)}
+.login h2{font-size:34px;line-height:1.02;letter-spacing:-.035em;margin-top:6px}
+.login-gate h2{font-size:30px}
+#toast{border-radius:var(--r-s);border-left-color:var(--brand)}
+.pill{border-radius:999px}
+
+
+/* person finder */
+.pick{position:relative;min-width:0}
+.pick-box{display:flex;align-items:center;gap:0;position:relative}
+.pick-box svg{position:absolute;left:14px;color:var(--muted);pointer-events:none}
+.pick .pick-box input.pick-in{flex:1;min-width:0;min-height:46px;padding:10px 44px 10px 42px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);font:inherit}
+.pick .pick-box input.pick-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pick-tg{position:absolute;right:6px;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer;font-size:14px}
+.pick-tg:hover{background:var(--card)}
+.pick-list{position:absolute;z-index:30;left:0;right:0;top:100%;margin:6px 0 0;padding:6px;list-style:none;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 34px rgba(0,0,0,.14);max-height:340px;overflow:auto}
+.pick-list li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer}
+.pick-list li small{color:var(--muted);text-align:right}
+.pick-list li.act,.pick-list li:hover{background:var(--accent-soft)}
+.pick-list li.grp{cursor:default;padding:8px 12px 4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:none}
+.pick-list mark{background:none;color:var(--accent);font-weight:700}
+.pick-list .none{cursor:default;color:var(--muted)}
+.finder-card{background:linear-gradient(115deg,var(--accent-soft),var(--card))}
+.finder-card .pick .pick-box input.pick-in{min-height:58px;font-size:18px;padding-left:48px;border-width:1.5px;border-color:var(--accent)}
+.finder-card .pick-box svg{left:18px}
+.selp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+/* voice typing */
+.stt{position:relative;display:block;min-width:0}
+.stt>input,.stt>textarea{padding-right:52px!important;width:100%}
+.stt-btn{position:absolute;right:7px;bottom:6px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--bg);color:var(--accent);display:grid;place-items:center;cursor:pointer;padding:0}
+.stt>input+.stt-btn{bottom:auto;top:50%;transform:translateY(-50%)}
+.stt-btn:hover{background:var(--accent-soft)}
+.stt-btn.rec{background:var(--emg);border-color:var(--emg);color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(196,43,28,.45)}70%{box-shadow:0 0 0 10px rgba(196,43,28,0)}100%{box-shadow:0 0 0 0 rgba(196,43,28,0)}}
+.chatf .stt{flex:1}
+/* MoM helper + prep */
+.ai-out{white-space:pre-wrap;background:var(--bg);border-radius:12px;padding:12px 14px;margin:10px 0;font-size:14px;line-height:1.55}
+.helper{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.prep{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--card)}
+.prep summary{cursor:pointer;font-weight:600}
+.prep ul{margin:8px 0;padding-left:20px;font-size:14px}
+.prep li{margin:3px 0}
+@media (max-width:720px){
+  .phead{display:none}
+  .prow>summary{grid-template-columns:minmax(0,1fr) auto}
+  .prow>summary .num,.prow>summary .chev{display:none}
+}
+@media (max-width:640px){
+  .top{grid-template-columns:minmax(0,1fr)!important}
+  .top .who{grid-column:1;grid-row:auto;justify-self:start;flex-wrap:wrap}
+  .top h1{white-space:nowrap;font-size:20px}
+  .top{border-radius:0;margin:-16px calc(-1 * max(16px,env(safe-area-inset-left,0px))) 14px;padding:10px max(16px,env(safe-area-inset-left,0px)) 8px}
+  h1{font-size:19px}
+  .whoname{display:none}
+  .tl{grid-template-columns:1fr}
+  .st{border-right:0;border-bottom:1px solid var(--line)}
+  .st:last-child{border-bottom:0}
+  .f.days,.f.grow{width:100%;min-width:0}
+  .rep thead{display:none}
+  .rep tr{display:block;border-bottom:1px solid var(--line);padding:6px 0}
+  .rep td{display:block;border:0;padding:3px 0}
+  .filters>*{flex:1 1 100%}.filters select{width:100%}
+  .card{padding:14px}
+  .clk{max-width:none}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+
+  <div class="top">
+    <div class="brand"><span class="mark" aria-hidden="true">AY</span>
+      <div><h1>Daily Work Portal</h1><div class="clock" id="clock"></div></div>
+    </div>
+    <div class="row" style="align-items:center">
+      <div class="who" id="whoBox"></div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+    </div>
+  </div>
+
+  <main id="main"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+/* =====================================================================
+   CONFIGURATION — edit here
+   ===================================================================== */
+const CONFIG = {
+  planOpen:    '09:00',   // morning plan opens
+  planClose:   '09:45',   // morning plan locks; extra work starts
+  closureOpen: '18:00',   // closure report opens; extra work ends
+  minWords:    12,
+  timeZone:    'Asia/Dubai'   // all windows run on UAE time, whatever the device's time zone
+};
+
+/* Closure report deadline by role (same day). */
+const CLOSURE_DEADLINE = {
+  'Staff':           '22:00',   // ASSUMPTION — not yet confirmed
+  'Manager':         '22:00',
+  'General Manager': '23:59'
+};
+
+/* STAFF LIST — loaded from the database after login (table "people"). No names are kept in this file. */
+let USERS = [];
+/* Roles that do not submit their own daily reports */
+const NO_OWN_REPORT = ['CEO'];
+
+const PLAN_PRI  = ['Important','Moderate','Daily Work'];
+const EXTRA_PRI = ['Emergency','Important'];
+const RANK = { 'Emergency':0, 'Important':1, 'Moderate':2, 'Daily Work':3 };
+const DB_KEY = 'dwp_db_v3', UI_KEY = 'dwp_ui_v3';
+const LOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="Locked"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
+/* ===== Helpers ===== */
+const pad = n => String(n).padStart(2,'0');
+const dstr = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); };
+const addDays = (s,n) => { const d = parse(s); d.setDate(d.getDate()+n); return dstr(d); };
+const diffDays = (a,b) => Math.round((parse(b)-parse(a))/86400000);
+const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+const fmtDate = s => parse(s).toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+const fmtShort = s => parse(s).toLocaleDateString(undefined,{day:'numeric',month:'short'});
+const fmtStamp = iso => new Date(iso).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:CONFIG.timeZone});
+const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const words = s => (s||'').trim().split(/\s+/).filter(Boolean).length;
+const uid = () => Math.random().toString(36).slice(2,10);
+const getUser = id => USERS.find(u=>u.id===id) || { id, name:id, title:'', role:'', managers:[] };
+const userName = id => getUser(id).name;
+const reportsOf = id => USERS.filter(u=>u.managers.includes(id));
+const mgrNames = id => getUser(id).managers.map(userName).join(' & ') || '—';
+const hasOwnReport = id => !NO_OWN_REPORT.includes(getUser(id).role);
+const deadlineOf = id => CLOSURE_DEADLINE[getUser(id).role] || '22:00';
+
+function load(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
+function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+/* ===== Shared data: Supabase database (table "records") ===== */
+const COLS = ['tasks','closures','meetings','notifications','checkins'];
+let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[] };
+let ui = load(UI_KEY, null) || { view:'staff', reviewDate:null };
+ui.user = null; ui.authed = false; ui.editing = null;
+let sb = null, LOCS = {}, booting = true, saveErrShown = false;
+const shadow = {}; COLS.forEach(c=>{ shadow[c] = new Map(); });
+const writeQ = new Map();
+function itemsOf(c){ return c==='closures' ? Object.entries(db.closures) : db[c].map(x=>[x.id, x]); }
+function queueWrite(key, fn){ const p = (writeQ.get(key)||Promise.resolve()).then(fn).catch(writeErr); writeQ.set(key, p); }
+function writeErr(e){
+  if (saveErrShown) return; saveErrShown = true; setTimeout(()=>{ saveErrShown = false; }, 15000);
+  tip('Not saved', (e && e.message ? e.message+'. ' : '') + 'Check your internet connection. Your last change may not have reached the server.');
+}
+function syncAll(){
+  if (!sb || !ui.authed) return;
+  COLS.forEach(c=>{
+    const seen = new Set();
+    itemsOf(c).forEach(([id, val])=>{
+      seen.add(id); const j = JSON.stringify(val);
+      if (shadow[c].get(id) !== j){ shadow[c].set(id, j); const data = JSON.parse(j);
+        queueWrite(c+'/'+id, ()=>sb.from('records').upsert({ collection:c, id, data }).then(r=>{ if (r.error) throw r.error; })); }
+    });
+    [...shadow[c].keys()].forEach(id=>{ if (!seen.has(id)){ shadow[c].delete(id);
+      queueWrite(c+'/'+id, ()=>sb.from('records').delete().eq('collection', c).eq('id', id).then(r=>{ if (r.error) throw r.error; })); } });
+  });
+}
+function applyRemote(c, id, data){
+  if (!data){ shadow[c].delete(id); if (c==='closures') delete db.closures[id]; else db[c] = db[c].filter(x=>x.id!==id); return; }
+  shadow[c].set(id, JSON.stringify(data));
+  if (c==='closures') db.closures[id] = data;
+  else { const i = db[c].findIndex(x=>x.id===id); if (i>=0) db[c][i] = data; else db[c].push(data); }
+}
+const save = () => { store(UI_KEY, { view:ui.view, reviewDate:ui.reviewDate }); syncAll(); };
+
+/* Current date/time from the system clock, read in UAE time. Not user-adjustable. */
+const DTF = new Intl.DateTimeFormat('en-GB',{ timeZone:CONFIG.timeZone, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23' });
+function now(){
+  const p = Object.fromEntries(DTF.formatToParts(new Date()).map(x=>[x.type,x.value]));
+  const h = +p.hour % 24, m = +p.minute;
+  return { date:`${p.year}-${p.month}-${p.day}`, mins:h*60+m, label:pad(h)+':'+pad(m) };
+}
+/* Phase for a specific person (closure deadline depends on role) */
+function phaseFor(m, userId){
+  if (m <  toMins(CONFIG.planOpen))    return 'before';
+  if (m <  toMins(CONFIG.planClose))   return 'plan';
+  if (m <  toMins(CONFIG.closureOpen)) return 'extra';
+  if (m <= toMins(deadlineOf(userId))) return 'closure';
+  return 'over';
+}
+/* Assignment by a manager: before 09:45 → plan, 09:45–18:00 → extra, otherwise closed */
+function assignMode(m){
+  if (m < toMins(CONFIG.planClose))   return 'plan';
+  if (m < toMins(CONFIG.closureOpen)) return 'extra';
+  return 'closed';
+}
+const ORDER = { before:0, plan:1, extra:2, closure:3, over:4 };
+
+function activeTasks(owner, date){
+  return db.tasks.filter(t => t.owner===owner && t.startDate<=date && (!t.completedOn || t.completedOn>=date))
+                 .sort((a,b)=> RANK[a.priority]-RANK[b.priority] || a.startDate.localeCompare(b.startDate));
+}
+function prevProgress(t, date){
+  const ks = Object.keys(t.log||{}).filter(k=>k<date).sort();
+  return ks.length ? t.log[ks[ks.length-1]].progress : 0;
+}
+/* Who may edit/delete a task right now */
+function canEdit(t, me, n){
+  if (t.category!=='planned' || t.startDate!==n.date) return false;
+  if (db.closures[t.owner+'|'+n.date]) return false;
+  if (t.assignedBy) return t.assignedBy===me && assignMode(n.mins)==='plan';
+  return t.owner===me && phaseFor(n.mins, me)==='plan';
+}
+
+/* ===== UI pieces ===== */
+const priBadge = p => `<span class="b p-${p.split(' ')[0]}">${esc(p)}</span>`;
+const pill = (cls, txt) => `<span class="pill ${cls}">${txt}</span>`;
+const note = (txt, lock, bad) => `<div class="note ${bad?'bad':''}">${lock?LOCK:''}<span>${txt}</span></div>`;
+const bar = (v, label) => `<div class="bar">${label}: <b>${v}%</b><div class="trk"><div class="fil ${v>=100?'full':''}" style="width:${v}%"></div></div></div>`;
+
+function timeline(ph, userId){
+  const steps = [
+    ['plan','Morning plan',`${CONFIG.planOpen} – ${CONFIG.planClose}`],
+    ['extra','Extra work',`${CONFIG.planClose} – ${CONFIG.closureOpen}`],
+    ['closure','Closure report',`${CONFIG.closureOpen} – ${deadlineOf(userId)}`]
+  ];
+  return `<div class="tl">${steps.map(s=>`<div class="st ${s[0]===ph?'on':''} ${ORDER[s[0]]<ORDER[ph]?'done':''}"><b>${s[1]}</b><span>${s[2]}</span></div>`).join('')}</div>`;
+}
+
+function taskCard(t, n, showOwner){
+  const d = n.date, dayN = diffDays(t.startDate,d)+1, carried = t.startDate<d, overdue = d>t.dueDate;
+  const editable = canEdit(t, ui.user, n);
+  return `<div class="task">
+    <div class="task-top">
+      <div class="task-title">${showOwner?`<span class="b">${esc(userName(t.owner))}</span> `:''}${esc(t.title)}</div>
+      ${editable
+        ? `<div class="acts"><button class="btn sm ghost" data-act="edit" data-id="${t.id}">Edit</button><button class="btn sm ghost danger" data-act="del" data-id="${t.id}">Delete</button></div>`
+        : `<span class="lockic" title="Locked">${LOCK}</span>`}
+    </div>
+    ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
+    <div class="badges">
+      ${priBadge(t.priority)}
+      <span class="b">${t.category==='extra'?'Extra work':'Planned'}</span>
+      ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
+      <span class="b">Day ${dayN} of ${t.days}</span>
+      ${carried?`<span class="b">Carried forward from ${fmtShort(t.startDate)}</span>`:''}
+      ${overdue?'<span class="b emg">Overdue</span>':''}
+    </div>
+    ${carried?bar(prevProgress(t,d),'Progress so far'):''}
+  </div>`;
+}
+
+/* kind: 'self' or 'assign'; mode: 'plan' or 'extra' */
+function taskForm(kind, mode){
+  const pri = mode==='plan' ? PLAN_PRI : EXTRA_PRI;
+  let t = ui.editing ? db.tasks.find(x=>x.id===ui.editing) : null;
+  if (t && (kind==='assign') !== !!t.assignedBy) t = null;
+  const reps = assignableBy(ui.user);
+  const label = t ? 'Save changes'
+    : kind==='assign' ? (mode==='plan' ? 'Assign to their plan' : 'Assign as extra work')
+    : (mode==='plan' ? 'Add to plan' : 'Add extra work');
+  return `<form class="tform" data-kind="${kind}" data-mode="${mode}" novalidate>
+    ${kind==='assign' ? (t ? `<div class="f">Assigned to<b style="color:var(--ink)">${esc(userName(t.owner))}</b><input type="hidden" name="target" value="${t.owner}"></div>`
+      : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to', 'Type a name or a letter, e.g. G')}</div>`) : ''}
+    <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What extra work came up?'}"></label>
+    <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
+    <div class="row">
+      <fieldset class="f"><legend>Priority</legend><div class="seg">
+        ${pri.map((p,i)=>`<label><input type="radio" name="priority" value="${p}" ${(t?t.priority===p:i===0)?'checked':''}><span>${p}</span></label>`).join('')}
+      </div></fieldset>
+      <label class="f days">Duration (days)<input type="number" name="days" min="1" max="60" value="${t?t.days:1}"></label>
+    </div>
+    <div class="err" hidden></div>
+    <div class="row end">
+      ${t?'<button type="button" class="btn ghost" data-act="cancel-edit">Cancel</button>':''}
+      <button class="btn">${label}</button>
+    </div>
+    ${mode==='extra'?'<p class="hint">Extra work is locked as soon as it is added — it cannot be edited afterwards.</p>':''}
+  </form>`;
+}
+
+function closureForm(tasks, d){
+  const submit = `<div class="row end"><button class="btn" data-act="submit-closure">Submit closure report</button></div>`;
+  if (!tasks.length) return note('No tasks to report today.') + submit;
+  return tasks.map(t=>{
+    const p = prevProgress(t,d);
+    return `<div class="crow" data-id="${t.id}">
+      <div class="ctitle">${esc(t.title)} ${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Extra':'Planned'}</span>
+        ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
+        <span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span></div>
+      <div class="prog">
+        <input type="range" min="0" max="100" step="5" value="${p}" class="pr" aria-label="Progress">
+        <input type="number" min="0" max="100" value="${p}" class="pn" aria-label="Progress percent"><span>%</span>
+      </div>
+      <div class="just" ${p>=100?'hidden':''}>
+        <label class="f">Why is this not complete? <span class="req">(minimum ${CONFIG.minWords} words)</span><textarea rows="2" class="jt"></textarea></label>
+        <div class="wc"><span class="wcn">0</span> / ${CONFIG.minWords} words</div>
+      </div>
+      <div class="err" hidden></div>
+    </div>`;
+  }).join('') + submit;
+}
+
+function reportBlock(owner, d, canReview){
+  const k = owner+'|'+d, c = db.closures[k];
+  const ts = (c.tasks||[]).map(id=>db.tasks.find(t=>t.id===id)).filter(Boolean);
+  const done = ts.filter(t=>t.log[d]?.progress>=100).length;
+  const avg = ts.length ? Math.round(ts.reduce((s,t)=>s+(t.log[d]?.progress||0),0)/ts.length) : 0;
+  const emg = ts.filter(t=>t.priority==='Emergency').length;
+  const extra = ts.filter(t=>t.category==='extra').length;
+  let h = `<div class="sum">
+    <div><b>${ts.length}</b>tasks</div><div><b>${done}</b>completed</div>
+    <div><b>${ts.length-done}</b>carried to next day</div><div><b>${avg}%</b>avg. progress</div>
+    <div><b>${extra}</b>extra work</div>${emg?`<div><b>${emg}</b>emergency</div>`:''}
+  </div>`;
+  if (ts.length){
+    h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>Progress</th><th>Reason if incomplete</th></tr></thead><tbody>
+    ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
+      <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}</td>
+      <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Extra':'Planned'}</span></td>
+      <td class="pct ${l.progress>=100?'full':'part'}">${l.progress}%</td>
+      <td>${l.justification?esc(l.justification):'—'}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  }
+  h += `<div class="hint">Submitted ${fmtStamp(c.submittedAt)} · goes to ${esc(mgrNames(owner))}</div>`;
+  if (c.review){
+    h += `<div class="review"><div class="meta">Review by ${esc(userName(c.review.by))} · ${fmtStamp(c.review.at)}</div><p>${esc(c.review.text)}</p></div>`;
+  } else if (canReview){
+    h += `<div style="margin-top:12px"><label class="f">Your review<textarea rows="3" class="revtxt" data-k="${k}" placeholder="Analysis and feedback on this closure report"></textarea></label>
+      <div class="err" hidden></div>
+      <div class="row end"><button class="btn" data-act="save-review" data-k="${k}">Submit review</button></div></div>`;
+  } else {
+    h += `<div class="hint">Awaiting review by ${esc(mgrNames(owner))}.</div>`;
+  }
+  return h;
+}
+
+/* ===== Views ===== */
+function staffView(n){
+  const u = ui.user, d = n.date, ph = phaseFor(n.mins,u), ck = db.closures[u+'|'+d];
+  const act = activeTasks(u,d);
+  const carried = act.filter(t=>t.startDate<d);
+  const planned = act.filter(t=>t.startDate===d && t.category==='planned');
+  const extra   = act.filter(t=>t.startDate===d && t.category==='extra');
+  const planOpen = ph==='plan' && !ck;
+  let h = (isField(u) ? fieldCard(u,n) : '') + timeline(ph,u);
+
+  h += `<section class="card"><div class="sec-h"><h2>1 · Morning plan</h2>${
+    ph==='before'?pill('soon',`Opens ${CONFIG.planOpen}`):planOpen?pill('open',`Open until ${CONFIG.planClose}`):pill('locked','Locked')}</div>`;
+  if (planOpen) h += taskForm('self','plan');
+  else if (ph==='before') h += note(`The planning portal opens at ${CONFIG.planOpen}. Your manager can already assign work to you.`);
+  else h += note(`Planning closed at ${CONFIG.planClose}. Planned work can no longer be added or changed.`, true);
+  if (carried.length) h += `<h3 class="sub">Carried forward from previous days (locked)</h3>` + carried.map(t=>taskCard(t,n)).join('');
+  h += `<h3 class="sub">Planned today</h3>` + (planned.length ? planned.map(t=>taskCard(t,n)).join('') : `<div class="empty">No planned tasks.</div>`);
+  h += `</section>`;
+
+  const extraOpen = ph==='extra' && !ck;
+  h += `<section class="card"><div class="sec-h"><h2>2 · Extra work</h2>${
+    extraOpen?pill('open',`Open until ${CONFIG.closureOpen}`):ORDER[ph]<ORDER.extra?pill('soon',`Opens ${CONFIG.planClose}`):pill('locked','Closed')}</div>`;
+  if (extraOpen) h += taskForm('self','extra');
+  else if (ORDER[ph]<ORDER.extra) h += note(`Extra work can be logged after the morning plan closes at ${CONFIG.planClose}.`);
+  else h += note(`Extra work logging closed at ${CONFIG.closureOpen}.`, true);
+  h += `<h3 class="sub">Extra work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No extra work logged.</div>`);
+  h += `</section>`;
+
+  const dl = deadlineOf(u);
+  h += `<section class="card"><div class="sec-h"><h2>3 · Closure report</h2>${
+    ck?pill('locked','Submitted'):ph==='closure'?pill('open',`Open until ${dl}`):ph==='over'?pill('miss','Deadline missed'):pill('soon',`Opens ${CONFIG.closureOpen}`)}</div>`;
+  if (ck) h += `<div class="ok-msg">Closure report submitted to ${esc(mgrNames(u))}. Incomplete tasks will appear automatically tomorrow morning.</div>` + reportBlock(u,d,false);
+  else if (ph==='closure') h += meetingBlock(u) + `<p class="hint" style="margin-top:0">Update progress on every task, including extra work. Anything below 100% needs a reason of at least ${CONFIG.minWords} words. Deadline: ${dl}.</p>` + closureForm(act,d);
+  else if (ph==='over') h += note(`The closure deadline (${dl}) has passed and no report was submitted. This will show as missed to ${esc(mgrNames(u))}. Open tasks will still carry forward.`, true, true);
+  else h += note(`The closure portal opens at ${CONFIG.closureOpen} and closes at ${dl}.`);
+  h += `</section>`;
+  return h;
+}
+
+function assignView(n){
+  const me = ui.user, d = n.date, mode = assignMode(n.mins), reps = assignableBy(me);
+  let h = `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
+    mode==='plan'?pill('open','Goes to their morning plan'):mode==='extra'?pill('open','Goes to their extra work'):pill('locked','Closed')}</div>`;
+  h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). From ${CONFIG.planClose} to ${CONFIG.closureOpen} it is added as extra work (Emergency or Important). The person cannot edit or delete work you assign.</p>`;
+  if (mode==='closed') h += note(`Assigning work closed at ${CONFIG.closureOpen}.`, true);
+  else h += taskForm('assign', mode);
+  const mine = db.tasks.filter(t=>t.assignedBy===me && t.startDate===d);
+  h += `<h3 class="sub">Assigned by me today</h3>` + (mine.length ? mine.map(t=>taskCard(t,n,true)).join('') : `<div class="empty">Nothing assigned today.</div>`);
+  h += `</section>`;
+  return h;
+}
+
+function reviewView(n){
+  const me = ui.user, d = ui.reviewDate || n.date, reps = reportsOf(me), ids = reps.map(r=>r.id);
+  /* 1. Everything waiting for my review, any date, oldest first */
+  const pending = Object.keys(db.closures).map(k=>{ const [owner,date] = k.split('|'); return { k, owner, date, c:db.closures[k] }; })
+    .filter(x=>ids.includes(x.owner) && !x.c.review)
+    .sort((a,b)=>a.date.localeCompare(b.date) || userName(a.owner).localeCompare(userName(b.owner)));
+  let h = `<section class="card"><div class="sec-h"><h2>Waiting for your review</h2>${
+    pending.length?pill('locked',`${pending.length} report${pending.length===1?'':'s'}`):pill('open','All reviewed')}</div>`;
+  if (!pending.length) h += note(`No reports waiting. A review box appears here as soon as someone in your team submits their closure report (from ${CONFIG.closureOpen}).`);
+  pending.forEach(x=>{
+    const u = getUser(x.owner);
+    h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span></div>${reportBlock(x.owner,x.date,true)}</div>`;
+  });
+  h += `</section>`;
+
+  /* 2. History by date */
+  h += `<section class="card"><div class="sec-h"><h2>Team reports by date</h2>
+    <label class="who">Date <input type="date" id="revDate" value="${d}" class="sel"></label></div>
+    <div class="hint" style="margin-top:0">${fmtDate(d)} · ${reps.length} direct report${reps.length===1?'':'s'}</div>`;
+  reps.forEach(u=>{
+    const c = db.closures[u.id+'|'+d];
+    const missed = !c && (d<n.date || (d===n.date && phaseFor(n.mins,u.id)==='over'));
+    h += `<div class="crow"><div class="sec-h"><div class="ctitle">${esc(u.name)} <span class="b">${esc(u.title)}</span></div>${
+      c ? (c.review?pill('open','Reviewed'):pill('locked','Awaiting your review'))
+        : missed ? pill('miss','Missed deadline') : pill('soon','Not submitted yet')}</div>`;
+    if (c && c.review) h += reportBlock(u.id,d,false);
+    else if (c) h += `<div class="hint" style="margin-top:0">Write your review in "Waiting for your review" at the top.</div>`;
+    else if (missed) h += note(`No closure report was submitted by the ${deadlineOf(u.id)} deadline.`, false, true);
+    else h += note(`Closure window: ${CONFIG.closureOpen} – ${deadlineOf(u.id)}. The review box appears once ${esc(u.name)} submits.`);
+    h += `</div>`;
+  });
+  h += `</section>`;
+  return h;
+}
+
+
+
+/* ===== Field check-in (sales staff out of office) ===== */
+let FIELD_STAFF = [];   // sales staff with GPS login: people marked is_field in the database
+const isField = id => FIELD_STAFF.includes(id);
+const mapUrl = c => `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;
+const checkinsOf = (id, d) => (db.checkins||[]).filter(c=>c.owner===id && c.date===d).sort((a,b)=>a.time.localeCompare(b.time));
+const PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+/* ===== Clock-face time picker (drag the hands) ===== */
+const CLK_STEP = 5;   // minute hand moves in 5-minute steps
+function clkHands(h,m){ return { ha:((h%12)+m/60)*30, ma:m*6 }; }
+function clockPicker(name, value){
+  let [h,m] = (value||'10:00').split(':').map(Number);
+  const { ha, ma } = clkHands(h,m);
+  let t = '';
+  for (let i=0;i<60;i++){ const a=i*6*Math.PI/180, big=i%5===0, r1=big?100:104; t += `<line class="clk-tk ${big?'big':''}" x1="${(r1*Math.sin(a)).toFixed(1)}" y1="${(-r1*Math.cos(a)).toFixed(1)}" x2="${(110*Math.sin(a)).toFixed(1)}" y2="${(-110*Math.cos(a)).toFixed(1)}"/>`; }
+  for (let i=1;i<=12;i++){ const a=i*30*Math.PI/180; t += `<text class="clk-n" x="${(84*Math.sin(a)).toFixed(1)}" y="${(-84*Math.cos(a)).toFixed(1)}">${i}</text>`; }
+  const inputAttr = name==='mTime' ? 'id="mTime" name="mTime"' : `name="${name}"`;
+  return `<div class="clk" data-h="${h}" data-m="${m}">
+    <div class="clk-top"><span class="clk-read">${pad(h%12||12)}:${pad(m)}</span>
+      <div class="clk-ap"><button type="button" data-act="clk-ap" data-ap="am" class="${h<12?'on':''}">AM</button><button type="button" data-act="clk-ap" data-ap="pm" class="${h>=12?'on':''}">PM</button></div></div>
+    <svg class="clk-face" viewBox="-120 -120 240 240" aria-label="Clock: drag the short hand for the hour and the long hand for minutes">
+      <circle r="114" class="clk-bg"/>${t}
+      <g class="hand" data-hand="h" transform="rotate(${ha})" tabindex="0" role="slider" aria-label="Hour" aria-valuemin="1" aria-valuemax="12" aria-valuenow="${h%12||12}"><line class="clk-hl" x1="0" y1="10" x2="0" y2="-50"/><circle class="clk-hk" cy="-50" r="10"/></g>
+      <g class="hand" data-hand="m" transform="rotate(${ma})" tabindex="0" role="slider" aria-label="Minutes" aria-valuemin="0" aria-valuemax="59" aria-valuenow="${m}"><line class="clk-ml" x1="0" y1="14" x2="0" y2="-80"/><circle class="clk-mk" cy="-80" r="10"/></g>
+      <circle r="6" class="clk-c"/></svg>
+    <div class="hint" style="text-align:center;margin:0">Drag the short hand for the hour, the long hand for minutes</div>
+    <input type="hidden" ${inputAttr} value="${pad(h)}:${pad(m)}"></div>`;
+}
+function clkSet(el, h, m){
+  h = ((h%24)+24)%24; m = ((m%60)+60)%60;
+  el.dataset.h = h; el.dataset.m = m;
+  const { ha, ma } = clkHands(h,m);
+  const [gh, gm] = el.querySelectorAll('.hand');
+  gh.setAttribute('transform', `rotate(${ha})`); gh.setAttribute('aria-valuenow', h%12||12);
+  gm.setAttribute('transform', `rotate(${ma})`); gm.setAttribute('aria-valuenow', m);
+  el.querySelector('.clk-read').textContent = `${pad(h%12||12)}:${pad(m)}`;
+  el.querySelectorAll('[data-ap]').forEach(b=>b.classList.toggle('on', (b.dataset.ap==='pm') === (h>=12)));
+  el.querySelector('input[type=hidden]').value = `${pad(h)}:${pad(m)}`;
+}
+let clkDrag = null;
+function clkPoint(svg, e){ const r = svg.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*240-120, y:(e.clientY-r.top)/r.height*240-120 }; }
+function clkMove(e){
+  const { el, svg, hand } = clkDrag, p = clkPoint(svg, e);
+  let ang = Math.atan2(p.x, -p.y)*180/Math.PI; if (ang < 0) ang += 360;
+  let h = +el.dataset.h, m = +el.dataset.m;
+  if (hand==='h') h = (Math.round(ang/30)%12) + (h>=12?12:0);
+  else m = (Math.round(ang/(6*CLK_STEP))*CLK_STEP)%60;
+  clkSet(el, h, m);
+}
+document.addEventListener('pointerdown', e=>{
+  const svg = e.target.closest('.clk-face'); if (!svg) return;
+  const el = svg.closest('.clk'), p = clkPoint(svg, e), g = e.target.closest('.hand');
+  clkDrag = { el, svg, hand: g ? g.dataset.hand : (Math.hypot(p.x,p.y) < 62 ? 'h' : 'm') };
+  try{ svg.setPointerCapture(e.pointerId); }catch(_){}
+  e.preventDefault(); clkMove(e);
+});
+document.addEventListener('pointermove', e=>{ if (clkDrag) clkMove(e); });
+document.addEventListener('pointerup', ()=>{ clkDrag = null; });
+document.addEventListener('pointercancel', ()=>{ clkDrag = null; });
+document.addEventListener('keydown', e=>{
+  if (e.key==='Enter' && !e.shiftKey && e.target.closest && e.target.closest('.chatf')){ e.preventDefault(); addDiary(e.target.closest('.chatf')); return; }
+  const g = e.target.closest && e.target.closest('.hand'); if (!g) return;
+  const d = { ArrowUp:1, ArrowRight:1, ArrowDown:-1, ArrowLeft:-1 }[e.key]; if (!d) return;
+  e.preventDefault(); const el = g.closest('.clk');
+  if (g.dataset.hand==='h') clkSet(el, +el.dataset.h + d, +el.dataset.m); else clkSet(el, +el.dataset.h, +el.dataset.m + d*CLK_STEP);
+});
+function nextSlot(){ const n = now(); let t = Math.ceil((n.mins+15)/15)*15; if (t > 23*60+55) t = 23*60+55; return pad(Math.floor(t/60))+':'+pad(t%60); }
+
+/* ===== GPS fix time ===== */
+const GPS_DTF = new Intl.DateTimeFormat('en-GB',{ timeZone:CONFIG.timeZone, hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23' });
+function gpsInfo(pos){
+  const ts = pos.timestamp || Date.now();
+  return { gpsTime: GPS_DTF.format(new Date(ts)), devTime: GPS_DTF.format(new Date()), gpsDiff: Math.round((ts - Date.now())/1000) };
+}
+const timeBadge = l => l && l.gps_time ? `<span class="b">Device ${esc(l.device_time)} · GPS fix ${esc(l.gps_time)}</span>${Math.abs(l.gps_diff||0)>300?'<span class="b emg">Time mismatch</span>':''}` : '';
+const locLinks = l => l ? `<span class="b">${(+l.lat).toFixed(5)}, ${(+l.lng).toFixed(5)} · ±${Math.round(l.acc||0)} m</span>${timeBadge(l)}<a href="${mapUrl(l)}" target="_blank" rel="noopener">Open in map</a>` : '<span class="b">Location loading or not available</span>';
+
+
+/* ===== Who can assign work to whom ===== */
+function assignableBy(id){
+  const r = getUser(id).role;
+  if (r==='CEO') return USERS.filter(u=>u.id!==id);                                  // CEO: everyone
+  if (r==='General Manager') return USERS.filter(u=>u.id!==id && u.role!=='CEO');   // GM: everyone except the CEO
+  return reportsOf(id);                                                                // others: direct team
+}
+
+/* ===== Person finder (type a letter or open the dropdown) ===== */
+const SEARCH_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+const sortName = u => u.name.replace(/^(dr|mr|mrs|ms)\.?\s+/i,'');
+function rankPeople(list, q){
+  q = (q||'').trim().toLowerCase();
+  const by = (a,b) => sortName(a).localeCompare(sortName(b));
+  if (!q) return { starts:[], rest:[...list].sort(by), q };
+  const starts = [], rest = [];
+  list.forEach(u=>{ const n = u.name.toLowerCase();
+    if (sortName(u).toLowerCase().startsWith(q) || n.startsWith(q)) starts.push(u); else if (n.includes(q)) rest.push(u); });
+  return { starts:starts.sort(by), rest:rest.sort(by), q };
+}
+function picker(name, list, selected, label, placeholder){
+  const sel = selected ? getUser(selected) : null;
+  return `<div class="pick" data-name="${name}" data-ids="${list.map(u=>u.id).join(',')}">
+    <label class="f" style="margin-bottom:0">${label}
+    <div class="pick-box">${SEARCH_ICON}<input type="text" class="pick-in" role="combobox" aria-expanded="false" aria-autocomplete="list" autocomplete="off" placeholder="${esc(placeholder)}" value="${sel?esc(sel.name):''}">
+      <button type="button" class="pick-tg" data-act="pick-tg" aria-label="Show everyone">▾</button></div></label>
+    <ul class="pick-list" role="listbox" hidden></ul>
+    <input type="hidden" name="${name}" value="${sel?sel.id:''}"></div>`;
+}
+function hl(name, q){ if (!q) return esc(name); const i = name.toLowerCase().indexOf(q); return i<0 ? esc(name) : esc(name.slice(0,i))+'<mark>'+esc(name.slice(i,i+q.length))+'</mark>'+esc(name.slice(i+q.length)); }
+function openPick(pk, text){
+  const list = pk.dataset.ids.split(',').filter(Boolean).map(getUser), ul = pk.querySelector('.pick-list'), inp = pk.querySelector('.pick-in');
+  const r = rankPeople(list, text), row = u => `<li role="option" data-act="pick-opt" data-id="${u.id}"><span>${hl(u.name, r.q)}</span><small>${esc(u.title)}</small></li>`;
+  let h = '';
+  if (r.q){
+    if (r.starts.length) h += `<li class="grp">Starts with “${esc(text.trim())}”</li>` + r.starts.map(row).join('');
+    if (r.rest.length) h += `<li class="grp">Contains “${esc(text.trim())}”</li>` + r.rest.map(row).join('');
+    if (!h) h = `<li class="none">No one matches “${esc(text.trim())}”</li>`;
+  } else h = `<li class="grp">Everyone (A–Z)</li>` + r.rest.map(row).join('');
+  ul.innerHTML = h; ul.hidden = false; inp.setAttribute('aria-expanded','true');
+  const first = ul.querySelector('[data-id]'); if (first) first.classList.add('act');
+}
+function closePicks(except){ document.querySelectorAll('.pick').forEach(pk=>{ if (pk===except) return; const ul = pk.querySelector('.pick-list'); if (ul && !ul.hidden){ ul.hidden = true; pk.querySelector('.pick-in').setAttribute('aria-expanded','false'); } }); }
+function choosePick(pk, id){
+  const u = getUser(id);
+  pk.querySelector('.pick-in').value = u.name; pk.querySelector('input[type=hidden]').value = id; closePicks();
+  if (pk.dataset.name==='dPerson'){ (ui.dash = ui.dash||{team:'all',status:'all'}).person = id; save(); render();
+    setTimeout(()=>{ const r = document.querySelector('.prow[open]'); if (r) r.scrollIntoView({behavior:'smooth', block:'center'}); }, 50); }
+}
+document.addEventListener('input', e=>{ const pk = e.target.closest && e.target.closest('.pick'); if (pk && e.target.classList.contains('pick-in')){ pk.querySelector('input[type=hidden]').value = ''; openPick(pk, e.target.value); } });
+document.addEventListener('focusin', e=>{ const pk = e.target.closest && e.target.closest('.pick'); if (pk && e.target.classList.contains('pick-in')){ closePicks(pk); const hv = pk.querySelector('input[type=hidden]').value; openPick(pk, hv ? '' : e.target.value); } });
+document.addEventListener('keydown', e=>{
+  const pk = e.target.closest && e.target.closest('.pick'); if (!pk || !e.target.classList.contains('pick-in')) return;
+  const ul = pk.querySelector('.pick-list'), opts = [...ul.querySelectorAll('[data-id]')], cur = ul.querySelector('.act'), i = opts.indexOf(cur);
+  if (e.key==='ArrowDown' || e.key==='ArrowUp'){ e.preventDefault(); if (ul.hidden) openPick(pk, e.target.value);
+    const n = opts[Math.max(0, Math.min(opts.length-1, i + (e.key==='ArrowDown'?1:-1)))]; if (n){ opts.forEach(o=>o.classList.remove('act')); n.classList.add('act'); n.scrollIntoView({block:'nearest'}); } }
+  else if (e.key==='Enter'){ if (!ul.hidden && cur){ e.preventDefault(); choosePick(pk, cur.dataset.id); } }
+  else if (e.key==='Escape'){ closePicks(); }
+});
+document.addEventListener('click', e=>{ if (!e.target.closest('.pick')) closePicks(); });
+
+/* ===== Voice typing (speech to text) on every text box ===== */
+const STT_LANG = 'en-IN';   // change to 'en-US', 'hi-IN' (Hindi) or 'ar-AE' (Arabic) if needed
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const MIC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+let recog = null, recogEl = null;
+function decorateSTT(){
+  document.querySelectorAll('#main textarea, #main input[type=text], #main input:not([type]), #main input[type=search]').forEach(el=>{
+    if (el.dataset.stt || el.classList.contains('pick-in') || el.closest('.stt')) return;
+    el.dataset.stt = '1';
+    const w = document.createElement('span'); w.className = 'stt';
+    el.parentNode.insertBefore(w, el); w.appendChild(el);
+    w.insertAdjacentHTML('beforeend', `<button type="button" class="stt-btn" data-act="stt" aria-label="Voice typing" title="Voice typing">${MIC}</button>`);
+  });
+}
+function tip(title, text){
+  let t = document.getElementById('toast');
+  if (!t){ t = document.createElement('div'); t.id='toast'; t.setAttribute('role','status'); t.title='Tap to close'; t.addEventListener('click',()=>{ t.hidden = true; }); document.body.appendChild(t); }
+  t.innerHTML = `<b>${esc(title)}</b><span>${esc(text)}</span><span class="x">Tap to close</span>`; t.hidden = false;
+  clearTimeout(tip.h); tip.h = setTimeout(()=>{ t.hidden = true; }, 7000);
+}
+function toggleDictation(btn){
+  const el = btn.parentElement.querySelector('input,textarea');
+  if (!SR) return tip('Voice typing', 'Voice typing is not available in this browser. Please use Chrome, Edge or Safari.');
+  if (recog){ const same = recogEl===el; recog.stop(); if (same) return; }
+  const r = new SR(); r.lang = STT_LANG; r.interimResults = true; r.continuous = true;
+  const base = el.value ? el.value.replace(/\s*$/, ' ') : ''; let fin = '';
+  r.onresult = e=>{ let interim = ''; for (let i=e.resultIndex; i<e.results.length; i++){ const x = e.results[i]; if (x.isFinal) fin += x[0].transcript + ' '; else interim += x[0].transcript; }
+    el.value = (base + fin + interim).replace(/\s+$/, ' '); el.dispatchEvent(new Event('input', { bubbles:true })); };
+  r.onerror = e=>{ if (e.error==='not-allowed' || e.error==='service-not-allowed') tip('Voice typing','Microphone permission was refused. Allow the microphone for this page in the browser settings, then tap the mic again.');
+    else if (e.error==='network') tip('Voice typing','Voice typing needs an internet connection.');
+    else if (e.error==='no-speech') tip('Voice typing','No speech was heard. Tap the mic and speak again.'); };
+  r.onend = ()=>{ btn.classList.remove('rec'); if (recog===r){ recog = null; recogEl = null; } el.value = el.value.replace(/\s+$/, ''); el.dispatchEvent(new Event('input', { bubbles:true })); };
+  try { r.start(); } catch(err){ return tip('Voice typing','Voice typing could not start. Try again.'); }
+  recog = r; recogEl = el; btn.classList.add('rec'); el.focus();
+}
+
+/* ===== MoM helper and meeting prep (works offline) ===== */
+async function copyText(t){
+  try{ await navigator.clipboard.writeText(t); return true; }
+  catch(e){ const ta = document.createElement('textarea'); ta.value = t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); let ok = false; try{ ok = document.execCommand('copy'); }catch(_){} ta.remove(); return ok; }
+}
+function momNotes(m, form){
+  const ta = form && form.querySelector('textarea[name=txt]');
+  const lines = ta && ta.value.trim() ? ta.value.split('\n') : (m.diary||[]).map(x=>x.text);
+  return lines.map(l=>l.replace(/^\s*[•\-*]\s*/, '').trim()).filter(Boolean);
+}
+const RX_DEC = /\b(agreed|agree|confirmed|confirm|decided|approved|accepted|finali[sz]ed|ok(ay)? with)\b/i;
+const RX_ACT = /\b(will|send|share|submit|provide|prepare|follow[- ]?up|arrange|schedule|need(s)? to|by (mon|tues|wednes|thurs|fri|satur|sun)day|by next|deadline|within)\b/i;
+function draftMoM(m, form){
+  const notes = momNotes(m, form), dec = notes.filter(l=>RX_DEC.test(l)), act = notes.filter(l=>RX_ACT.test(l) && !RX_DEC.test(l));
+  const li = a => a.length ? a.map(x=>'• '+x).join('\n') : '• —';
+  return `MINUTES OF MEETING
+Date and time: ${fmtAbs(mStart(m))}
+Meeting with: ${m.withWhom}${m.place?'\nPlace: '+m.place:''}
+Purpose: ${m.purpose}
+Prepared by: ${userName(m.owner)}
+
+Discussion:
+${li(notes)}
+
+Decisions / agreements:
+${li(dec)}
+
+Action items:
+${li(act)}
+
+Next steps:
+• `;
+}
+function aiPromptMoM(m, form){
+  return `Please write clear, professional minutes of meeting (MoM) from my notes below. Use these headings: Meeting details, Purpose, Discussion points, Decisions, Action items (with owner and due date where mentioned), Next steps. Keep it factual and do not add anything that is not in the notes.
+
+Meeting with: ${m.withWhom}
+Date and time: ${fmtAbs(mStart(m))}${m.place?'\nPlace: '+m.place:''}
+Purpose: ${m.purpose}
+Prepared by: ${userName(m.owner)} (power cable accessories sales)
+
+Notes:
+${momNotes(m, form).map(x=>'• '+x).join('\n') || '• (no notes yet)'}`;
+}
+function aiPromptPrep(m){
+  return `Help me prepare for a sales meeting for power cable accessories (cable joints, terminations, connectors). Give me: 5 questions to ask, the documents I should bring, likely objections with short answers, and a clear next step to agree at the end.
+
+Meeting with: ${m.withWhom}
+Date and time: ${fmtAbs(mStart(m))}${m.place?'\nPlace: '+m.place:''}
+Purpose: ${m.purpose}`;
+}
+function prepBox(m){
+  return `<details class="prep"><summary>Meeting prep</summary><ul>
+    <li>Confirm who will attend and who makes the decision.</li>
+    <li>Know the project: voltage class (e.g. 11 / 33 / 132 kV), cable type and size, quantities, timeline.</li>
+    <li>Bring the catalogue, type test reports and two project references.</li>
+    <li>Ask about the current supplier and what problems they have had.</li>
+    <li>Have pricing, delivery time and payment terms ready.</li>
+    <li>Agree a clear next step and date before you leave.</li></ul>
+    <button type="button" class="btn sm ghost" data-act="prep-ai" data-id="${m.id}">Prepare with AI</button><div class="ai-out" hidden></div></details>`;
+}
+
+/* ===== Sales: day login, meetings, reminders ===== */
+const LOGIN_BY = '09:00';                        // sales staff must log in at or before this time
+const REMIND_BEFORE = [1440,720,360,60,15,10];   // reminder offsets, minutes before the meeting
+const NAG_EVERY = 30, NAG_FROM = '09:00', NAG_TO = '22:00';  // missing-notes reminders (working hours)
+const EPOCH = '2020-01-01';
+const absOf = (date,time) => diffDays(EPOCH,date)*1440 + toMins(time);
+const nowAbs = () => { const n = now(); return absOf(n.date, n.label); };
+const fromAbs = a => { const d = Math.floor(a/1440), m = a - d*1440; return { date:addDays(EPOCH,d), time:pad(Math.floor(m/60))+':'+pad(m%60) }; };
+const fmtAbs = a => { const x = fromAbs(a); return `${fmtShort(x.date)} ${x.time}`; };
+const offLabel = o => o>=60 ? `${o/60} hour${o===60?'':'s'}` : `${o} minutes`;
+const offShort = o => o>=60 ? `${o/60} h` : `${o} min`;
+const loginOf = (id,d) => (db.checkins||[]).find(c=>c.owner===id && c.date===d && c.kind==='login');
+const meetingsOf = id => (db.meetings||[]).filter(m=>m.owner===id);
+const mStart = m => absOf(m.date, m.time);
+const mState = (m,na) => m.status==='scheduled' ? (na < mStart(m) ? 'upcoming' : 'notes') : m.status;
+const needsInput = (m,na) => { const s = mState(m,na); return s==='notes' || s==='returned'; };
+const reviewersOf = id => USERS.filter(u=>DASH_ROLES.includes(u.role) && subtree(u.id).some(x=>x.id===id));
+const BELL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+let fresh = [], pendingRender = false;
+const geoTried = {};
+
+function notify(owner, text, at, meetingId){
+  db.notifications.push({ id:uid(), owner, text, at, meetingId, read:false, email:true });
+  if (ui.authed && owner===ui.user) fresh.push(text);
+}
+/* Works out which reminders are due now. The real system would do this on a server and send the emails. */
+function runReminders(){
+  if (!ui.authed) return false;
+  const na = nowAbs(); let changed = false;
+  const mine = db.notifications.filter(x=>x.owner===ui.user).sort((a,b)=>b.at-a.at);
+  if (mine.length > 200){ const drop = new Set(mine.slice(200).map(x=>x.id)); db.notifications = db.notifications.filter(x=>!drop.has(x.id)); changed = true; }
+  db.meetings.filter(m=>m.owner===ui.user).forEach(m=>{
+    m.sent = m.sent || {};
+    const st = mStart(m), who = m.withWhom;
+    if (m.status==='scheduled'){
+      REMIND_BEFORE.forEach(o=>{ const t = st-o, k = 'pre'+o;
+        if (!m.sent[k] && t<=na && t>=m.createdAt){ m.sent[k]=t; changed=true; notify(m.owner, `Reminder: meeting with ${who} in ${offLabel(o)} (${fmtAbs(st)}). Purpose: ${m.purpose}`, t, m.id); } });
+      if (!m.sent.start && st<=na){ m.sent.start=st; changed=true; notify(m.owner, `Your meeting with ${who} is starting now. Keep the portal open so the meeting location is captured.`, st, m.id); }
+    }
+    if (needsInput(m,na)){
+      const begin = m.status==='returned' ? m.returnedAt + NAG_EVERY : absOf(addDays(m.date,1), NAG_FROM);
+      if (begin > na) return;
+      const from = Math.max(begin, na - 14*1440);
+      for (let t = begin + Math.ceil((from-begin)/NAG_EVERY)*NAG_EVERY; t<=na; t+=NAG_EVERY){
+        const tm = t - Math.floor(t/1440)*1440, k = 'nag'+t;
+        if (tm < toMins(NAG_FROM) || tm > toMins(NAG_TO) || m.sent[k]) continue;
+        m.sent[k]=t; changed=true;
+        notify(m.owner, m.status==='returned'
+          ? `Meeting report sent back: add more detail for your meeting with ${who} (${fmtAbs(st)}).`
+          : `Meeting notes missing: write the outcome of your meeting with ${who} (${fmtAbs(st)}).`, t, m.id);
+      }
+    }
+  });
+  return changed;
+}
+function flushFresh(){
+  if (!fresh.length) return;
+  const last = fresh[fresh.length-1], more = fresh.length-1; fresh = [];
+  let t = document.getElementById('toast');
+  if (!t){ t = document.createElement('div'); t.id='toast'; t.setAttribute('role','status'); t.title='Tap to close'; t.addEventListener('click',()=>{ t.hidden = true; }); document.body.appendChild(t); }
+  t.innerHTML = `<b>Reminder${more?` (+${more} more)`:''}</b><span>${esc(last)}</span><small>Email sent (simulated)</small><span class="x">Tap to close</span>`; t.hidden = false;
+  clearTimeout(flushFresh.h); flushFresh.h = setTimeout(()=>{ t.hidden = true; }, 9000);
+  try{ if ('Notification' in window && Notification.permission==='granted') new Notification('Daily Work Portal', { body:last }); }catch(e){}
+}
+function safeRender(){
+  const a = document.activeElement;
+  const main = document.getElementById('main');
+  const dirty = clkDrag || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('#main') && (a.value||'').length)
+    || [...main.querySelectorAll('form textarea, form input[type=text], form input:not([type]), form input[type=password]')].some(x=>x.value.trim() !== (x.defaultValue||'').trim());
+  if (dirty){ pendingRender = true; updateClock(); return; }
+  render();
+}
+function autoMeetingGeo(){
+  const na = nowAbs();
+  meetingsOf(ui.user).forEach(m=>{ const st = mStart(m);
+    if (!m.geo && !geoTried[m.id] && m.status==='scheduled' && na>=st && na<=st+120){ geoTried[m.id]=true; captureMeetingGeo(m.id, true); } });
+}
+function captureMeetingGeo(id, auto, btn){
+  const m = db.meetings.find(x=>x.id===id); if (!m) return;
+  if (!('geolocation' in navigator)){ m.geoErr = 'This device cannot read location.'; save(); safeRender(); return; }
+  if (btn){ btn.disabled = true; btn.textContent = 'Getting location…'; }
+  navigator.geolocation.getCurrentPosition(async p=>{ const n = now();
+      m.geo = { time:n.label, date:n.date, auto:!!auto }; m.geoErr = ''; save(); await saveLocation('meeting', m.id, p); safeRender(); },
+    e=>{ m.geoErr = e.code===1 ? 'Location permission was refused. Allow location for this page, then press "Check in at meeting".' : 'Location is not available. Turn on GPS, then press "Check in at meeting".'; save(); safeRender(); },
+    { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+}
+
+/* ----- login screens ----- */
+function loginView(){
+  if (ui.recovery) return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Set a new password</h2>
+    <form id="newPwForm" novalidate style="margin-top:10px"><label class="f">New password (at least 8 characters)<input type="password" id="np1" autocomplete="new-password"></label>
+    <label class="f">Repeat new password<input type="password" id="np2" autocomplete="new-password"></label><div class="err" id="npErr" hidden></div>
+    <div class="row end"><button class="btn">Save password</button></div></form></section>`;
+  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Log in to the Daily Work Portal</h2><p class="hint" style="margin:2px 0 0">Al Yamuna Densons Industries</p>
+    <form id="loginForm" novalidate style="margin-top:10px">
+      <label class="f">Work email<input type="email" id="lgEmail" autocomplete="username" inputmode="email"></label>
+      <label class="f">Password<input type="password" id="lgPass" autocomplete="current-password"></label>
+      <div class="err" id="lgErr" hidden></div>
+      <div class="row end" style="justify-content:space-between"><button type="button" class="btn sm ghost" data-act="forgot">Forgot password?</button><button class="btn">Log in</button></div>
+    </form></section>`;
+}
+function gateView(n){
+  const late = n.mins > toMins(LOGIN_BY);
+  return `<section class="card login geo login-gate"><h2>Start your day</h2>
+    <div style="font:600 44px var(--f-mono);margin:8px 0 2px;font-variant-numeric:tabular-nums">${n.label}</div><p class="hint" style="margin:0 0 12px">Time from this device · UAE</p>
+    <p>Sales staff must log in at or before <b>${LOGIN_BY}</b>.</p>
+    ${late ? note(`It is now ${n.label}. Your login will be recorded as <b>Late</b>.`, false, true) : note(`It is now ${n.label}. You are on time.`)}
+    <div class="row" style="margin-top:12px;align-items:center"><button class="btn geo-btn" data-act="daylogin">${PIN}<span>Log in</span></button></div>
+    <p class="hint">Location is captured automatically for attendance.</p>
+    <div class="err" id="ciErr" hidden></div></section>`;
+}
+
+/* ----- attendance ----- */
+function ciRow(c, full){
+  return `<div class="ci"><span class="tm">${esc(c.time)}</span>
+    ${c.kind==='login'?`<span class="b ${c.late?'emg':'asg'}">${c.late?'Late login':'Day login'}</span>`:`<span>${c.place?esc(c.place):'<span class="hint" style="margin:0">Site visit</span>'}</span>`}
+    ${full?locLinks(LOCS[c.id]):''}</div>`;
+}
+function fieldCard(u, n){
+  const lg = loginOf(u, n.date), visits = checkinsOf(u, n.date).filter(c=>c.kind!=='login');
+  return `<section class="card geo"><div class="sec-h"><h2>Field attendance</h2>${
+      lg ? pill(lg.late?'miss':'open', `Logged in ${lg.time} · ${lg.late?'Late':'On time'}`) : pill('miss','Not logged in')}</div>
+    <h3 class="sub" style="margin-top:0">Site visits</h3>
+    <label class="f">Location / customer (optional)<input id="ciPlace" maxlength="120" placeholder="e.g. Customer site, Riyadh"></label>
+    <div class="row" style="align-items:center"><button class="btn geo-btn" data-act="checkin">${PIN}<span>Check in at this site</span></button></div>
+    <div class="err" id="ciErr" hidden></div>
+    ${visits.map(c=>ciRow(c,false)).join('')}</section>`;
+}
+function doCheckin(btn, kind){
+  const err = document.getElementById('ciErr'), lbl = btn.querySelector('span');
+  const show = m => { err.hidden=false; err.textContent=m; btn.disabled=false; lbl.textContent='Try again'; };
+  if (!('geolocation' in navigator)) return show('This browser cannot read location. Please use a phone or a browser with location support.');
+  btn.disabled = true; lbl.textContent = 'Getting your location…'; err.hidden = true;
+  const place = kind==='login' ? 'Day login' : ((document.getElementById('ciPlace')||{}).value||'').trim();
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const n = now();
+    if (!(kind==='login' && loginOf(ui.user, n.date))){
+      const id = uid();
+      db.checkins.push({ id, owner:ui.user, kind, late: kind==='login' && n.mins>toMins(LOGIN_BY), date:n.date, time:n.label, at:new Date().toISOString(), place });
+      save(); await saveLocation(kind, id, pos);
+    }
+    render();
+  }, e=>{
+    show(e.code===1 ? 'Location permission was refused. Allow location for this page in the browser settings, then try again. Nothing is recorded without a location.'
+       : e.code===3 ? 'Getting the location took too long. Move to an open area or turn on GPS, then try again.'
+       : 'Location is not available right now. Turn on location/GPS on the device and try again.');
+  }, { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+}
+
+/* ----- meetings (sales staff) ----- */
+const stPill = (m,na) => { const s = mState(m,na);
+  return s==='upcoming'?pill('soon','Upcoming'):s==='notes'?pill('miss','Notes needed'):s==='returned'?pill('miss','Sent back'):s==='review'?pill('locked','Awaiting approval'):pill('open','Approved'); };
+function geoLine(m, full){
+  if (!m.geo) return `<span class="b emg">Meeting check-in not recorded</span>`;
+  return full ? `<span class="b">Meeting check-in ${esc(m.geo.time)}${m.geo.auto?' (automatic)':''}</span> ${locLinks(LOCS[m.id])}`
+              : `<span class="b asg">Meeting check-in recorded ${esc(m.geo.time)}</span>`;
+}
+/* ----- meeting diary (chat-style running notes) ----- */
+const diaryOpen = (m,na) => m.status==='scheduled' && na >= mStart(m) - 15 && m.date===now().date;
+const bubble = x => `<div class="bub"><p>${esc(x.text)}</p><span>${fromAbs(x.t).time}</span></div>`;
+function diaryLog(m){ const d = m.diary||[]; return d.length ? `<div class="chat">${d.map(bubble).join('')}</div>` : '<div class="empty">No points written yet.</div>'; }
+function diaryBox(m){
+  return `<div class="diary"><h3 class="sub" style="margin-top:12px">Meeting diary</h3>
+    <p class="hint" style="margin:-4px 0 8px">Write points as the discussion happens. They are added to your minutes of meeting (MoM).</p>${diaryLog(m)}
+    <form class="chatf" data-id="${m.id}" novalidate><textarea name="msg" rows="1" placeholder="Type a point and press Enter" aria-label="Diary entry"></textarea><button class="btn">Send</button></form></div>`;
+}
+function addDiary(f){
+  const m = db.meetings.find(x=>x.id===f.dataset.id), txt = f.msg.value.trim(), na = nowAbs();
+  if (!m || !txt || !diaryOpen(m,na)) return;
+  const x = { t:na, text:txt }; (m.diary = m.diary||[]).push(x); save();
+  const box = f.parentElement; let chat = box.querySelector('.chat');
+  if (!chat){ const e = box.querySelector('.empty'); if (e) e.remove(); chat = document.createElement('div'); chat.className = 'chat'; f.before(chat); }
+  chat.insertAdjacentHTML('beforeend', bubble(x)); chat.scrollTop = chat.scrollHeight;
+  const ta = f.closest('.mtg').querySelector('.mout:not([data-ret]) textarea[name=txt]');
+  if (ta) ta.value += (ta.value ? '\n' : '') + '• ' + txt;
+  f.msg.value = ''; f.msg.focus();
+}
+function meetingCard(m, na, mode, reviewer, mgmt){
+  const st = mStart(m);
+  let h = `<div class="crow mtg"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${fmtAbs(st)} · ${esc(m.withWhom)}${m.postponedFrom?' <span class="b">Rescheduled</span>':''}</div>${stPill(m,na)}</div>
+    <div class="task-det">${esc(m.purpose)}${m.place?' · '+esc(m.place):''}</div>`;
+  if (mode==='up'){
+    const offs = REMIND_BEFORE.filter(o=>st-o>=m.createdAt);
+    if (!mgmt) h += prepBox(m);
+    h += `<div class="badges"><span class="b">Reminders:</span>${offs.length?offs.map(o=>`<span class="b ${m.sent&&m.sent['pre'+o]?'asg':''}">${offShort(o)}${m.sent&&m.sent['pre'+o]?' · sent':''}</span>`).join(''):'<span class="b">none left before the meeting</span>'}</div>`;
+  } else h += `<div class="badges">${geoLine(m, mgmt)}</div>`;
+  if (m.geoErr && !m.geo && mode!=='up' && !mgmt) h += `<div class="err">${esc(m.geoErr)}</div>`;
+  if (mode==='input' && !m.geo) h += `<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="mgeo" data-id="${m.id}">Check in at meeting</button></div>`;
+  if (!mgmt && diaryOpen(m,na)) h += diaryBox(m);
+  else if (!mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
+  if (mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
+  if (m.notes || m.postponeReason){
+    const nm = m.postponedTo && db.meetings.find(x=>x.id===m.postponedTo);
+    h += `<div class="review"><div class="meta">${m.outcome==='postponed'?'Postponed':'Minutes of meeting'}${m.notesAt?' · submitted '+fmtAbs(m.notesAt):''}</div><p>${esc(m.outcome==='postponed'?m.postponeReason:m.notes)}</p>${nm?`<div class="meta">New date: ${fmtAbs(mStart(nm))}</div>`:''}</div>`;
+  }
+  (m.history||[]).filter(x=>x.action!=='submitted').forEach(x=>{
+    h += `<div class="review"><div class="meta">${x.action==='approved'?'Approved':'Sent back'} by ${esc(userName(x.by))} · ${fmtAbs(x.at)}</div>${x.text?`<p>${esc(x.text)}</p>`:''}</div>`; });
+  if (mode==='input') h += outcomeForm(m);
+  if (reviewer) h += `<div style="margin-top:10px"><label class="f">Comment (required to send back)<textarea rows="2" class="mrc" data-id="${m.id}"></textarea></label><div class="err" hidden></div>
+    <div class="row end"><button class="btn ghost" data-act="msendback" data-id="${m.id}">Send back</button><button class="btn" data-act="mapprove" data-id="${m.id}">Approve</button></div></div>`;
+  return h + `</div>`;
+}
+function outcomeForm(m){
+  if (m.status==='returned') return `<form class="tform mout" data-id="${m.id}" data-ret="1" novalidate style="margin-top:8px">
+    <label class="f">Add more detail <span class="req">(minimum ${CONFIG.minWords} words)</span><textarea name="txt" rows="3"></textarea></label>
+    <div class="err" hidden></div><div class="row end"><button class="btn">Resubmit for approval</button></div></form>`;
+  const pre = (m.diary||[]).map(x=>'• '+x.text).join('\n');
+  return `<form class="tform mout" data-id="${m.id}" novalidate style="margin-top:12px">
+    <fieldset class="f"><legend>What happened?</legend><div class="seg">
+      <label><input type="radio" name="oc" value="held" checked><span>Meeting held</span></label>
+      <label><input type="radio" name="oc" value="postponed"><span>Postponed</span></label></div></fieldset>
+    <div class="helper"><button type="button" class="btn sm ghost" data-act="mom-draft" data-id="${m.id}">Draft MoM from my notes</button><button type="button" class="btn sm ghost" data-act="mom-ai" data-id="${m.id}">Write MoM with AI</button></div>
+    <label class="f">Minutes of meeting (MoM), or why it was postponed <span class="req">(minimum ${CONFIG.minWords} words)</span><textarea name="txt" rows="5">${esc(pre)}</textarea></label>
+    ${pre?'<p class="hint" style="margin:-6px 0 10px">Your diary points are filled in. Edit them into the final minutes before sending.</p>':''}
+    <div class="clk-row pp" hidden><label class="f" style="flex:1;min-width:180px">New date<input type="date" name="nd" min="${now().date}"></label><div class="f" style="flex:1;min-width:240px"><span>New time</span>${clockPicker('nt','10:00')}</div></div>
+    <div class="err" hidden></div><div class="row end"><button class="btn">Send MoM for approval</button></div></form>`;
+}
+function meetingsView(n){
+  const na = nowAbs(), all = meetingsOf(ui.user);
+  const need = all.filter(m=>needsInput(m,na)).sort((a,b)=>mStart(a)-mStart(b));
+  const up = all.filter(m=>mState(m,na)==='upcoming').sort((a,b)=>mStart(a)-mStart(b));
+  const done = all.filter(m=>['review','approved'].includes(m.status)).sort((a,b)=>mStart(b)-mStart(a));
+  let h = `<section class="card"><div class="sec-h"><h2>Schedule a meeting</h2></div>
+    <form id="meetForm" class="tform" novalidate>
+      <div class="row"><label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company"></label>
+        <label class="f grow">Place (optional)<input id="mPlace" maxlength="120" placeholder="e.g. Customer office, Dubai"></label></div>
+      <label class="f">What the meeting is for<textarea id="mPurpose" rows="2"></textarea></label>
+      <div class="clk-row"><label class="f" style="flex:1;min-width:180px">Date<input type="date" id="mDate" min="${n.date}" value="${n.date}"></label>
+        <div class="f" style="flex:1;min-width:240px"><span>Time</span>${clockPicker('mTime', nextSlot())}</div></div>
+      <div class="err" id="mErr" hidden></div>
+      <div class="row end"><button type="button" class="btn ghost" data-act="meet-now">Start meeting now</button><button class="btn">Schedule meeting</button></div>
+      <p class="hint">Reminders by email and notification: 24 h, 12 h, 6 h, 1 h, 15 min and 10 min before. Past dates and times cannot be chosen.</p>
+    </form></section>`;
+  h += `<section class="card"><div class="sec-h"><h2>Needs your input</h2>${need.length?pill('miss',`${need.length} meeting${need.length===1?'':'s'}`):pill('open','Nothing pending')}</div>`;
+  if (need.length) h += `<p class="hint" style="margin-top:0">Your closure report can't be submitted until these are done. From the next morning, reminders are sent every ${NAG_EVERY} minutes until you write them.</p>` + need.map(m=>meetingCard(m,na,'input')).join('');
+  else h += note('Once a meeting starts, write here what was discussed, or record that it was postponed.');
+  h += `</section><section class="card"><div class="sec-h"><h2>Upcoming</h2></div>${up.length?up.map(m=>meetingCard(m,na,'up')).join(''):'<div class="empty">No upcoming meetings.</div>'}</section>`;
+  h += `<section class="card"><div class="sec-h"><h2>Submitted</h2></div>${done.length?done.map(m=>meetingCard(m,na,'done')).join(''):'<div class="empty">No meeting reports submitted yet.</div>'}</section>`;
+  return h;
+}
+function scheduleMeeting(instant){
+  const n = now(), err = document.getElementById('mErr'), fail = m => { err.hidden=false; err.textContent=m; };
+  const w = document.getElementById('mWith').value.trim(), p = document.getElementById('mPurpose').value.trim(), pl = document.getElementById('mPlace').value.trim();
+  let d = document.getElementById('mDate').value, t = document.getElementById('mTime').value;
+  if (instant){ d = n.date; t = n.label; }
+  if (!w) return fail('Enter who the meeting is with.');
+  if (!p) return fail('Enter what the meeting is for.');
+  if (!d || !t) return fail('Choose a date and time, or press "Start meeting now".');
+  const na = nowAbs();
+  if (absOf(d,t) < na) return fail('That date and time has already passed. Choose a time from now onwards.');
+  db.meetings.push({ id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] });
+  save(); render();
+}
+function submitOutcome(f){
+  const m = db.meetings.find(x=>x.id===f.dataset.id), na = nowAbs(), err = f.querySelector('.err');
+  const fail = t => { err.hidden=false; err.textContent=t; };
+  if (!m || !needsInput(m,na)){ render(); return; }
+  const txt = f.txt.value.trim();
+  if (words(txt) < CONFIG.minWords) return fail(`Please write at least ${CONFIG.minWords} words (currently ${words(txt)}).`);
+  if (f.dataset.ret){
+    if (m.outcome==='postponed') m.postponeReason += '\n\nMore detail: '+txt; else m.notes += '\n\nMore detail: '+txt;
+  } else {
+    const oc = f.querySelector('input[name=oc]:checked').value;
+    if (oc==='postponed'){
+      const nd = f.nd.value, nt = f.querySelector('input[name=nt]').value;
+      if (!nd || !nt) return fail('Choose the new date and time for the meeting.');
+      if (absOf(nd,nt) < na) return fail('The new date and time must be in the future.');
+      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
+      db.meetings.push(nm); m.postponedTo = nm.id; m.postponeReason = txt;
+    } else m.notes = txt;
+    m.outcome = oc;
+  }
+  m.status = 'review'; m.notesAt = na; (m.history = m.history||[]).push({ by:m.owner, action:'submitted', at:na });
+  emailPeople(reviewersOf(m.owner).map(r=>r.id), `MoM for approval: ${userName(m.owner)} — meeting with ${m.withWhom}`, (m.outcome==='postponed'?'Postponed: '+m.postponeReason:m.notes) + '\n\nApprove or send back in the portal (Sales meetings).');
+  reviewersOf(m.owner).forEach(r=>notify(r.id, `${userName(m.owner)} submitted a meeting report (${m.outcome==='postponed'?'postponed':'held'}) for the meeting with ${m.withWhom}. Waiting for approval.`, na, m.id));
+  save(); render();
+}
+function decideMeeting(id, action){
+  const m = db.meetings.find(x=>x.id===id), ta = document.querySelector(`.mrc[data-id="${id}"]`), txt = ta.value.trim();
+  const err = ta.closest('label').parentElement.querySelector('.err');
+  if (!m || m.status!=='review'){ render(); return; }
+  if (action==='returned' && !txt){ err.hidden=false; err.textContent='Write what extra detail is needed before sending it back.'; return; }
+  const na = nowAbs();
+  m.status = action; if (action==='returned') m.returnedAt = na;
+  m.history.push({ by:ui.user, action, text:txt, at:na });
+  emailPeople([m.owner], action==='approved' ? `MoM approved — meeting with ${m.withWhom}` : `MoM sent back — meeting with ${m.withWhom}`, action==='approved' ? `Approved by ${userName(ui.user)}.${txt?' Comment: '+txt:''}` : `Sent back by ${userName(ui.user)}: ${txt}\n\nPlease add more detail in the portal (Meetings).`);
+  notify(m.owner, action==='approved'
+    ? `Your meeting report (${m.withWhom}) was approved by ${userName(ui.user)}.${txt?' Comment: '+txt:''}`
+    : `Your meeting report (${m.withWhom}) was sent back by ${userName(ui.user)}: ${txt}`, na, m.id);
+  save(); render();
+}
+function meetingReviewView(){
+  const na = nowAbs(), n = now(), staff = subtree(ui.user).filter(u=>isField(u.id)).map(u=>u.id);
+  const ms = db.meetings.filter(m=>staff.includes(m.owner));
+  const last = m => m.history&&m.history.length ? m.history[m.history.length-1].at : 0;
+  const live = ms.filter(m=>m.status==='scheduled' && m.date===n.date && na>=mStart(m)-15).sort((a,b)=>mStart(a)-mStart(b));
+  const pend = ms.filter(m=>m.status==='review').sort((a,b)=>a.notesAt-b.notesAt);
+  const recent = ms.filter(m=>m.status==='approved'||m.status==='returned').sort((a,b)=>last(b)-last(a)).slice(0,10);
+  const lbl = m => `<div class="hint" style="margin:12px 0 4px"><b style="color:var(--ink)">${esc(userName(m.owner))}</b> · ${esc(getUser(m.owner).title)}</div>`;
+  let h = `<section class="card"><div class="sec-h"><h2>Meetings in progress</h2>${live.length?pill('open',`${live.length} live`):pill('locked','None right now')}</div>`;
+  h += live.length ? live.map(m=>lbl(m)+meetingCard(m,na,'done',false,true)).join('') : note('Diaries appear here while salespeople are in a meeting.');
+  h += `</section><section class="card"><div class="sec-h"><h2>MoM waiting for approval</h2>${pend.length?pill('locked',`${pend.length} waiting`):pill('open','All done')}</div>
+    <p class="hint" style="margin-top:0">The GM or the CEO can approve; once one of them approves, it is final. Sending it back restarts reminders every ${NAG_EVERY} minutes until the salesperson adds detail.</p>`;
+  h += pend.length ? pend.map(m=>lbl(m)+meetingCard(m,na,'done',true,true)).join('') : note('No minutes waiting.');
+  h += `</section><section class="card"><div class="sec-h"><h2>Recently decided</h2></div>${recent.length?recent.map(m=>lbl(m)+meetingCard(m,na,'done',false,true)).join(''):'<div class="empty">Nothing decided yet.</div>'}</section>`;
+  return h;
+}
+function alertsView(){
+  const list = db.notifications.filter(x=>x.owner===ui.user).sort((a,b)=>b.at-a.at);
+  list.forEach(x=>{ x.read = true; }); save();
+  const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  return `<section class="card"><div class="sec-h"><h2>Notifications</h2><span class="hint" style="margin:0">${list.length} total</span></div>
+    <div class="row" style="align-items:center;margin-bottom:8px">${perm==='granted'?'<span class="b">Pop-up notifications are on</span>':perm==='unsupported'?'<span class="b">This browser does not support pop-up notifications</span>':'<button class="btn sm ghost" data-act="perm">Turn on pop-up notifications</button>'}</div>
+    ${list.length?list.slice(0,80).map(x=>`<div class="ci"><span class="tm" style="min-width:96px">${fmtAbs(x.at)}</span><span style="flex:1;min-width:0">${esc(x.text)}</span></div>`).join(''):note('No notifications yet.')}
+    <p class="hint">Meeting reminders are also sent to your email by the server, even when the portal is closed. Pop-ups appear while the portal is open.</p></section>`;
+}
+function meetingBlock(u){
+  if (!isField(u)) return '';
+  const p = meetingsOf(u).filter(m=>needsInput(m,nowAbs()));
+  return p.length ? note(`You have ${p.length} meeting${p.length===1?'':'s'} without notes. Write them in the Meetings tab first — the closure report can't be submitted until then.`, true, true) + '<div style="height:10px"></div>' : '';
+}
+function updateClock(){ const n = now(); document.getElementById('clock').textContent = `${fmtDate(n.date)} · ${n.label} (UAE time)`; }
+
+function fieldDash(people, d){
+  const fs = people.filter(p=>isField(p.id)); if (!fs.length) return '';
+  const n = now(), na = nowAbs();
+  let h = `<section class="card"><div class="sec-h"><h2>Field sales</h2><span class="hint" style="margin:0">${fmtDate(d)}</span></div>`;
+  fs.forEach(p=>{
+    const lg = loginOf(p.id,d), visits = checkinsOf(p.id,d).filter(c=>c.kind!=='login');
+    const ms = meetingsOf(p.id).filter(m=>m.date===d).sort((a,b)=>mStart(a)-mStart(b));
+    const lp = lg ? pill(lg.late?'miss':'open',`Login ${lg.time} · ${lg.late?'Late':'On time'}`) : (d<n.date || n.mins>toMins(LOGIN_BY)) ? pill('miss','Not logged in') : pill('soon','Not logged in yet');
+    h += `<div class="crow"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${esc(p.name)} <span class="b">${esc(p.title)}</span></div>${lp}</div>
+      ${lg?ciRow(lg,true):''}${visits.map(c=>ciRow(c,true)).join('')}
+      <h3 class="sub" style="margin-top:8px">Meetings</h3>${ms.length?ms.map(m=>`<div class="ci"><span class="tm">${m.time}</span><span style="flex:1;min-width:0"><b>${esc(m.withWhom)}</b> · ${esc(m.purpose)}</span>${(m.diary||[]).length?`<span class="b">Diary · ${m.diary.length}</span>`:''}${stPill(m,na)}${m.geo&&LOCS[m.id]?`<a href="${mapUrl(LOCS[m.id])}" target="_blank" rel="noopener">Meeting location</a>`:''}</div>`).join(''):'<div class="empty">No meetings on this date.</div>'}</div>`;
+  });
+  return h + `<p class="hint">Full diaries and minutes are in the Sales meetings tab.</p></section>`;
+}
+
+function summaryPrompt(){
+  const n = now(), d = n.date, people = subtree(ui.user).filter(u=>hasOwnReport(u.id)), na = nowAbs();
+  const lines = people.map(u=>{ const i = personInfo(u, d, n);
+    const t = i.act.map(x=>`${x.title} [${x.priority}${x.category==='extra'?', extra':''}${d>x.dueDate?', OVERDUE':''}, ${progOn(x,d)}%]`).join('; ');
+    const lg = isField(u.id) ? (loginOf(u.id,d) ? ` login ${loginOf(u.id,d).time}${loginOf(u.id,d).late?' LATE':''};` : ' no login;') : '';
+    const ms = isField(u.id) ? meetingsOf(u.id).filter(m=>m.date===d).map(m=>`meeting ${m.time} with ${m.withWhom} (${mState(m,na)})`).join('; ') : '';
+    return `- ${u.name} (${u.title}): ${i.st};${lg} tasks: ${t||'none'}${ms?'; '+ms:''}`; }).join('\n');
+  return `You are helping the management of a power cable accessories company review the day. Today is ${fmtDate(d)}, time ${n.label} (UAE).
+Write a short plain-text summary (no Markdown symbols) with these parts: 1) Overall picture in two sentences. 2) Needs attention now (emergencies, overdue work, missed plans or closures, late sales logins). 3) Sales meetings today. 4) Suggested follow-ups for the manager. Only use the facts below.
+
+${lines.slice(0, 15000)}`;
+}
+
+/* ===== CEO / GM dashboard ===== */
+const DASH_ROLES = ['CEO','General Manager'];
+function subtree(id){ const out=[]; const walk=x=>reportsOf(x).forEach(r=>{ if(!out.includes(r)){ out.push(r); walk(r.id); } }); walk(id); return out; }
+function teamHead(uId, viewer){ let cur=getUser(uId), g=0; while(cur && cur.managers.length && !cur.managers.includes(viewer) && g++<12) cur=getUser(cur.managers[0]); return cur; }
+const progOn = (t,d) => t.log[d] ? t.log[d].progress : prevProgress(t,d);
+
+function personInfo(u, d, n){
+  const act = activeTasks(u.id,d), c = db.closures[u.id+'|'+d];
+  const isToday = d===n.date, ph = isToday ? phaseFor(n.mins,u.id) : 'over';
+  const planned = act.filter(t=>t.startDate===d && t.category==='planned').length;
+  const extra = act.filter(t=>t.startDate===d && t.category==='extra');
+  const carried = act.filter(t=>t.startDate<d).length;
+  const overdue = act.filter(t=>d>t.dueDate);
+  const avg = act.length ? Math.round(act.reduce((s,t)=>s+progOn(t,d),0)/act.length) : null;
+  let st, cls, flag=false;
+  if (c){ st = c.review ? 'Closed · reviewed' : 'Closed · awaiting review'; cls = c.review ? 'open' : 'locked'; }
+  else if (ph==='over'){ st='Closure missed'; cls='miss'; flag=true; }
+  else if (ph==='closure'){ st='Closure pending'; cls='soon'; }
+  else if (!act.length && ORDER[ph]>=ORDER.extra){ st='No plan'; cls='miss'; flag=true; }
+  else if (!act.length){ st='Not started'; cls='soon'; }
+  else { st='Working'; cls='open'; }
+  if (overdue.length || extra.some(t=>t.priority==='Emergency')) flag = true;
+  return { u, act, c, planned, extra, carried, overdue, avg, st, cls, flag };
+}
+
+function dashView(n){
+  const me = ui.user, dv = ui.dash || (ui.dash = { date:null, team:'all', status:'all' });
+  const d = dv.date && dv.date<=n.date ? dv.date : n.date;
+  const people = subtree(me).filter(u=>hasOwnReport(u.id));
+  const heads = reportsOf(me);
+  const infos = people.map(u=>({ ...personInfo(u,d,n), head:teamHead(u.id,me) }));
+  const isToday = d===n.date;
+
+  /* tiles */
+  const withPlan = infos.filter(i=>i.act.length).length;
+  const tasks = infos.reduce((s,i)=>s+i.act.length,0);
+  const emg = infos.reduce((s,i)=>s+i.extra.filter(t=>t.priority==='Emergency').length,0);
+  const extraN = infos.reduce((s,i)=>s+i.extra.length,0);
+  const overdueN = infos.reduce((s,i)=>s+i.overdue.length,0);
+  const closed = infos.filter(i=>i.c).length;
+  const missed = infos.filter(i=>i.st==='Closure missed').length;
+  const noPlan = infos.filter(i=>i.st==='No plan').length;
+  const pendRev = Object.keys(db.closures).filter(k=>{ const [o,dt]=k.split('|'); return dt<=d && people.some(p=>p.id===o) && !db.closures[k].review; }).length;
+  const tile = (v,l,warn) => `<div class="tile ${warn&&v?'warn':''}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+
+  const selP = dv.person && people.some(p=>p.id===dv.person) ? getUser(dv.person) : null;
+  let h = `<section class="card finder-card"><div class="sec-h" style="border-bottom:0;padding-bottom:0;margin-bottom:10px"><h2>Find a person</h2><span class="hint" style="margin:0">Type any letter. Names starting with it come first, then names containing it.</span></div>
+    ${picker('dPerson', people, selP?selP.id:'', '', 'Type a name or a letter, e.g. G')}
+    ${selP?`<div class="selp"><span class="b asg">Showing ${esc(selP.name)} · ${esc(selP.title)}</span><button class="btn sm ghost" data-act="dperson-clear">Show everyone</button></div>`:''}</section>`;
+  h += `<section class="card"><div class="sec-h"><h2>AI summary</h2><button class="btn sm ghost" data-act="ai-summary">Summarise with AI</button></div><div class="ai-out" id="aiSum" hidden></div><p class="hint" style="margin:0">A short written summary of today: who needs attention, emergencies, overdue work and sales meetings.</p></section>`;
+  h += `<section class="card"><div class="sec-h"><h2>${getUser(me).role==='CEO'?'Company':'Team'} dashboard</h2>
+      <span class="hint" style="margin:0">${people.length} people · ${fmtDate(d)}${isToday?' · '+n.label:''}</span></div>
+    <div class="filters">
+      <label class="who">Date <input type="date" id="dDate" value="${d}" max="${n.date}"></label>
+      <select id="dTeam" aria-label="Team"><option value="all">All teams</option>${heads.map(hd=>`<option value="${hd.id}" ${dv.team===hd.id?'selected':''}>${esc(hd.name)} — ${esc(hd.title)}</option>`).join('')}</select>
+      <select id="dStatus" aria-label="Status">${[['all','All statuses'],['flag','Needs attention'],['working','Working / pending'],['closed','Closed']].map(o=>`<option value="${o[0]}" ${dv.status===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
+      <input type="search" id="dSearch" placeholder="Search person or task" aria-label="Search">
+    </div>
+    <div class="tiles">
+      ${tile(`${withPlan}/${people.length}`,isToday?'people with work today':'people with work')}
+      ${tile(tasks,'tasks in progress')}
+      ${tile(extraN,'extra work added')}
+      ${tile(emg,'emergencies',true)}
+      ${tile(overdueN,'overdue tasks',true)}
+      ${tile(`${closed}/${people.length}`,'closure reports in')}
+      ${tile(missed+noPlan,'missed plan / closure',true)}
+      ${tile(pendRev,'reports awaiting review',true)}
+    </div></section>`;
+
+  /* attention list */
+  const att = [];
+  infos.forEach(i=>{
+    i.extra.filter(t=>t.priority==='Emergency').forEach(t=>att.push([0,`<span class="b emg">Emergency</span> <b>${esc(i.u.name)}</b>: ${esc(t.title)}${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}`]));
+    i.overdue.forEach(t=>att.push([1,`<span class="b emg">Overdue</span> <b>${esc(i.u.name)}</b>: ${esc(t.title)} — due ${fmtShort(t.dueDate)}, ${progOn(t,d)}% done (day ${diffDays(t.startDate,d)+1} of ${t.days})`]));
+  });
+  const np = infos.filter(i=>i.st==='No plan'), ms = infos.filter(i=>i.st==='Closure missed');
+  if (np.length) att.push([2,`<span class="b emg">No plan</span> ${np.length} ${np.length===1?'person':'people'} entered no work by ${CONFIG.planClose}: ${np.map(i=>`<b>${esc(i.u.name)}</b>`).join(', ')}`]);
+  if (ms.length) att.push([2,`<span class="b emg">Missed closure</span> ${ms.length} ${ms.length===1?'person':'people'} did not submit a closure report: ${ms.map(i=>`<b>${esc(i.u.name)}</b>`).join(', ')}`]);
+  Object.keys(db.closures).forEach(k=>{ const [o,dt]=k.split('|'); const c=db.closures[k];
+    if (dt<d && !c.review && people.some(p=>p.id===o)) att.push([3,`<span class="b">Review pending</span> ${esc(mgrNames(o))} has not reviewed <b>${esc(userName(o))}</b>'s report from ${fmtShort(dt)}`]); });
+  people.filter(p=>isField(p.id)).forEach(p=>{
+    const lg = loginOf(p.id,d), naX = nowAbs();
+    if (lg && lg.late) att.push([1,`<span class="b emg">Late login</span> <b>${esc(p.name)}</b> logged in at ${lg.time} (required by ${LOGIN_BY})`]);
+    if (!lg && (d<n.date || n.mins>toMins(LOGIN_BY))) att.push([1,`<span class="b emg">Not logged in</span> <b>${esc(p.name)}</b> has no location login for this date`]);
+    meetingsOf(p.id).filter(m=>needsInput(m,naX) && m.date<n.date).forEach(m=>att.push([1,`<span class="b emg">Meeting notes overdue</span> <b>${esc(p.name)}</b>: meeting with ${esc(m.withWhom)} on ${fmtShort(m.date)}`]));
+  });
+  const mpN = (db.meetings||[]).filter(m=>m.status==='review' && people.some(p=>p.id===m.owner)).length;
+  if (mpN) att.push([3,`<span class="b">Meeting approval</span> ${mpN} meeting report${mpN===1?'':'s'} waiting for GM / CEO approval`]);
+  att.sort((a,b)=>a[0]-b[0]);
+  h += `<section class="card"><div class="sec-h"><h2>Needs attention</h2>${att.length?pill('miss',att.length+' item'+(att.length===1?'':'s')):pill('open','Nothing flagged')}</div>
+    ${att.length?`<ul class="att">${att.map(a=>`<li><span>${a[1]}</span></li>`).join('')}</ul>`:note('No emergencies, overdue work or missed reports for this date.')}</section>`;
+
+  h += fieldDash(people, d);
+
+  /* people by team */
+  const show = i => (!selP || i.u.id===selP.id) && (dv.team==='all' || (i.head&&i.head.id===dv.team)) &&
+    (dv.status==='all' || (dv.status==='flag'&&i.flag) || (dv.status==='closed'&&i.c) || (dv.status==='working'&&!i.c&&!i.flag));
+  h += `<section class="card"><div class="sec-h"><h2>What everyone is doing</h2><span class="hint" style="margin:0">Click a person to see their tasks</span></div>
+    <div class="phead"><span>Person</span><span style="text-align:left">Status</span><span>Planned</span><span>Extra</span><span>Carried</span><span>Avg. progress</span><span></span></div>`;
+  const groups = heads.map(hd=>({ hd, list: infos.filter(i=>i.head&&i.head.id===hd.id && show(i)) })).filter(g=>g.list.length);
+  if (!groups.length) h += note('No one matches these filters.');
+  groups.forEach(g=>{
+    h += `<div class="team-h">${esc(g.hd.name)} · ${esc(g.hd.title)}</div>`;
+    g.list.forEach(i=>{
+      const hay = (i.u.name+' '+i.u.title+' '+i.act.map(t=>t.title).join(' ')).toLowerCase();
+      h += `<details class="prow" data-hay="${esc(hay)}" ${selP?'open':''}><summary>
+        <div class="nm"><b>${esc(i.u.name)}</b><span>${esc(i.u.title)}</span></div>
+        <div>${pill(i.cls,i.st)}</div>
+        <div class="num">${i.planned}</div>
+        <div class="num">${i.extra.length}${i.extra.some(t=>t.priority==='Emergency')?'<small style="color:var(--emg)">emergency</small>':''}</div>
+        <div class="num">${i.carried}${i.overdue.length?`<small style="color:var(--emg)">${i.overdue.length} overdue</small>`:''}</div>
+        <div class="num">${i.avg===null?'—':i.avg+'%'}</div>
+        <div class="chev">›</div></summary>
+        <div class="body">${i.act.length ? `<div class="tscroll"><table class="mini"><thead><tr><th>Task</th><th>Priority</th><th>Type</th><th>Day</th><th>Progress</th><th>Reason if incomplete</th></tr></thead><tbody>
+          ${i.act.map(t=>{ const p=progOn(t,d), j=t.log[d]?.justification; return `<tr>
+            <td><b>${esc(t.title)}</b>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${d>t.dueDate?' <span class="b emg">Overdue</span>':''}</td>
+            <td>${priBadge(t.priority)}</td><td>${t.category==='extra'?'Extra':'Planned'}${t.startDate<d?' · carried':''}</td>
+            <td>${diffDays(t.startDate,d)+1}/${t.days}</td>
+            <td class="pct ${p>=100?'full':'part'}">${p}%${t.log[d]?'':' <span class="hint">(last)</span>'}</td>
+            <td>${j?esc(j):'—'}</td></tr>`; }).join('')}
+          </tbody></table></div>` : `<p class="empty">No work entered for this date.</p>`}
+          ${i.c&&i.c.review?`<div class="review"><div class="meta">Review by ${esc(userName(i.c.review.by))}</div><p>${esc(i.c.review.text)}</p></div>`:''}
+        </div></details>`;
+    });
+  });
+  h += `</section>`;
+  return h;
+}
+
+/* ===== Render ===== */
+function tabsFor(id){
+  const t = [];
+  if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']);
+    const fsIds = subtree(id).filter(u=>isField(u.id)).map(u=>u.id);
+    if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
+  if (hasOwnReport(id)) t.push(['staff','My day']);
+  if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
+  if (reportsOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length;
+    t.push(['assign','Assign work']); t.push(['review', nP?`Team reports (${nP})`:'Team reports']); }
+  return t;
+}
+let lastSig = '';
+function sigNow(){ if (!ui.authed) return 'out'; const n = now(); return n.date+'|'+phaseFor(n.mins,ui.user)+'|'+assignMode(n.mins)+'|'+(ui.authed&&isField(ui.user)?meetingsOf(ui.user).map(m=>mState(m,nowAbs())).join(''):''); }
+function render(){
+  const n = now();
+  lastSig = sigNow();
+  pendingRender = false;
+  if (runReminders()) save();
+  const tabs = tabsFor(ui.user);
+  if (ui.authed && !['alerts','account'].includes(ui.view) && !tabs.some(t=>t[0]===ui.view)) ui.view = tabs[0][0];
+  document.getElementById('clock').textContent = `${fmtDate(n.date)} · ${n.label} (UAE time)`;
+  if (document.getElementById('userSel')) document.getElementById('userSel').innerHTML = USERS.map(u=>`<option value="${u.id}" ${u.id===ui.user?'selected':''}>${esc(u.name)} — ${esc(u.title)}</option>`).join('');
+  const tabsEl = document.getElementById('tabs'), main = document.getElementById('main'), who = document.getElementById('whoBox');
+  const gate = ui.authed && isField(ui.user) && !loginOf(ui.user, n.date);
+  tabsEl.hidden = !ui.authed || gate;
+  if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
+  main.innerHTML = gate ? gateView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : reviewView(n);
+  tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
+  const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
+  const lgT = isField(ui.user) && loginOf(ui.user, n.date);
+  who.innerHTML = `${lgT?`<span class="lgchip ${lgT.late?'late':''}">Logged in ${lgT.time}</span>`:''}<button class="whoname" data-act="account" title="My account" style="background:none;border:0;color:inherit;cursor:pointer;text-align:right;padding:0"><b>${esc(me.name)}</b><br><small>${esc(me.title)}</small></button>
+    <button class="btn sm ghost bell" data-act="view" data-v="alerts" aria-label="Notifications">${BELL}${unread?`<span class="cnt">${unread}</span>`:''}</button>
+    <button class="btn sm ghost" data-act="logout">Log out</button>`;
+  flushFresh();
+  decorateSTT();
+}
+
+/* ===== Actions ===== */
+async function doLogin(){
+  const email = document.getElementById('lgEmail').value.trim(), pw = document.getElementById('lgPass').value, err = document.getElementById('lgErr');
+  const btn = document.querySelector('#loginForm .btn:not(.ghost)');
+  if (!email || !pw){ err.hidden = false; err.textContent = 'Enter your work email and password.'; return; }
+  btn.disabled = true; err.hidden = true;
+  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+  btn.disabled = false;
+  if (error){ err.hidden = false; err.textContent = /invalid/i.test(error.message) ? 'Wrong email or password.' : error.message; return; }
+  await afterLogin();
+}
+async function forgotPassword(){
+  const email = (document.getElementById('lgEmail')||{}).value?.trim(), err = document.getElementById('lgErr');
+  if (!email){ err.hidden = false; err.textContent = 'Type your work email first, then press "Forgot password?".'; return; }
+  await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  tip('Check your email', 'If this email is registered, a link to set a new password has been sent.');
+}
+async function setNewPassword(){
+  const a = document.getElementById('np1').value, b = document.getElementById('np2').value, err = document.getElementById('npErr');
+  if (a.length < 8){ err.hidden = false; err.textContent = 'Use at least 8 characters.'; return; }
+  if (a !== b){ err.hidden = false; err.textContent = 'The two passwords are different.'; return; }
+  const { error } = await sb.auth.updateUser({ password: a });
+  if (error){ err.hidden = false; err.textContent = error.message; return; }
+  ui.recovery = false; tip('Password saved', 'Use your new password next time you log in.'); await afterLogin();
+}
+function accountView(){
+  const me = getUser(ui.user);
+  return `<section class="card"><div class="sec-h"><h2>My account</h2></div>
+    <p style="margin-top:0"><b>${esc(me.name)}</b> · ${esc(me.title)}<br><span class="hint">${esc(me.email||'')}</span></p>
+    <form id="chPwForm" class="tform" novalidate><label class="f">New password (at least 8 characters)<input type="password" id="np1" autocomplete="new-password"></label>
+    <label class="f">Repeat new password<input type="password" id="np2" autocomplete="new-password"></label><div class="err" id="npErr" hidden></div>
+    <div class="row end"><button class="btn">Change password</button></div></form></section>`;
+}
+function setupView(){
+  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Almost ready</h2>
+    <p>This portal is not connected to its database yet. Open <b>config.js</b> in the repository and fill in the Supabase project URL and public key, as described in SETUP.md.</p></section>`;
+}
+function noAccessView(){
+  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Not in the staff list</h2>
+    <p>You are signed in, but your email is not in the portal's staff list yet. Ask the portal administrator to add your email to the staff list.</p>
+    <div class="row end"><button class="btn sm ghost" data-act="logout">Log out</button></div></section>`;
+}
+async function afterLogin(){
+  const main = document.getElementById('main');
+  main.innerHTML = '<section class="card login"><h2>Loading…</h2><p class="hint">Getting your work from the server.</p></section>';
+  const { data: me, error } = await sb.rpc('link_me');
+  if (error || !me || !me.id){ ui.authed = false; ui.noAccess = true; render(); return; }
+  const ppl = await sb.from('people').select('*');
+  if (ppl.error){ tip('Could not load', ppl.error.message); return; }
+  USERS = ppl.data.map(p=>({ id:p.id, name:p.name, title:p.title||'', role:p.role, managers:p.managers||[], email:p.email||'', field:!!p.is_field }))
+    .sort((x,y)=>sortName(x).localeCompare(sortName(y)));
+  FIELD_STAFF = USERS.filter(u=>u.field).map(u=>u.id);
+  ui.user = me.id; ui.authed = true; ui.noAccess = false;
+  await loadAll(); subscribe();
+  if (DASH_ROLES.includes(getUser(ui.user).role)) await loadLocations();
+  ui.view = tabsFor(ui.user)[0][0];   // everyone starts on their main tab after logging in
+  render();
+}
+async function loadAll(){
+  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[] }; COLS.forEach(c=>shadow[c].clear());
+  for (let from = 0; ; from += 1000){
+    const { data, error } = await sb.from('records').select('collection,id,data').range(from, from+999);
+    if (error){ tip('Could not load', error.message); break; }
+    data.forEach(r=>{ if (COLS.includes(r.collection)) applyRemote(r.collection, r.id, r.data); });
+    if (data.length < 1000) break;
+  }
+}
+let renderTimer = null;
+const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeout(safeRender, 250); };
+function subscribe(){
+  sb.channel('records-live').on('postgres_changes', { event:'*', schema:'public', table:'records' }, p=>{
+    const r = (p.new && p.new.collection) ? p.new : p.old; if (!r || !COLS.includes(r.collection)) return;
+    applyRemote(r.collection, r.id, p.eventType==='DELETE' ? null : p.new.data); scheduleRender();
+  }).subscribe();
+  if (DASH_ROLES.includes(getUser(ui.user).role))
+    sb.channel('locations-live').on('postgres_changes', { event:'INSERT', schema:'public', table:'locations' }, p=>{ addLoc(p.new); scheduleRender(); }).subscribe();
+}
+function addLoc(r){ if (r && r.ref) LOCS[r.ref] = r; }
+async function loadLocations(){
+  const since = new Date(Date.now() - 60*86400000).toISOString();
+  const { data } = await sb.from('locations').select('*').gte('created_at', since).order('created_at');
+  (data||[]).forEach(addLoc);
+}
+async function saveLocation(kind, ref, pos){
+  const g = gpsInfo(pos);
+  const { error } = await sb.from('locations').insert({ person:ui.user, kind, ref, lat:pos.coords.latitude, lng:pos.coords.longitude, acc:pos.coords.accuracy,
+    gps_time:g.gpsTime, device_time:g.devTime, gps_diff:g.gpsDiff });
+  if (error) tip('Location not saved', error.message);
+}
+function emailPeople(ids, subject, text){
+  ids = [...new Set(ids)].filter(id=>id && id!==ui.user);
+  if (!sb || !ids.length) return;
+  sb.functions.invoke('notify', { body:{ to:ids, subject, text } }).catch(()=>{});
+}
+async function aiAsk(prompt){
+  const { data, error } = await sb.functions.invoke('ai', { body:{ prompt } });
+  if (error) throw new Error('The AI service could not be reached.');
+  if (!data || !data.text) throw new Error((data && data.error) || 'The AI gave no answer.');
+  return data.text;
+}
+function addOrSaveTask(form){
+  const kind = form.dataset.kind, mode = form.dataset.mode, n = now(), me = ui.user, err = form.querySelector('.err');
+  const liveMode = kind==='assign' ? assignMode(n.mins) : phaseFor(n.mins, me);
+  if (liveMode!==mode){ alert('This window has just closed.'); ui.editing=null; render(); return; }
+  if (kind==='self' && db.closures[me+'|'+n.date]){ render(); return; }
+  const title = form.title.value.trim();
+  const priority = (form.querySelector('input[name=priority]:checked')||{}).value;
+  const days = Math.max(1, Math.min(60, parseInt(form.days.value,10)||1));
+  if (!title){ err.hidden=false; err.textContent='Please enter the task.'; return; }
+  const edit = ui.editing ? db.tasks.find(x=>x.id===ui.editing) : null;
+  if (edit && canEdit(edit, me, n)){
+    Object.assign(edit,{ title, details:form.details.value.trim(), priority, days, dueDate:addDays(edit.startDate,days-1) });
+    ui.editing = null;
+  } else {
+    const owner = kind==='assign' ? form.target.value : me;
+    if (kind==='assign' && !owner){ err.hidden=false; err.textContent='Choose who to assign this to. Type a name or open the list.'; return; }
+    if (kind==='assign' && !assignableBy(me).some(r=>r.id===owner)) return;
+    if (mode==='extra' && !confirm(`Add this as extra work${kind==='assign'?' for '+userName(owner):''}? It will be locked and cannot be edited.`)) return;
+    if (kind==='assign') emailPeople([owner], `New ${mode==='plan'?'task':'extra work'} from ${userName(me)}`, `${userName(me)} assigned you: ${title}\nPriority: ${priority}\nDuration: ${days} day(s)${form.details.value.trim()?'\nDetails: '+form.details.value.trim():''}`);
+    db.tasks.push({ id:uid(), owner, assignedBy:kind==='assign'?me:null, category:mode==='plan'?'planned':'extra', priority, title,
+      details:form.details.value.trim(), days, startDate:n.date, dueDate:addDays(n.date,days-1),
+      log:{}, completedOn:null, createdAt:new Date().toISOString() });
+  }
+  save(); render();
+}
+
+function submitClosure(){
+  const n = now(), u = ui.user, d = n.date, k = u+'|'+d;
+  if (phaseFor(n.mins,u)!=='closure' || db.closures[k]){ alert('The closure window is not open.'); render(); return; }
+  if (isField(u)){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
+  const rows = [...document.querySelectorAll('.crow')], out = []; let ok = true;
+  rows.forEach(row=>{
+    const v = Math.max(0, Math.min(100, Math.round(+row.querySelector('.pn').value||0)));
+    const j = row.querySelector('.jt').value.trim(), w = words(j), err = row.querySelector('.err');
+    if (v<100 && w<CONFIG.minWords){ ok=false; row.classList.add('bad'); err.hidden=false; err.textContent=`A justification of at least ${CONFIG.minWords} words is required (currently ${w}).`; }
+    else { row.classList.remove('bad'); err.hidden=true; }
+    out.push({ id:row.dataset.id, v, j });
+  });
+  if (!ok){ document.querySelector('.crow.bad')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  if (!confirm(`Submit your closure report to ${mgrNames(u)}? It cannot be changed afterwards.`)) return;
+  out.forEach(o=>{
+    const t = db.tasks.find(x=>x.id===o.id);
+    t.log[d] = { progress:o.v, justification:o.v<100?o.j:'' };
+    if (o.v>=100) t.completedOn = d;
+  });
+  db.closures[k] = { submittedAt:new Date().toISOString(), tasks:out.map(o=>o.id) };
+  emailPeople(getUser(u).managers, `Closure report from ${userName(u)} — ${fmtDate(d)}`, out.map(o=>{ const t = db.tasks.find(x=>x.id===o.id); return `• ${t?t.title:''}: ${o.v}%${o.v<100?' — '+o.j:''}`; }).join('\n') + '\n\nPlease review it in the portal (Team reports).');
+  save(); render();
+}
+
+
+document.addEventListener('submit', e=>{
+  e.preventDefault();
+  if (e.target.id==='loginForm') return doLogin();
+  if (e.target.id==='newPwForm' || e.target.id==='chPwForm') return setNewPassword();
+  if (e.target.id==='meetForm') return scheduleMeeting(false);
+  if (e.target.classList.contains('mout')) return submitOutcome(e.target);
+  if (e.target.classList.contains('chatf')) return addDiary(e.target);
+  const f = e.target.closest('.tform'); if (f) addOrSaveTask(f);
+});
+
+document.addEventListener('click', e=>{
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act;
+  if (act==='view'){ ui.view = a.dataset.v; ui.editing=null; }
+  else if (act==='edit'){ ui.editing = a.dataset.id; render(); document.querySelector('.tform input[name=title]')?.focus(); return; }
+  else if (act==='cancel-edit'){ ui.editing = null; }
+  else if (act==='del'){
+    const t = db.tasks.find(x=>x.id===a.dataset.id);
+    if (!t || !canEdit(t, ui.user, now())){ render(); return; }
+    if (!confirm('Delete this task?')) return;
+    db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
+  }
+  else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (act==='save-review'){
+    const k = a.dataset.k, ta = document.querySelector(`.revtxt[data-k="${k}"]`), txt = ta.value.trim();
+    const err = ta.closest('label').parentElement.querySelector('.err');
+    if (!txt){ err.hidden=false; err.textContent='Please write a review before submitting.'; return; }
+    db.closures[k].review = { by:ui.user, text:txt, at:new Date().toISOString() };
+    emailPeople([k.split('|')[0]], `Your closure report was reviewed by ${userName(ui.user)}`, txt);
+  }
+  else if (act==='checkin'){ doCheckin(a,'visit'); return; }
+  else if (act==='daylogin'){ doCheckin(a,'login'); return; }
+  else if (act==='meet-now'){ scheduleMeeting(true); return; }
+  else if (act==='stt'){ toggleDictation(a); return; }
+  else if (act==='pick-tg'){ const pk = a.closest('.pick'), ul = pk.querySelector('.pick-list'); if (ul.hidden){ closePicks(pk); openPick(pk,''); pk.querySelector('.pick-in').focus(); } else closePicks(); return; }
+  else if (act==='pick-opt'){ choosePick(a.closest('.pick'), a.dataset.id); return; }
+  else if (act==='dperson-clear'){ if (ui.dash) ui.dash.person = null; }
+  else if (act==='mom-draft'){ const m = db.meetings.find(x=>x.id===a.dataset.id), f = a.closest('form'), ta = f.querySelector('textarea[name=txt]');
+    if (ta.value.trim() && /^MINUTES OF MEETING/.test(ta.value) && !confirm('Replace the current draft?')) return;
+    ta.value = draftMoM(m, f); ta.dispatchEvent(new Event('input',{bubbles:true})); ta.focus(); tip('MoM draft ready','Check each section and fill in the next steps before sending.'); return; }
+  else if (act==='mom-ai'){ const m = db.meetings.find(x=>x.id===a.dataset.id), f = a.closest('form'), ta = f.querySelector('textarea[name=txt]');
+    if (!momNotes(m, f).length){ tip('Nothing to work from', 'Write a few points in the diary or the MoM box first.'); return; }
+    a.disabled = true; a.textContent = 'Writing…';
+    aiAsk(aiPromptMoM(m, f) + '\n\nReply with only the minutes as plain text. Do not use Markdown symbols such as ** or #.')
+      .then(t=>{ ta.value = t; ta.dispatchEvent(new Event('input',{bubbles:true})); tip('AI draft ready', 'Check it carefully and correct anything before sending.'); })
+      .catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Write MoM with AI'; }); return; }
+  else if (act==='prep-ai'){ const m = db.meetings.find(x=>x.id===a.dataset.id), out = a.parentElement.querySelector('.ai-out');
+    a.disabled = true; a.textContent = 'Preparing…';
+    aiAsk(aiPromptPrep(m) + '\n\nUse short plain-text lists. Do not use Markdown symbols such as ** or #.')
+      .then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Prepare with AI'; }); return; }
+  else if (act==='ai-summary'){ const out = document.getElementById('aiSum'); a.disabled = true; a.textContent = 'Summarising…';
+    aiAsk(summaryPrompt()).then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Summarise with AI'; }); return; }
+  else if (act==='forgot'){ forgotPassword(); return; }
+  else if (act==='account'){ ui.view = 'account'; }
+  else if (act==='clk-ap'){ const el = a.closest('.clk'), h = +el.dataset.h; clkSet(el, a.dataset.ap==='pm' ? (h%12)+12 : h%12, +el.dataset.m); return; }
+  else if (act==='mgeo'){ captureMeetingGeo(a.dataset.id, false, a); return; }
+  else if (act==='mapprove'){ decideMeeting(a.dataset.id,'approved'); return; }
+  else if (act==='msendback'){ decideMeeting(a.dataset.id,'returned'); return; }
+  else if (act==='perm'){ try{ Notification.requestPermission().then(()=>render()); }catch(_){ } return; }
+  else if (act==='logout'){ ui.authed = false; ui.noAccess = false; ui.editing = null; if (sb) sb.auth.signOut(); }
+  save(); render();
+});
+
+document.addEventListener('input', e=>{
+  const row = e.target.closest('.crow'); if (!row || !row.querySelector('.pn')) return;
+  const r = row.querySelector('.pr'), num = row.querySelector('.pn');
+  if (e.target===r) num.value = r.value;
+  if (e.target===num) r.value = Math.max(0, Math.min(100, +num.value||0));
+  row.querySelector('.just').hidden = (+num.value) >= 100;
+  const w = words(row.querySelector('.jt').value), wc = row.querySelector('.wc');
+  wc.querySelector('.wcn').textContent = w; wc.classList.toggle('ok', w>=CONFIG.minWords);
+});
+
+document.addEventListener('input', e=>{
+  if (e.target.id!=='dSearch') return;
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('.prow').forEach(r=>{ r.hidden = q && !r.dataset.hay.includes(q); });
+  document.querySelectorAll('.team-h').forEach(hd=>{ let el=hd.nextElementSibling, any=false; while(el && el.classList.contains('prow')){ if(!el.hidden) any=true; el=el.nextElementSibling; } hd.hidden=!any; });
+});
+
+document.addEventListener('change', e=>{
+  if (e.target.name==='oc'){ const pp = e.target.closest('form').querySelector('.pp'); if (pp) pp.hidden = e.target.value!=='postponed'; return; }
+  const id = e.target.id;
+  if (id==='userSel'){ ui.user = e.target.value; ui.authed = true; ui.view = tabsFor(ui.user)[0][0]; }
+  else if (id==='revDate' && e.target.value){ ui.reviewDate = e.target.value; }
+  else if (id==='dDate' && e.target.value){ (ui.dash||(ui.dash={team:'all',status:'all'})).date = e.target.value; }
+  else if (id==='dTeam'){ ui.dash.team = e.target.value; }
+  else if (id==='dStatus'){ ui.dash.status = e.target.value; }
+  else return;
+  ui.editing = null; save(); render();
+});
+
+/* System clock: windows open/lock on their own. Re-render only when a window changes so typing isn't lost. */
+setInterval(()=>{
+  const changed = runReminders();
+  if (changed) save();
+  if (ui.authed) autoMeetingGeo();
+  if (sigNow() !== lastSig || changed || pendingRender) safeRender();
+  else updateClock();
+  flushFresh();
+}, 15000);
+
+async function boot(){
+  const cfg = window.PORTAL_CONFIG || {};
+  if (!window.supabase || !cfg.SUPABASE_URL || /YOUR-/.test(cfg.SUPABASE_URL)){ render(); return; }
+  sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  sb.auth.onAuthStateChange((ev)=>{ if (ev==='PASSWORD_RECOVERY'){ ui.recovery = true; ui.authed = false; render(); } if (ev==='SIGNED_OUT'){ ui.authed = false; render(); } });
+  const { data } = await sb.auth.getSession();
+  if (data && data.session && !/type=recovery/.test(location.hash)) await afterLogin(); else render();
+}
+boot();
+</script>
+</body>
+</html>

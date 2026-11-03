@@ -1,0 +1,5 @@
+# Never commit the staff list or any filled-in secrets
+people*.sql
+*.local.sql
+cron.filled.sql
+.env
