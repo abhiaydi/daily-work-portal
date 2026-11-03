@@ -1489,7 +1489,7 @@ function dashView(n){
 /* ===== Render ===== */
 function tabsFor(id){
   const t = [];
-  if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']);
+  if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']); t.push(['logins','Staff logins']);
     const fsIds = subtree(id).filter(u=>isField(u.id)).map(u=>u.id);
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
@@ -1515,7 +1515,7 @@ function render(){
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
-    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : reviewView(n);
+    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
   const lgT = isField(ui.user) && loginOf(ui.user, n.date);
@@ -1550,6 +1550,43 @@ async function setNewPassword(){
   const { error } = await sb.auth.updateUser({ password: a });
   if (error){ err.hidden = false; err.textContent = error.message; return; }
   ui.recovery = false; tip('Password saved', 'Use your new password next time you log in.'); await afterLogin();
+}
+let LOGINS = null, LOGIN_RESULTS = [];
+async function adminUsers(body){
+  const { data, error } = await sb.functions.invoke('admin-users', { body });
+  if (error) throw new Error('The server could not be reached.');
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+function refreshLogins(){ adminUsers({ action:'list' }).then(d=>{ LOGINS = Object.fromEntries(d.people.map(p=>[p.id, p])); render(); }).catch(e=>tip('Could not load logins', e.message)); }
+function loginsView(){
+  if (!LOGINS){ refreshLogins(); return '<section class="card"><div class="sec-h"><h2>Staff logins</h2></div><p class="hint">Loading…</p></section>'; }
+  const people = USERS.filter(u=>u.id!==ui.user);
+  const ready = people.filter(u=>LOGINS[u.id] && LOGINS[u.id].emailOk && !LOGINS[u.id].hasLogin);
+  let h = '';
+  if (LOGIN_RESULTS.length){
+    const ok = LOGIN_RESULTS.filter(r=>r.password);
+    const text = ok.map(r=>`${userName(r.id)} — ${getUser(r.id).email} — temporary password: ${r.password}`).join('\n');
+    h += `<section class="card geo"><div class="sec-h"><h2>Temporary passwords</h2><button class="btn sm ghost" data-act="copy-logins">Copy all</button></div>
+      <p class="hint" style="margin-top:0">Shown only now. Copy them and send each person their own. Ask them to change it after the first login (tap their name, top right).</p>
+      ${LOGIN_RESULTS.map(r=>`<div class="ci"><b style="min-width:160px">${esc(userName(r.id))}</b><span style="flex:1;min-width:0">${esc(getUser(r.id).email||'')}</span>${r.password?`<span class="b asg" style="font-size:14px">${esc(r.password)}</span>`:`<span class="b emg">${esc(r.error)}</span>`}</div>`).join('')}
+      <textarea id="loginText" style="position:absolute;left:-9999px" aria-hidden="true">${esc(text)}</textarea>
+      <div class="row end"><button class="btn sm ghost" data-act="clear-logins">Done, hide passwords</button></div></section>`;
+  }
+  h += `<section class="card"><div class="sec-h"><h2>Staff logins</h2>${ready.length?`<button class="btn" data-act="mk-all">Create ${ready.length} login${ready.length===1?'':'s'}</button>`:pill('open','Everyone with an email has a login')}</div>
+    <p class="hint" style="margin-top:0">Everyone in the staff list with a work email can get a login. People without an email need one added first.</p>`;
+  people.forEach(u=>{ const L = LOGINS[u.id] || {};
+    const st = L.hasLogin ? pill('open','Has login') : L.emailOk ? pill('soon','Ready') : pill('miss','No email yet');
+    const act = L.hasLogin ? `<button class="btn sm ghost" data-act="reset-login" data-id="${u.id}">New password</button>` : L.emailOk ? `<button class="btn sm ghost" data-act="mk-login" data-id="${u.id}">Create login</button>` : '';
+    h += `<div class="ci"><span style="min-width:180px"><b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span><span style="flex:1;min-width:0">${L.emailOk?esc(u.email):'<span class="hint" style="margin:0">—</span>'}</span>${st}${act}</div>`; });
+  return h + '</section>';
+}
+async function loginAction(action, ids, btn){
+  if (!ids.length) return;
+  if (action==='reset' && !confirm(`Set a new temporary password for ${userName(ids[0])}? Their old password will stop working.`)) return;
+  if (btn){ btn.disabled = true; btn.textContent = 'Working…'; }
+  try { const d = await adminUsers({ action, ids }); LOGIN_RESULTS = (d.results||[]).concat(LOGIN_RESULTS.filter(r=>!ids.includes(r.id))); LOGINS = null; refreshLogins(); }
+  catch(e){ tip('Not done', e.message); if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } }
 }
 function accountView(){
   const me = getUser(ui.user);
@@ -1730,6 +1767,11 @@ document.addEventListener('click', e=>{
   else if (act==='ai-summary'){ const out = document.getElementById('aiSum'); a.disabled = true; a.textContent = 'Summarising…';
     aiAsk(summaryPrompt()).then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Summarise with AI'; }); return; }
   else if (act==='forgot'){ forgotPassword(); return; }
+  else if (act==='mk-all'){ const ids = USERS.filter(u=>u.id!==ui.user && LOGINS && LOGINS[u.id] && LOGINS[u.id].emailOk && !LOGINS[u.id].hasLogin).map(u=>u.id); loginAction('create', ids, a); return; }
+  else if (act==='mk-login'){ loginAction('create', [a.dataset.id], a); return; }
+  else if (act==='reset-login'){ loginAction('reset', [a.dataset.id], a); return; }
+  else if (act==='copy-logins'){ const t = document.getElementById('loginText').value; copyText(t).then(ok=>tip(ok?'Copied':'Copy failed', ok?'Paste it somewhere safe, then send each person their own password.':'Select the passwords and copy them by hand.')); return; }
+  else if (act==='clear-logins'){ LOGIN_RESULTS = []; }
   else if (act==='account'){ ui.view = 'account'; }
   else if (act==='clk-ap'){ const el = a.closest('.clk'), h = +el.dataset.h; clkSet(el, a.dataset.ap==='pm' ? (h%12)+12 : h%12, +el.dataset.m); return; }
   else if (act==='mgeo'){ captureMeetingGeo(a.dataset.id, false, a); return; }
