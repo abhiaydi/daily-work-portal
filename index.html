@@ -1095,7 +1095,7 @@ function captureMeetingGeo(id, auto, btn){
 
 /* ----- login screens ----- */
 function loginView(){
-  if (ui.recovery) return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Set a new password</h2>
+  if (ui.recovery) return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>${ui.forced?'Choose your own password':'Set a new password'}</h2>${ui.forced?'<p class="hint" style="margin:2px 0 0">This is your first login. Your first password was your phone number, so please choose a new one that only you know.</p>':''}
     <form id="newPwForm" novalidate style="margin-top:10px"><label class="f">New password (at least 8 characters)<input type="password" id="np1" autocomplete="new-password"></label>
     <label class="f">Repeat new password<input type="password" id="np2" autocomplete="new-password"></label><div class="err" id="npErr" hidden></div>
     <div class="row end"><button class="btn">Save password</button></div></form></section>`;
@@ -1547,9 +1547,10 @@ async function setNewPassword(){
   const a = document.getElementById('np1').value, b = document.getElementById('np2').value, err = document.getElementById('npErr');
   if (a.length < 8){ err.hidden = false; err.textContent = 'Use at least 8 characters.'; return; }
   if (a !== b){ err.hidden = false; err.textContent = 'The two passwords are different.'; return; }
-  const { error } = await sb.auth.updateUser({ password: a });
+  if (/^\d+$/.test(a)){ err.hidden = false; err.textContent = 'Use letters as well as numbers, not just a phone number.'; return; }
+  const { error } = await sb.auth.updateUser({ password: a, data: { must_change_password: false } });
   if (error){ err.hidden = false; err.textContent = error.message; return; }
-  ui.recovery = false; tip('Password saved', 'Use your new password next time you log in.'); await afterLogin();
+  ui.recovery = false; ui.forced = false; tip('Password saved', 'Use your new password next time you log in.'); await afterLogin();
 }
 let LOGINS = null, LOGIN_RESULTS = [];
 async function adminUsers(body){
@@ -1561,29 +1562,32 @@ async function adminUsers(body){
 function refreshLogins(){ adminUsers({ action:'list' }).then(d=>{ LOGINS = Object.fromEntries(d.people.map(p=>[p.id, p])); render(); }).catch(e=>tip('Could not load logins', e.message)); }
 function loginsView(){
   if (!LOGINS){ refreshLogins(); return '<section class="card"><div class="sec-h"><h2>Staff logins</h2></div><p class="hint">Loading…</p></section>'; }
-  const people = USERS.filter(u=>u.id!==ui.user);
-  const ready = people.filter(u=>LOGINS[u.id] && LOGINS[u.id].emailOk && !LOGINS[u.id].hasLogin);
+  const people = [...USERS].sort((x,y)=>(x.sort-y.sort) || x.name.localeCompare(y.name));
+  const ready = people.filter(u=>u.id!==ui.user && LOGINS[u.id] && LOGINS[u.id].emailOk && !LOGINS[u.id].hasLogin);
   let h = '';
   if (LOGIN_RESULTS.length){
     const ok = LOGIN_RESULTS.filter(r=>r.password);
-    const text = ok.map(r=>`${userName(r.id)} — ${getUser(r.id).email} — temporary password: ${r.password}`).join('\n');
-    h += `<section class="card geo"><div class="sec-h"><h2>Temporary passwords</h2><button class="btn sm ghost" data-act="copy-logins">Copy all</button></div>
-      <p class="hint" style="margin-top:0">Shown only now. Copy them and send each person their own. Ask them to change it after the first login (tap their name, top right).</p>
+    const text = ok.map(r=>`${userName(r.id)} — ${getUser(r.id).email} — first password: ${r.password}${r.phone?' (phone number)':''} — they will be asked to choose their own at first login`).join('\n');
+    h += `<section class="card geo"><div class="sec-h"><h2>First passwords</h2><button class="btn sm ghost" data-act="copy-logins">Copy all</button></div>
+      <p class="hint" style="margin-top:0">Shown only now. The first password is the person's phone number (digits only), or a random one if no phone is on file. Everyone must choose their own password when they first log in.</p>
       ${LOGIN_RESULTS.map(r=>`<div class="ci"><b style="min-width:160px">${esc(userName(r.id))}</b><span style="flex:1;min-width:0">${esc(getUser(r.id).email||'')}</span>${r.password?`<span class="b asg" style="font-size:14px">${esc(r.password)}</span>`:`<span class="b emg">${esc(r.error)}</span>`}</div>`).join('')}
       <textarea id="loginText" style="position:absolute;left:-9999px" aria-hidden="true">${esc(text)}</textarea>
       <div class="row end"><button class="btn sm ghost" data-act="clear-logins">Done, hide passwords</button></div></section>`;
   }
   h += `<section class="card"><div class="sec-h"><h2>Staff logins</h2>${ready.length?`<button class="btn" data-act="mk-all">Create ${ready.length} login${ready.length===1?'':'s'}</button>`:pill('open','Everyone with an email has a login')}</div>
-    <p class="hint" style="margin-top:0">Everyone in the staff list with a work email can get a login. People without an email need one added first.</p>`;
+    <p class="hint" style="margin-top:0">Listed in organisation chart order. Everyone with a work email can get a login; the first password is their phone number.</p>`;
   people.forEach(u=>{ const L = LOGINS[u.id] || {};
-    const st = L.hasLogin ? pill('open','Has login') : L.emailOk ? pill('soon','Ready') : pill('miss','No email yet');
-    const act = L.hasLogin ? `<button class="btn sm ghost" data-act="reset-login" data-id="${u.id}">New password</button>` : L.emailOk ? `<button class="btn sm ghost" data-act="mk-login" data-id="${u.id}">Create login</button>` : '';
-    h += `<div class="ci"><span style="min-width:180px"><b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span><span style="flex:1;min-width:0">${L.emailOk?esc(u.email):'<span class="hint" style="margin:0">—</span>'}</span>${st}${act}</div>`; });
+    const self = u.id===ui.user;
+    const st = L.hasLogin ? pill('open', self?'You':'Has login') : L.emailOk ? pill('soon','Ready') : pill('miss','No email yet');
+    const act = self ? '' : L.hasLogin ? `<button class="btn sm ghost" data-act="reset-login" data-id="${u.id}">Reset password</button>` : L.emailOk ? `<button class="btn sm ghost" data-act="mk-login" data-id="${u.id}">Create login</button>` : '';
+    const ph = u.phone ? `<a href="tel:${esc(u.phone)}">${esc(u.phone.replace(/^(\+\d{3})(\d{2})(\d{3})(\d+)$/,'$1 $2 $3 $4'))}</a>` : '<span class="hint" style="margin:0">No phone</span>';
+    h += `<div class="ci" style="align-items:flex-start"><span style="min-width:200px;flex:1 1 200px"><b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span>
+      <span style="flex:2 1 260px;min-width:0">${L.emailOk?esc(u.email):'<span class="hint" style="margin:0">No email yet</span>'}<br>${ph}</span>${st}${act}</div>`; });
   return h + '</section>';
 }
 async function loginAction(action, ids, btn){
   if (!ids.length) return;
-  if (action==='reset' && !confirm(`Set a new temporary password for ${userName(ids[0])}? Their old password will stop working.`)) return;
+  if (action==='reset' && !confirm(`Reset ${userName(ids[0])}'s password? It goes back to their phone number (or a random one), and they'll choose a new one at their next login.`)) return;
   if (btn){ btn.disabled = true; btn.textContent = 'Working…'; }
   try { const d = await adminUsers({ action, ids }); LOGIN_RESULTS = (d.results||[]).concat(LOGIN_RESULTS.filter(r=>!ids.includes(r.id))); LOGINS = null; refreshLogins(); }
   catch(e){ tip('Not done', e.message); if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } }
@@ -1608,11 +1612,13 @@ function noAccessView(){
 async function afterLogin(){
   const main = document.getElementById('main');
   main.innerHTML = '<section class="card login"><h2>Loading…</h2><p class="hint">Getting your work from the server.</p></section>';
+  const au = await sb.auth.getUser();
+  if (au.data && au.data.user && au.data.user.user_metadata && au.data.user.user_metadata.must_change_password){ ui.recovery = true; ui.forced = true; ui.authed = false; render(); return; }
   const { data: me, error } = await sb.rpc('link_me');
   if (error || !me || !me.id){ ui.authed = false; ui.noAccess = true; render(); return; }
   const ppl = await sb.from('people').select('*');
   if (ppl.error){ tip('Could not load', ppl.error.message); return; }
-  USERS = ppl.data.map(p=>({ id:p.id, name:p.name, title:p.title||'', role:p.role, managers:p.managers||[], email:p.email||'', field:!!p.is_field }))
+  USERS = ppl.data.map(p=>({ id:p.id, name:p.name, title:p.title||'', role:p.role, managers:p.managers||[], email:p.email||'', phone:p.phone||'', sort:p.sort??999, field:!!p.is_field }))
     .sort((x,y)=>sortName(x).localeCompare(sortName(y)));
   FIELD_STAFF = USERS.filter(u=>u.field).map(u=>u.id);
   ui.user = me.id; ui.authed = true; ui.noAccess = false;
