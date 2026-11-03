@@ -97,6 +97,15 @@ create policy "save own location" on public.locations for insert to authenticate
 create policy "management reads locations" on public.locations for select to authenticated
   using (public.is_management());
 
+-- Table access for logged-in users (the security rules above still decide which rows).
+grant usage on schema public to authenticated;
+grant select on public.people to authenticated;
+grant select, insert, update, delete on public.records to authenticated;
+grant select, insert on public.locations to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on function public.link_me() to authenticated;
+revoke all on public.people, public.records, public.locations from anon;
+
 -- Live updates in the portal.
 do $$ begin
   begin alter publication supabase_realtime add table public.records;   exception when duplicate_object then null; end;
