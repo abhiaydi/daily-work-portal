@@ -11,6 +11,7 @@ create table if not exists public.people (
   managers  text[] not null default '{}',     -- ids of the people this person reports to
   email     text unique,                      -- the email they log in with
   is_field  boolean not null default false,   -- sales staff: location login before 09:00, meetings
+  phone     text,
   user_id   uuid unique references auth.users(id) on delete set null
 );
 
@@ -39,6 +40,8 @@ create table if not exists public.locations (
   created_at  timestamptz not null default now()
 );
 create index if not exists locations_ref_idx on public.locations(ref);
+
+alter table public.people add column if not exists phone text;
 
 -- Keep updated_at current.
 create or replace function public.touch_updated_at() returns trigger language plpgsql set search_path = public as $$
