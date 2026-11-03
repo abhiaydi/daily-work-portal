@@ -1,6 +1,5 @@
 -- Meeting reminder emails: runs the "reminders" server function every minute.
--- Paste into Supabase → SQL Editor AFTER the functions are deployed.
--- Replace the two CAPITALISED placeholders first. Do NOT commit the filled-in version.
+-- Paste into Supabase → SQL Editor after the functions are deployed. Replace YOUR-PROJECT-REF first.
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
@@ -8,7 +7,8 @@ select cron.unschedule('meeting-reminders') where exists (select 1 from cron.job
 select cron.schedule('meeting-reminders', '* * * * *', $$
   select net.http_post(
     url     := 'https://YOUR-PROJECT-REF.supabase.co/functions/v1/reminders',
-    headers := jsonb_build_object('Content-Type','application/json','x-cron-secret','YOUR-CRON-SECRET'),
+    headers := jsonb_build_object('Content-Type','application/json',
+                 'x-cron-secret', (select value from private.settings where key = 'cron_secret')),
     body    := '{}'::jsonb
   );
 $$);

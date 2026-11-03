@@ -41,7 +41,7 @@ create table if not exists public.locations (
 create index if not exists locations_ref_idx on public.locations(ref);
 
 -- Keep updated_at current.
-create or replace function public.touch_updated_at() returns trigger language plpgsql as $$
+create or replace function public.touch_updated_at() returns trigger language plpgsql set search_path = public as $$
 begin new.updated_at := now(); new.updated_by := auth.uid(); return new; end $$;
 drop trigger if exists records_touch on public.records;
 create trigger records_touch before update on public.records for each row execute function public.touch_updated_at();
@@ -73,6 +73,16 @@ language sql security definer set search_path = public as $$
 $$;
 revoke execute on function public.set_email_sent(text, jsonb) from public, anon, authenticated;
 
+-- Private settings, readable only by the server (not exposed to the website).
+create schema if not exists private;
+create table if not exists private.settings (key text primary key, value text not null);
+insert into private.settings (key, value) values ('cron_secret', encode(gen_random_bytes(24), 'hex')) on conflict (key) do nothing;
+create or replace function public.check_cron_secret(s text) returns boolean
+language sql stable security definer set search_path = public, private as $$
+  select exists (select 1 from private.settings where key = 'cron_secret' and value = s)
+$$;
+revoke execute on function public.check_cron_secret(text) from public, anon, authenticated;
+
 -- Security rules (row-level security).
 alter table public.people    enable row level security;
 alter table public.records   enable row level security;
@@ -103,7 +113,8 @@ grant select on public.people to authenticated;
 grant select, insert, update, delete on public.records to authenticated;
 grant select, insert on public.locations to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
-grant execute on function public.link_me() to authenticated;
+revoke execute on function public.is_staff(), public.is_management(), public.link_me() from public, anon;
+grant execute on function public.is_staff(), public.is_management(), public.link_me() to authenticated;
 revoke all on public.people, public.records, public.locations from anon;
 
 -- Live updates in the portal.

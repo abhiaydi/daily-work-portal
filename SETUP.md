@@ -55,10 +55,11 @@ In Supabase: **Edge Functions → Secrets** (sometimes under Project Settings �
 | `RESEND_API_KEY` | the key from Part 3 |
 | `EMAIL_FROM` | e.g. `Daily Work Portal <portal@yourcompany.com>` (must use the verified domain) |
 | `PORTAL_URL` | your PORTAL URL |
-| `CRON_SECRET` | any long random text (a value is suggested in your private notes) |
 | `AI_MODEL` | optional; leave out to use the default model set in `supabase/functions/ai/index.ts` |
 
-## Part 6 — Deploy the server functions (GitHub)
+## Part 6 — Deploy the server functions
+
+Already done: the three functions (ai, notify, reminders) are deployed to the Supabase project. Use the steps below only if you ever need to redeploy them from GitHub.
 
 1. Supabase: click your avatar → **Account preferences → Access Tokens → Generate new token** → copy it.
 2. This repository: **Settings → Secrets and variables → Actions → New repository secret**, add:
@@ -68,8 +69,10 @@ In Supabase: **Edge Functions → Secrets** (sometimes under Project Settings �
 
 ## Part 7 — Turn on reminder emails
 
+Already done: the every-minute schedule is set up in the database. The steps below are for setting it up again in a new project.
+
 1. Open `supabase/cron.sql` from this repository, copy it.
-2. In Supabase **SQL Editor → New query**, paste, replace `YOUR-PROJECT-REF` and `YOUR-CRON-SECRET` with your values, **Run**.
+2. In Supabase **SQL Editor → New query**, paste, replace `YOUR-PROJECT-REF` with your value, **Run**.
    Reminders are checked every minute from then on.
 
 ## Part 8 — Check it works

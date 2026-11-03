@@ -33,9 +33,9 @@ export async function caller(req: Request) {
 export async function sendEmail(to: string[], subject: string, text: string) {
   const key = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("EMAIL_FROM");
-  to = to.filter(Boolean);
+  to = to.filter((e) => e && e.includes("@") && !/CHANGE-ME/i.test(e));   // skip placeholder addresses
   if (!key || !from || !to.length) return { skipped: true };
-  const portal = Deno.env.get("PORTAL_URL");
+  const portal = Deno.env.get("PORTAL_URL") || "https://abhiaydi.github.io/daily-work-portal/";
   const body = text + (portal ? `\n\nOpen the portal: ${portal}` : "") + "\n\n— Daily Work Portal";
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",

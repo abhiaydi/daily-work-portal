@@ -2,7 +2,8 @@
 //  - 24 h, 12 h, 6 h, 1 h, 15 min and 10 min before each meeting
 //  - "notes missing" every 30 minutes (09:00–22:00 UAE) from the morning after the meeting,
 //    or 30 minutes after a MoM is sent back, until the salesperson writes it
-// Needs the secret CRON_SECRET (the scheduler sends it in the x-cron-secret header).
+// The scheduler sends a secret in the x-cron-secret header; it is checked against the database
+// (private.settings, readable only by the server).
 import { admin, json, sendEmail } from "../_shared/common.ts";
 
 const OFFSETS = [1440, 720, 360, 60, 15, 10];        // minutes before
@@ -18,10 +19,10 @@ const fmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dubai", weekday: 
 type Rec = Record<string, any>;
 
 Deno.serve(async (req) => {
-  const secret = Deno.env.get("CRON_SECRET");
-  if (!secret || req.headers.get("x-cron-secret") !== secret) return json({ error: "forbidden" }, 403);
-
   const a = admin();
+  const { data: ok } = await a.rpc("check_cron_secret", { s: req.headers.get("x-cron-secret") || "" });
+  if (ok !== true) return json({ error: "forbidden" }, 403);
+
   const now = Date.now();
   const [{ data: rows }, { data: people }] = await Promise.all([
     a.from("records").select("id,data").eq("collection", "meetings"),

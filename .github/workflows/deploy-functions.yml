@@ -1,8 +1,7 @@
 name: Deploy server functions
+# Optional: the functions are currently deployed directly to Supabase.
+# Run this by hand (Actions tab) only after adding the two secrets below.
 on:
-  push:
-    branches: [main]
-    paths: ['supabase/functions/**', '.github/workflows/deploy-functions.yml']
   workflow_dispatch:
 
 jobs:
