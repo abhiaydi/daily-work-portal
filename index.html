@@ -1296,7 +1296,9 @@ const meetingsOf = id => (db.meetings||[]).filter(m=>m.owner===id);
 const mStart = m => absOf(m.date, m.time);
 const mState = (m,na) => m.status==='scheduled' ? (na < mStart(m) ? 'upcoming' : 'notes') : m.status;
 const needsInput = (m,na) => { const s = mState(m,na); return s==='notes' || s==='returned'; };
-const reviewersOf = id => USERS.filter(u=>DASH_ROLES.includes(u.role) && subtree(u.id).some(x=>x.id===id));
+const reviewersOf = id => { const mg = USERS.filter(u=>DASH_ROLES.includes(u.role) && subtree(u.id).some(x=>x.id===id));
+  if (isField(id)) return mg; const direct = USERS.filter(u=>getUser(id).managers.includes(u.id)); return direct.length ? direct : mg; };
+const canReviewMeeting = (m, me) => m.owner!==me && (isMgmt(me) || reviewersOf(m.owner).some(u=>u.id===me));
 const BELL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
 let fresh = [], pendingRender = false;
 const geoTried = {};
@@ -1461,7 +1463,8 @@ function addDiary(f){
 function meetingCard(m, na, mode, reviewer, mgmt){
   const st = mStart(m);
   let h = `<div class="crow mtg"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${fmtAbs(st)} · ${esc(m.withWhom)}${m.postponedFrom?' <span class="b">Rescheduled</span>':''}</div>${stPill(m,na)}</div>
-    <div class="task-det">${esc(m.purpose)}${m.place?' · '+esc(m.place):''}</div>`;
+    <div class="task-det">${esc(m.purpose)}${m.place?' · '+esc(m.place):''}</div>
+    <div class="badges"><span class="b">${m.mode==='online'?'Online':'In person'}</span><span class="b">${mDur(m)<60?mDur(m)+' min':(mDur(m)/60)+' h'} · until ${hhmm(mEnd(m))}</span></div>`;
   if (mode==='up'){
     const offs = REMIND_BEFORE.filter(o=>st-o>=m.createdAt);
     if (!mgmt) h += prepBox(m);
@@ -1505,14 +1508,16 @@ function meetingsView(n){
   const done = all.filter(m=>['review','approved'].includes(m.status)).sort((a,b)=>mStart(b)-mStart(a));
   let h = `<section class="card"><div class="sec-h"><h2>Schedule a meeting</h2></div>
     <form id="meetForm" class="tform" novalidate>
-      <div class="row"><label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company"></label>
-        <label class="f grow">Place (optional)<input id="mPlace" maxlength="120" placeholder="e.g. Customer office, Dubai"></label></div>
+      <label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company"></label>
+      <div class="row"><fieldset class="f"><legend>Type</legend><div class="seg"><label><input type="radio" name="mMode" value="person" checked><span>In person</span></label><label><input type="radio" name="mMode" value="online"><span>Online</span></label></div></fieldset>
+        <label class="f grow">Place<input id="mPlace" maxlength="120" placeholder="Area and city, e.g. Al Quoz, Dubai — or Teams / Zoom link"></label>
+        <label class="f days">Duration<select id="mDur" class="sel">${[30,45,60,90,120,150,180,240].map(x=>`<option value="${x}" ${x===60?'selected':''}>${x<60?x+' min':(x/60)+' h'}</option>`).join('')}</select></label></div>
       <label class="f">What the meeting is for<textarea id="mPurpose" rows="2"></textarea></label>
       <div class="clk-row"><label class="f" style="flex:1;min-width:180px">Date<input type="date" id="mDate" min="${n.date}" value="${n.date}"></label>
         <div class="f" style="flex:1;min-width:240px"><span>Time</span>${clockPicker('mTime', nextSlot())}</div></div>
       <div class="err" id="mErr" hidden></div>
       <div class="row end"><button type="button" class="btn ghost" data-act="meet-now">Start meeting now</button><button class="btn">Schedule meeting</button></div>
-      <p class="hint">Reminders by email and notification: 24 h, 12 h, 6 h, 1 h, 15 min and 10 min before. Past dates and times cannot be chosen.</p>
+      <p class="hint">Reminders by email and notification: 24 h, 12 h, 6 h, 1 h, 15 min and 10 min before. For in-person meetings the AI checks that you can get there in time from your other meetings that day.</p>
     </form></section>`;
   h += `<section class="card"><div class="sec-h"><h2>Needs your input</h2>${need.length?pill('miss',`${need.length} meeting${need.length===1?'':'s'}`):pill('open','Nothing pending')}</div>`;
   if (need.length) h += `<p class="hint" style="margin-top:0">Your closure report can't be submitted until these are done. From the next morning, reminders are sent every ${NAG_EVERY} minutes until you write them.</p>` + need.map(m=>meetingCard(m,na,'input')).join('');
@@ -1521,18 +1526,27 @@ function meetingsView(n){
   h += `<section class="card"><div class="sec-h"><h2>Submitted</h2></div>${done.length?done.map(m=>meetingCard(m,na,'done')).join(''):'<div class="empty">No meeting reports submitted yet.</div>'}</section>`;
   return h;
 }
-function scheduleMeeting(instant){
+async function scheduleMeeting(instant){
   const n = now(), err = document.getElementById('mErr'), fail = m => { err.hidden=false; err.textContent=m; };
   const w = document.getElementById('mWith').value.trim(), p = document.getElementById('mPurpose').value.trim(), pl = document.getElementById('mPlace').value.trim();
+  const mode = (document.querySelector('input[name=mMode]:checked')||{}).value || 'person', dur = parseInt((document.getElementById('mDur')||{}).value,10) || 60;
   let d = document.getElementById('mDate').value, t = document.getElementById('mTime').value;
   if (instant){ d = n.date; t = n.label; }
   if (!w) return fail('Enter who the meeting is with.');
   if (!p) return fail('Enter what the meeting is for.');
+  if (mode==='person' && !pl) return fail('Enter where the meeting is (area and city), so travel time can be checked.');
   if (!d || !t) return fail('Choose a date and time, or press "Start meeting now".');
   const na = nowAbs();
   if (absOf(d,t) < na) return fail('That date and time has already passed. Choose a time from now onwards.');
-  db.meetings.push({ id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] });
-  save(); render();
+  const c = { id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, mode, dur, date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] };
+  const add = () => { db.meetings.push(c); save(); render(); tip('Meeting scheduled', `${w} · ${fmtShort(c.date)} ${c.time}${mode==='online'?' (online)':' · '+pl}`); };
+  if (instant) return add();
+  const btn = document.querySelector('#meetForm .row.end .btn:not(.ghost)'), old = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = mode==='person' ? 'Checking travel time…' : 'Checking…'; }
+  let res = null; try{ res = await checkMeetingPlan(c); }catch(_){ res = null; }
+  if (btn){ btn.disabled = false; btn.textContent = old; }
+  if (!res) return add();
+  planModal(res, ()=>{ const x = fromAbs(res.suggest); c.date = x.date; c.time = x.time; add(); }, add);
 }
 function submitOutcome(f){
   const m = db.meetings.find(x=>x.id===f.dataset.id), na = nowAbs(), err = f.querySelector('.err');
@@ -1548,20 +1562,20 @@ function submitOutcome(f){
       const nd = f.nd.value, nt = f.querySelector('input[name=nt]').value;
       if (!nd || !nt) return fail('Choose the new date and time for the meeting.');
       if (absOf(nd,nt) < na) return fail('The new date and time must be in the future.');
-      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
+      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, mode:m.mode, dur:m.dur, date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
       db.meetings.push(nm); m.postponedTo = nm.id; m.postponeReason = txt;
     } else m.notes = txt;
     m.outcome = oc;
   }
   m.status = 'review'; m.notesAt = na; (m.history = m.history||[]).push({ by:m.owner, action:'submitted', at:na });
-  emailPeople(reviewersOf(m.owner).map(r=>r.id), `MoM for approval: ${userName(m.owner)} — meeting with ${m.withWhom}`, (m.outcome==='postponed'?'Postponed: '+m.postponeReason:m.notes) + '\n\nApprove or send back in the portal (Sales meetings).');
+  emailPeople(reviewersOf(m.owner).map(r=>r.id), `MoM for approval: ${userName(m.owner)} — meeting with ${m.withWhom}`, (m.outcome==='postponed'?'Postponed: '+m.postponeReason:m.notes) + '\n\nApprove or send back in the portal (Meetings review / Team meetings).');
   reviewersOf(m.owner).forEach(r=>notify(r.id, `${userName(m.owner)} submitted a meeting report (${m.outcome==='postponed'?'postponed':'held'}) for the meeting with ${m.withWhom}. Waiting for approval.`, na, m.id));
   save(); render();
 }
 function decideMeeting(id, action){
   const m = db.meetings.find(x=>x.id===id), ta = document.querySelector(`.mrc[data-id="${id}"]`), txt = ta.value.trim();
   const err = ta.closest('label').parentElement.querySelector('.err');
-  if (!m || m.status!=='review'){ render(); return; }
+  if (!m || m.status!=='review' || !canReviewMeeting(m, ui.user)){ render(); return; }
   if (action==='returned' && !txt){ err.hidden=false; err.textContent='Write what extra detail is needed before sending it back.'; return; }
   const na = nowAbs();
   m.status = action; if (action==='returned') m.returnedAt = na;
@@ -1573,17 +1587,16 @@ function decideMeeting(id, action){
   save(); render();
 }
 function meetingReviewView(){
-  const na = nowAbs(), n = now(), staff = subtree(ui.user).filter(u=>isField(u.id)).map(u=>u.id);
-  const ms = db.meetings.filter(m=>staff.includes(m.owner));
+  const na = nowAbs(), n = now(), me = ui.user;
+  const ms = db.meetings.filter(m=>canReviewMeeting(m, me));
   const last = m => m.history&&m.history.length ? m.history[m.history.length-1].at : 0;
-  const live = ms.filter(m=>m.status==='scheduled' && m.date===n.date && na>=mStart(m)-15).sort((a,b)=>mStart(a)-mStart(b));
+  const live = ms.filter(m=>isMgmt(me) && isField(m.owner) && m.status==='scheduled' && m.date===n.date && na>=mStart(m)-15).sort((a,b)=>mStart(a)-mStart(b));
   const pend = ms.filter(m=>m.status==='review').sort((a,b)=>a.notesAt-b.notesAt);
   const recent = ms.filter(m=>m.status==='approved'||m.status==='returned').sort((a,b)=>last(b)-last(a)).slice(0,10);
   const lbl = m => `<div class="hint" style="margin:12px 0 4px"><b style="color:var(--ink)">${esc(userName(m.owner))}</b> · ${esc(getUser(m.owner).title)}</div>`;
-  let h = `<section class="card"><div class="sec-h"><h2>Meetings in progress</h2>${live.length?pill('open',`${live.length} live`):pill('locked','None right now')}</div>`;
-  h += live.length ? live.map(m=>lbl(m)+meetingCard(m,na,'done',false,true)).join('') : note('Diaries appear here while salespeople are in a meeting.');
-  h += `</section><section class="card"><div class="sec-h"><h2>MoM waiting for approval</h2>${pend.length?pill('locked',`${pend.length} waiting`):pill('open','All done')}</div>
-    <p class="hint" style="margin-top:0">The GM or the CEO can approve; once one of them approves, it is final. Sending it back restarts reminders every ${NAG_EVERY} minutes until the salesperson adds detail.</p>`;
+  let h = isMgmt(me) ? `<section class="card"><div class="sec-h"><h2>Sales meetings in progress</h2>${live.length?pill('open',`${live.length} live`):pill('locked','None right now')}</div>` + (live.length ? live.map(m=>lbl(m)+meetingCard(m,na,'done',false,true)).join('') : note('Diaries appear here while salespeople are in a meeting.')) + `</section>` : '';
+  h += `<section class="card"><div class="sec-h"><h2>MoM waiting for approval</h2>${pend.length?pill('locked',`${pend.length} waiting`):pill('open','All done')}</div>
+    <p class="hint" style="margin-top:0">Sales minutes are approved by the GM or the CEO; everyone else's by their own manager (the GM and CEO can also act). Once approved, it is final. Sending it back restarts reminders every ${NAG_EVERY} minutes until more detail is added.</p>`;
   h += pend.length ? pend.map(m=>lbl(m)+meetingCard(m,na,'done',true,true)).join('') : note('No minutes waiting.');
   h += `</section><section class="card"><div class="sec-h"><h2>Recently decided</h2></div>${recent.length?recent.map(m=>lbl(m)+meetingCard(m,na,'done',false,true)).join(''):'<div class="empty">Nothing decided yet.</div>'}</section>`;
   return h;
@@ -1598,7 +1611,6 @@ function alertsView(){
     <p class="hint">Meeting reminders are also sent to your email by the server, even when the portal is closed. Pop-ups appear while the portal is open.</p></section>`;
 }
 function meetingBlock(u){
-  if (!isField(u)) return '';
   const p = meetingsOf(u).filter(m=>needsInput(m,nowAbs()));
   return p.length ? note(`You have ${p.length} meeting${p.length===1?'':'s'} without notes. Write them in the Meetings tab first — the closure report can't be submitted until then.`, true, true) + '<div style="height:10px"></div>' : '';
 }
@@ -2632,7 +2644,7 @@ async function retryPendingScores(){
 function submitClosure(){
   const n = now(), u = ui.user, d = n.date, k = u+'|'+d, prev = db.closures[k], editing = !!prev;
   if (editing ? !closureEditable(u, d) : (phaseFor(n.mins,u)!=='extra')){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
-  if (!editing && isField(u)){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
+  if (!editing){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
   const rows = [...document.querySelectorAll('#closureCard .crow[data-id]')], work = {}; let ok = true;
   rows.forEach(row=>{
     const txt = row.querySelector('.wt').value.trim(), w = words(txt), err = row.querySelector('.err');
@@ -3258,6 +3270,54 @@ async function zipDay(d, btn){
 }
 document.addEventListener('change', e=>{ if (e.target.id==='arcDate'){ ui.arcDate = e.target.value; render(); } });
 
+/* ===== Meeting planner: overlap check and, for in-person meetings, an AI travel-time check between places ===== */
+const mDur = m => m.dur || 60;
+const mEnd = m => mStart(m) + mDur(m);
+const hhmm = abs => fromAbs(abs).time;
+const round15 = a => Math.ceil(a/15)*15;
+async function travelMinutes(from, to, departAbs){
+  const x = fromAbs(departAbs), wd = new Date(x.date+'T12:00:00Z').toLocaleDateString('en-GB',{ weekday:'long', timeZone:'UTC' });
+  const j = parseJSONLoose(await aiAsk(`Estimate realistic driving time by car in the UAE between two places, leaving on ${wd} ${x.date} at ${x.time} (UAE time). Allow for typical traffic at that hour (rush hours roughly 07:00-09:30 and 17:00-20:00 on weekdays), and for parking and walking in at the destination.
+From: ${from}
+To: ${to}
+Reply with ONLY JSON: {"minutes": <whole number>, "note": "<one short sentence, e.g. 'About 110 km via E311; evening traffic near Sharjah.'>"}
+If both places are the same building or area, minutes can be 5-15. If a place is unclear, assume its city centre and say so in the note.`, true));
+  const min = Math.round(+j.minutes); if (!isFinite(min) || min<0 || min>720) throw new Error('No estimate');
+  return { min, note:String(j.note||'').slice(0,200) };
+}
+/* Returns null when the plan is fine, or { msg, suggest } with a suggested start (abs minutes). */
+async function checkMeetingPlan(c){
+  const same = meetingsOf(ui.user).filter(m=>m.status==='scheduled' && m.date===c.date && m.id!==c.id);
+  const s = mStart(c), e = s + mDur(c), lines = []; let suggest = null;
+  const clash = same.find(m=>mStart(m) < e && mEnd(m) > s);
+  if (clash) lines.push(`It overlaps your meeting with ${clash.withWhom} (${clash.time}–${hhmm(mEnd(clash))}).`);
+  if (c.mode==='person' && c.place){
+    const ip = same.filter(m=>(m.mode||'person')==='person' && m.place);
+    const prev = ip.filter(m=>mEnd(m) <= s + 1).sort((a,b)=>mEnd(b)-mEnd(a))[0], next = ip.filter(m=>mStart(m) >= s).sort((a,b)=>mStart(a)-mStart(b))[0];
+    if (prev){ try{ const t = await travelMinutes(prev.place, c.place, mEnd(prev)), need = mEnd(prev) + t.min + 15;
+        if (s < need){ suggest = round15(need); lines.push(`Your meeting with ${prev.withWhom} in ${prev.place} ends at ${hhmm(mEnd(prev))}. Driving to ${c.place} takes about ${t.min} minutes at that time (${t.note}). With 15 minutes to spare, the earliest realistic start is ${hhmm(suggest)}.`); }
+      }catch(_){ if (s - mEnd(prev) < 60) lines.push(`Your meeting with ${prev.withWhom} in ${prev.place} ends at ${hhmm(mEnd(prev))}, and the travel time to ${c.place} could not be estimated. Leave enough time to get there.`); } }
+    if (next){ const st = suggest || s; try{ const t = await travelMinutes(c.place, next.place, st + mDur(c));
+        if (st + mDur(c) + t.min + 15 > mStart(next)) lines.push(`Afterwards you have ${next.withWhom} in ${next.place} at ${next.time}. Driving from ${c.place} takes about ${t.min} minutes (${t.note}), so you would be late. Consider moving that meeting or shortening this one.`);
+      }catch(_){} }
+  }
+  return lines.length ? { msg:lines.join('\n\n'), suggest } : null;
+}
+function planModal(res, onUse, onKeep){
+  const el = modalEl('planModal');
+  el.innerHTML = `<div class="modal-box"><h2>Check the timing</h2><p style="white-space:pre-wrap;margin-top:0">${esc(res.msg)}</p>
+    <p class="hint">Travel times are AI estimates, not live traffic. Use your judgement.</p>
+    <div class="row end"><button type="button" class="btn ghost" data-act="plan-x">Cancel</button><button type="button" class="btn ghost" data-act="plan-keep">Keep my time</button>${res.suggest?`<button type="button" class="btn" data-act="plan-use">Use ${hhmm(res.suggest)}</button>`:''}</div></div>`;
+  PLAN_CB = { use:onUse, keep:onKeep };
+}
+let PLAN_CB = null;
+function planClick(act){
+  if (!['plan-x','plan-keep','plan-use'].includes(act)) return false;
+  const cb = PLAN_CB; PLAN_CB = null; const el = document.getElementById('planModal'); if (el) el.remove();
+  if (cb && act==='plan-use') cb.use(); else if (cb && act==='plan-keep') cb.keep();
+  return true;
+}
+
 /* Admin portal (CEO and GM only) and employee portal. */
 const ADMIN_TABS = ['dash','logins','activity','files','mrev','appr'];
 const isAdminUser = id => DASH_ROLES.includes(getUser(id).role);
@@ -3270,11 +3330,11 @@ function tabsFor(id){
 function allTabs(id){
   const t = [];
   if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']); t.push(['activity','Login activity']); t.push(['files','Attachments by day']); t.push(['logins','Staff logins']);
-    const fsIds = subtree(id).filter(u=>isField(u.id)).map(u=>u.id);
-    if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
+    const p = (db.meetings||[]).filter(m=>m.status==='review' && canReviewMeeting(m, id)).length; t.push(['mrev', p?`Meetings review (${p})`:'Meetings review']); }
   if (hasOwnReport(id)) t.push(['staff','My day']);
   if (hasOwnReport(id) || subtree(id).length) t.push(['mydash', hasOwnReport(id)?'My dashboard':'Dashboards']);
-  if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
+  if (hasOwnReport(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
+  if (!DASH_ROLES.includes(getUser(id).role) && USERS.some(u=>u.id!==id && !isField(u.id) && reviewersOf(u.id).some(r=>r.id===id))){ const p = (db.meetings||[]).filter(m=>m.status==='review' && canReviewMeeting(m, id)).length; t.push(['mrev', p?`Team meetings (${p})`:'Team meetings']); }
   t.push(['proj','Projects']); t.push(['photos','Photo library']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
   if (reportsOf(id).length || indirectOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
@@ -3283,7 +3343,7 @@ function allTabs(id){
   return t;
 }
 let lastSig = '';
-function sigNow(){ if (!ui.authed) return 'out'; const n = now(); return n.date+'|'+phaseFor(n.mins,ui.user)+'|'+assignMode(n.mins)+'|'+(ui.authed&&isField(ui.user)?meetingsOf(ui.user).map(m=>mState(m,nowAbs())).join(''):''); }
+function sigNow(){ if (!ui.authed) return 'out'; const n = now(); return n.date+'|'+phaseFor(n.mins,ui.user)+'|'+assignMode(n.mins)+'|'+(ui.authed?meetingsOf(ui.user).map(m=>mState(m,nowAbs())).join(''):''); }
 function render(){
   const n = now();
   lastSig = sigNow();
@@ -3581,6 +3641,7 @@ document.addEventListener('click', e=>{
   else if (act==='arc-zip'){ zipDay(a.dataset.d, a); return; }
   else if (act==='tf-del'){ removeTaskFile(a.dataset.id, a.dataset.path, a.dataset.name, a); return; }
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
+  else if (planClick(act)) return;
   else if (chatClick(act, a)) return;
   else if (mydClick(act, a)) return;
   else if (act==='sheet-dl'){ downloadMonthSheet(a); return; }
