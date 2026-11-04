@@ -764,7 +764,7 @@ function taskForm(kind, mode){
     : (mode==='plan' ? 'Add to plan' : 'Add additional work');
   return `<form class="tform" data-kind="${kind}" data-mode="${mode}" novalidate>
     ${kind==='assign' ? (t ? `<div class="f">Assigned to<b style="color:var(--ink)">${esc(userName(t.owner))}</b><input type="hidden" name="target" value="${t.owner}"></div>`
-      : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to (you can add several people)', 'Type a name or a letter, e.g. G')}<div class="chips tchips"></div><input type="hidden" name="targets" value=""></div>`) : ''}
+      : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to (you can add several people)', 'Type a name or a letter, e.g. G')}<div class="chips tchips">${tgtChips()}</div><input type="hidden" name="targets" value="${(ui.tgt||[]).join(',')}"></div>`) : ''}
     <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     ${projSelect(t)}
@@ -1063,16 +1063,18 @@ function openPick(pk, text){
   const first = ul.querySelector('[data-id]'); if (first) first.classList.add('act');
 }
 function closePicks(except){ document.querySelectorAll('.pick').forEach(pk=>{ if (pk===except) return; const ul = pk.querySelector('.pick-list'); if (ul && !ul.hidden){ ul.hidden = true; pk.querySelector('.pick-in').setAttribute('aria-expanded','false'); } }); }
+function tgtChips(){ return (ui.tgt||[]).filter(id=>USERS.some(u=>u.id===id)).map(id=>`<span class="chip">${esc(userName(id))}${needsGm(ui.user,id)?' <small>(GM approval)</small>':''}<button type="button" data-act="tg-del" data-id="${id}" aria-label="Remove ${esc(userName(id))}">×</button></span>`).join(''); }
 function paintTargets(tf){
-  const tg = tf.querySelector('input[name=targets]'), ids = tg.value ? tg.value.split(',') : [];
-  tf.querySelector('.tchips').innerHTML = ids.map(id=>`<span class="chip">${esc(userName(id))}${needsGm(ui.user,id)?' <small>(GM approval)</small>':''}<button type="button" data-act="tg-del" data-id="${id}" aria-label="Remove">×</button></span>`).join('');
-  const btn = tf.querySelector('.row.end .btn:not(.ghost)'); if (btn && ids.length>1) btn.textContent = `Assign to ${ids.length} people`;
+  const ids = ui.tgt || [], tg = tf.querySelector('input[name=targets]'); tg.value = ids.join(',');
+  tf.querySelector('.tchips').innerHTML = tgtChips();
+  const btn = tf.querySelector('.row.end .btn:not(.ghost)'), mode = tf.dataset.mode;
+  if (btn) btn.textContent = ids.length>1 ? `Assign to ${ids.length} people` : (mode==='plan' ? 'Assign to their plan' : 'Assign as additional work');
 }
 function choosePick(pk, id){
   const u = getUser(id);
   pk.querySelector('.pick-in').value = u.name; pk.querySelector('input[type=hidden]').value = id; closePicks();
   const tf = pk.closest('.tform'), tg = tf && tf.querySelector('input[name=targets]');
-  if (tg){ const ids = tg.value ? tg.value.split(',') : []; if (!ids.includes(id)) ids.push(id); tg.value = ids.join(','); paintTargets(tf); pk.querySelector('.pick-in').value = ''; pk.querySelector('input[type=hidden]').value = ''; }
+  if (tg){ ui.tgt = ui.tgt || []; if (!ui.tgt.includes(id)) ui.tgt.push(id); paintTargets(tf); pk.querySelector('.pick-in').value = ''; pk.querySelector('input[type=hidden]').value = ''; pk.querySelector('.pick-in').focus(); }
   if (pk.dataset.name==='dPerson'){ (ui.dash = ui.dash||{team:'all',status:'all'}).person = id; save(); render();
     setTimeout(()=>{ const r = document.querySelector('.prow[open]'); if (r) r.scrollIntoView({behavior:'smooth', block:'center'}); }, 50); }
 }
@@ -1344,7 +1346,8 @@ function safeRender(){
   const a = document.activeElement;
   const main = document.getElementById('main');
   const dirty = clkDrag || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('#main') && (a.value||'').length)
-    || [...main.querySelectorAll('form textarea, form input[type=text], form input:not([type]), form input[type=password], textarea.wt')].some(x=>x.value.trim() !== (x.defaultValue||'').trim());
+    || [...main.querySelectorAll('form textarea, form input[type=text], form input:not([type]), form input[type=password], textarea.wt')].some(x=>x.value.trim() !== (x.defaultValue||'').trim())
+    || [...main.querySelectorAll('.tform .tf-in')].some(x=>x.files && x.files.length);
   if (dirty){ pendingRender = true; updateClock(); return; }
   render();
 }
@@ -3454,6 +3457,7 @@ async function addOrSaveTask(form){
     db.tasks.push(t); taskIds.push(t.id);
   }
   if (ups.length) attachFiles(ups, taskIds, reqIds);
+  if (kind==='assign') ui.tgt = [];
   save(); render();
   if (kind==='assign') tip('Assigned', `${direct.length?`Assigned to ${direct.map(userName).join(', ')}.`:''}${viaGm.length?` Sent to the GM for ${viaGm.map(userName).join(', ')}.`:''}${ups.length?' The AI is reading the attachments.':''}`);
 }
@@ -3496,7 +3500,7 @@ document.addEventListener('click', e=>{
   else if (act==='close-edit-cancel'){ ui.editClosure = false; }
   else if (act.startsWith('feas-') && feasClick(act, a)) return;
   else if (act==='tf-get'){ getTaskFile(a.dataset.path, a.dataset.name, a); return; }
-  else if (act==='tg-del'){ const tf = a.closest('.tform'), tg = tf.querySelector('input[name=targets]'); tg.value = tg.value.split(',').filter(x=>x && x!==a.dataset.id).join(','); paintTargets(tf); return; }
+  else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
   else if (chatClick(act, a)) return;
   else if (mydClick(act, a)) return;
   else if (act==='sheet-dl'){ downloadMonthSheet(a); return; }
