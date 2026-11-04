@@ -3365,21 +3365,67 @@ function placeField(id, value, ph){
   return `<span class="plc"><input id="${id}" class="plc-in" maxlength="160" autocomplete="off" placeholder="${esc(ph||'Start typing a place')}" value="${esc(value||'')}"><span class="plc-list" hidden></span></span>`;
 }
 function placeGeoOf(id, text){ const g = PLACE_GEO[id]; return g && g.text===text ? { label:g.label, ...(g.lat!=null?{lat:g.lat,lng:g.lng}:{}), ...(g.placeId?{placeId:g.placeId}:{}) } : null; }
-let plcTimer = null, plcSeq = 0;
+let plcTimer = null, plcSeq = 0, plcCtl = null;
+const PLC_CACHE = new Map();
+/* Common UAE business areas: shown instantly while the map search runs. */
+const UAE_AREAS = [
+  ['Al Quoz Industrial Area','Dubai'],['Al Quoz','Dubai'],['Jebel Ali Free Zone (JAFZA)','Dubai'],['Jebel Ali Industrial Area','Dubai'],['Dubai Investments Park (DIP)','Dubai'],
+  ['Dubai Industrial City','Dubai'],['Dubai South','Dubai'],['Dubai Silicon Oasis','Dubai'],['Ras Al Khor Industrial Area','Dubai'],['Al Qusais Industrial Area','Dubai'],
+  ['Business Bay','Dubai'],['Downtown Dubai','Dubai'],['DIFC','Dubai'],['Deira','Dubai'],['Bur Dubai','Dubai'],['Al Karama','Dubai'],['Al Garhoud','Dubai'],
+  ['Dubai Marina','Dubai'],['Jumeirah Lake Towers (JLT)','Dubai'],['Al Barsha','Dubai'],['Dubai Airport Free Zone (DAFZA)','Dubai'],['Al Rashidiya','Dubai'],['Port Rashid','Dubai'],
+  ['Sharjah Industrial Area','Sharjah'],['SAIF Zone','Sharjah'],['Hamriyah Free Zone','Sharjah'],['Al Majaz','Sharjah'],['Al Nahda','Sharjah'],['Muweilah','Sharjah'],
+  ['Mussafah Industrial Area','Abu Dhabi'],['ICAD (Industrial City of Abu Dhabi)','Abu Dhabi'],['KIZAD (Khalifa Industrial Zone)','Abu Dhabi'],['Khalifa City','Abu Dhabi'],
+  ['Al Reem Island','Abu Dhabi'],['Abu Dhabi city centre','Abu Dhabi'],['Al Ain Industrial Area','Abu Dhabi'],['Al Ain','Abu Dhabi'],['Ruwais','Abu Dhabi'],
+  ['Ajman Industrial Area','Ajman'],['Ajman Free Zone','Ajman'],['Umm Al Quwain Industrial Area','Umm Al Quwain'],
+  ['Al Hamra','Ras Al Khaimah'],['Al Ghail Industrial Zone (RAKEZ)','Ras Al Khaimah'],['Al Jazeera Al Hamra','Ras Al Khaimah'],['Ras Al Khaimah city','Ras Al Khaimah'],
+  ['Fujairah Free Zone','Fujairah'],['Fujairah city','Fujairah'],['Khor Fakkan','Sharjah'],['Kalba','Sharjah'],
+  ['Dubai','Dubai'],['Abu Dhabi','Abu Dhabi'],['Sharjah','Sharjah'],['Ajman','Ajman'],['Umm Al Quwain','Umm Al Quwain'],['Ras Al Khaimah','Ras Al Khaimah'],['Fujairah','Fujairah']
+].map(([label, city])=>({ label, sub:city+', United Arab Emirates', local:true }));
+function localPlaces(q){
+  const w = q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  return UAE_AREAS.map(x=>{ const t = (x.label+' '+x.sub).toLowerCase(); if (!w.every(k=>t.includes(k))) return null;
+    return { x, score:(x.label.toLowerCase().startsWith(w[0])?0:1) + x.label.length/100 }; }).filter(Boolean).sort((a,b)=>a.score-b.score).slice(0,4).map(r=>r.x);
+}
+/* OpenStreetMap place search (Photon), called straight from the browser: much faster than going through our server. */
+async function photonSearch(q, signal){
+  const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8&lang=en&lat=25.2&lon=55.3&location_bias_scale=0.3`, { signal });
+  if (!r.ok) throw new Error('map search '+r.status);
+  const d = await r.json(), seen = new Set();
+  const gulf = f => /United Arab Emirates|Saudi Arabia|Oman|Qatar|Bahrain|Kuwait/.test((f.properties||{}).country||'') ? 0 : 1;
+  return (d.features||[]).sort((a,b)=>gulf(a)-gulf(b)).map(f=>{ const p = f.properties||{}, c = (f.geometry||{}).coordinates||[];
+    const label = p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || p.city || '';
+    const sub = [p.district||p.locality, p.city!==label?p.city:'', p.state!==p.city?p.state:'', p.country].filter(Boolean).join(', ');
+    return { label, sub, lat:c[1], lng:c[0] }; }).filter(x=>x.label && isFinite(x.lat) && !seen.has(x.label+x.sub) && seen.add(x.label+x.sub)).slice(0,6);
+}
+function paintPlaces(inp, local, remote, state){
+  const list = inp.closest('.plc').querySelector('.plc-list');
+  const q = inp.value.trim().toLowerCase(), keys = new Set(remote.map(x=>x.label.toLowerCase()));
+  const lo = local.filter(x=>!keys.has(x.label.toLowerCase())), top = lo.filter(x=>x.label.toLowerCase().startsWith(q)), rest = lo.filter(x=>!top.includes(x));
+  const items = top.slice(0,2).concat(remote, top.slice(2), rest).slice(0,8);
+  PLC_ITEMS[inp.id] = items;
+  if (!items.length && state!=='loading'){ list.innerHTML = '<span class="plc-st">No match on the map. You can still type the place yourself.</span>'; list.hidden = false; return; }
+  list.hidden = false;
+  list.innerHTML = items.map((x,i)=>`<button type="button" class="plc-i" data-act="plc-pick" data-for="${inp.id}" data-i="${i}"><b>${esc(x.label)}</b>${x.sub?`<small>${esc(x.sub)}</small>`:''}</button>`).join('')
+    + `<span class="plc-st">${state==='loading'?'Searching the map…':'Map data © OpenStreetMap'}</span>`;
+}
 async function placeSuggest(inp){
-  const list = inp.closest('.plc').querySelector('.plc-list'), q = inp.value.trim(), seq = ++plcSeq;
+  const q = inp.value.trim(), seq = ++plcSeq, list = inp.closest('.plc').querySelector('.plc-list');
   const online = inp.id==='mPlace' && (document.querySelector('input[name=mMode]:checked')||{}).value==='online';
-  if (online || q.length < 3 || /^https?:|teams|zoom|meet\.google/i.test(q)){ list.hidden = true; return; }
-  list.hidden = false; list.innerHTML = '<span class="plc-st">Searching…</span>';
-  try{
-    const { data } = await sb.functions.invoke('maps', { body:{ action:'suggest', q } });
+  if (plcCtl){ try{ plcCtl.abort(); }catch(_){} plcCtl = null; }
+  if (online || q.length < 2 || /^https?:|teams|zoom|meet\.google/i.test(q)){ list.hidden = true; return; }
+  const local = localPlaces(q), key = q.toLowerCase();
+  if (PLC_CACHE.has(key)){ paintPlaces(inp, local, PLC_CACHE.get(key), 'done'); return; }
+  paintPlaces(inp, local, [], 'loading');
+  const ctl = plcCtl = new AbortController(), tm = setTimeout(()=>ctl.abort(), 5000);
+  let remote = [];
+  try{ remote = await photonSearch(q, ctl.signal); }
+  catch(e){
     if (seq!==plcSeq) return;
-    const items = (data && data.items) || [];
-    if (!items.length){ list.innerHTML = '<span class="plc-st">No match on the map. You can still type the place yourself.</span>'; return; }
-    PLC_ITEMS[inp.id] = items;
-    list.innerHTML = items.map((x,i)=>`<button type="button" class="plc-i" data-act="plc-pick" data-for="${inp.id}" data-i="${i}"><b>${esc(x.label)}</b>${x.sub?`<small>${esc(x.sub)}</small>`:''}</button>`).join('')
-      + `<span class="plc-st">${data.provider==='google'?'Google Maps':'Map data © OpenStreetMap'}</span>`;
-  }catch(_){ if (seq===plcSeq) list.hidden = true; }
+    try{ const { data } = await sb.functions.invoke('maps', { body:{ action:'suggest', q } }); remote = (data && data.items) || []; }catch(_){ remote = []; }
+  } finally { clearTimeout(tm); }
+  if (seq!==plcSeq) return;
+  if (remote.length) PLC_CACHE.set(key, remote);
+  paintPlaces(inp, local, remote, 'done');
 }
 const PLC_ITEMS = {};
 function placePick(a){
@@ -3387,10 +3433,11 @@ function placePick(a){
   const subShort = (x.sub||'').split(',').map(s=>s.trim()).filter(s=>s && s!=='United Arab Emirates' && s!==x.label).slice(0,2).join(', ');
   const text = subShort ? `${x.label}, ${subShort}` : x.label;
   inp.value = text; PLACE_GEO[inp.id] = { text, label:text, lat:x.lat, lng:x.lng, placeId:x.placeId };
+  if (x.local) photonSearch(`${x.label.replace(/\s*\(.*\)/,'')}, ${x.sub}`).then(r=>{ const g = PLACE_GEO[inp.id]; if (r[0] && g && g.text===text){ g.lat = r[0].lat; g.lng = r[0].lng; } }).catch(()=>{});
   inp.closest('.plc').querySelector('.plc-list').hidden = true;
   if (inp.form && inp.form.classList.contains('rsform')) rsKeep(inp.form);
 }
-document.addEventListener('input', e=>{ if (!e.target.classList || !e.target.classList.contains('plc-in')) return; clearTimeout(plcTimer); const inp = e.target; plcTimer = setTimeout(()=>placeSuggest(inp), 350); });
+document.addEventListener('input', e=>{ if (!e.target.classList || !e.target.classList.contains('plc-in')) return; clearTimeout(plcTimer); const inp = e.target; plcTimer = setTimeout(()=>placeSuggest(inp), 180); });
 document.addEventListener('focusout', e=>{ if (e.target.classList && e.target.classList.contains('plc-in')){ const l = e.target.closest('.plc') && e.target.closest('.plc').querySelector('.plc-list'); setTimeout(()=>{ if (l && !l.contains(document.activeElement)) l.hidden = true; }, 200); } });
 const geoQ = m => m.placeGeo && m.placeGeo.lat!=null ? `${m.placeGeo.lat},${m.placeGeo.lng}` : m.place;
 const gmapsPlace = m => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geoQ(m))}`;

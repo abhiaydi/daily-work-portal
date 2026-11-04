@@ -47,17 +47,24 @@ async function gRoute(key: string, from: P, to: P, depart: string) {
 }
 
 /* ---------- OpenStreetMap (free) ---------- */
+const CACHE = new Map<string, any[]>();
 async function oSearch(q: string, limit = 6) {
-  const u = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}&lang=en&lat=25.2&lon=55.3&bbox=${UAE_BBOX}`;
-  let d = await fetch(u, { headers: { "User-Agent": UA } }).then((r) => r.json()).catch(() => ({}));
-  if (!(d.features || []).length) d = await fetch(u.replace(`&bbox=${UAE_BBOX}`, ""), { headers: { "User-Agent": UA } }).then((r) => r.json()).catch(() => ({}));
+  const key = q.toLowerCase() + "|" + limit; if (CACHE.has(key)) return CACHE.get(key)!;
+  // One request, biased towards Dubai (places nearby rank first); Gulf results are moved to the top.
+  const u = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit + 4}&lang=en&lat=25.2&lon=55.3&location_bias_scale=0.3`;
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 6000);
+  const d = await fetch(u, { headers: { "User-Agent": UA }, signal: ctl.signal }).then((r) => r.json()).catch(() => ({})).finally(() => clearTimeout(tm));
+  const gulf = (f: any) => /United Arab Emirates|Saudi Arabia|Oman|Qatar|Bahrain|Kuwait/.test(f.properties?.country || "") ? 0 : 1;
+  d.features = (d.features || []).sort((x: any, y: any) => gulf(x) - gulf(y));
   const seen = new Set<string>();
-  return (d.features || []).map((f: any) => {
+  const out = (d.features || []).map((f: any) => {
     const p = f.properties || {}, [lng, lat] = f.geometry?.coordinates || [];
     const label = p.name || [p.street, p.housenumber].filter(Boolean).join(" ") || p.city || "";
     const sub = [p.district || p.locality, p.city !== label ? p.city : "", p.state !== p.city ? p.state : "", p.country].filter(Boolean).join(", ");
     return { label, sub, lat, lng };
   }).filter((x: any) => x.label && isFinite(x.lat) && !seen.has(x.label + x.sub) && seen.add(x.label + x.sub)).slice(0, limit);
+  if (out.length) { CACHE.set(key, out); if (CACHE.size > 500) CACHE.delete(CACHE.keys().next().value!); }
+  return out;
 }
 async function oLocate(p: P): Promise<P> {
   if (isFinite(p.lat as number) && isFinite(p.lng as number)) return p;
@@ -91,6 +98,14 @@ Deno.serve(async (req) => {
   if (req.headers.get("x-cron-secret")) { const { data } = await admin().rpc("check_cron_secret", { s: req.headers.get("x-cron-secret") }); ok = data === true; }
   if (!ok && !(await caller(req))) return json({ error: "Please log in again." }, 401);
   const gKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  if (body.action === "diag" && ok) {
+    const t0 = Date.now(); const r1 = await fetch(`https://photon.komoot.io/api/?q=dubai%20marina&limit=6&lang=en&lat=25.2&lon=55.3`, { headers: { "User-Agent": UA } });
+    const t1 = Date.now(); await r1.text();
+    const r2 = await fetch(`https://photon.komoot.io/api/?q=dubai%20marina&limit=6&lang=en&lat=25.2&lon=55.3&bbox=${UAE_BBOX}`, { headers: { "User-Agent": UA, Origin: "https://abhiaydi.github.io" } });
+    const t2 = Date.now(); await r2.text();
+    const t3 = Date.now(); await admin().auth.getUser("x").catch(() => null); const t4 = Date.now();
+    return json({ photon1: t1 - t0, photon2: t2 - t1, auth: t4 - t3, cors: r2.headers.get("access-control-allow-origin"), status: r2.status });
+  }
   try {
     if (body.action === "suggest") {
       const q = String(body.q || "").trim().slice(0, 120);
