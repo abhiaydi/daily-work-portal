@@ -207,9 +207,9 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:99px;
   background:linear-gradient(135deg,var(--accent),#6b3fd4);color:#fff;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 8px 24px rgba(26,94,212,.35)}
 #aiFab[hidden]{display:none}
-.bot-av{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);vertical-align:middle}
-.ai-h .bot-av{width:34px;height:34px}.bot-av.sm{width:16px;height:16px;border-width:1px;margin-right:4px;vertical-align:-3px}
-#aiFab{padding-left:8px}
+.bot-av{width:40px;height:40px;image-rendering:auto;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);vertical-align:middle}
+.ai-h .bot-av{width:44px;height:44px}.ai-h b{display:inline-flex;align-items:center;gap:8px;font-size:17px}.bot-av.sm{width:22px;height:22px;border-width:1px;margin-right:5px;vertical-align:-6px}
+#aiFab{padding:6px 18px 6px 6px}
 #aiFab.wake::after{content:'';position:absolute;top:4px;right:6px;width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 2px #fff}
 #aiFab{position:fixed}
 .ai-h{flex-wrap:wrap}
@@ -1223,8 +1223,32 @@ function listenOnce(){
     setTimeout(()=>{ try { r.start(); } catch(err){ if (typeof wakeResume==='function') wakeResume(); reject(new Error('Voice could not start. Try again.')); } }, WAKE && WAKE.on ? 250 : 0);
   });
 }
+/* Denson's voice: a male Indian-English voice when the device has one, else the most suitable male voice; deeper pitch for a bold sound.
+   Which voices exist depends on the browser/device (e.g. Edge offers "Microsoft Prabhat … English (India)", Windows "Microsoft Ravi"). */
+const MALE_IN = /prabhat|ravi|madhur|hemant|kunal|aarav|arjun|rishi|rehaan|rahul|male/i;
+const MALE_ANY = /\bmale\b|prabhat|ravi|madhur|hemant|david|mark|guy|ryan|george|daniel|james|thomas|christopher|eric|brian|andrew|fred|alex\b|aaron|arthur|oliver/i;
+const FEMALE = /female|heera|neerja|kalpana|swara|veena|lekha|aditi|raveena|zira|hazel|susan|samantha|karen|moira|tessa|fiona|victoria|aria|jenny|libby|sonia|emma|ava|allison|google (uk english female|us english)|हिन्दी/i;
+let DVOICE = null;
+function pickVoice(){
+  try{
+    const vs = speechSynthesis.getVoices(); if (!vs.length) return null;
+    const lang = v => (v.lang||'').toLowerCase().replace('_','-');
+    const enIN = vs.filter(v => lang(v)==='en-in'), hiIN = vs.filter(v => lang(v)==='hi-in');
+    const male = (list, re) => list.filter(v => re.test(v.name) && !FEMALE.test(v.name.replace(/\bmale\b/i,'')));
+    const nat = l => l.sort((a,b)=> (/natural|online|neural/i.test(b.name)?1:0) - (/natural|online|neural/i.test(a.name)?1:0));
+    DVOICE = nat(male(enIN, MALE_IN))[0] || nat(male(hiIN, MALE_IN))[0]
+          || nat(male(vs.filter(v=>/^en-(gb|in|au)/.test(lang(v))), MALE_ANY))[0]
+          || nat(male(vs.filter(v=>/^en/.test(lang(v))), MALE_ANY))[0]
+          || enIN.filter(v=>!FEMALE.test(v.name))[0] || null;
+  }catch(_){ DVOICE = null; }
+  return DVOICE;
+}
+try{ if ('speechSynthesis' in window){ pickVoice(); speechSynthesis.addEventListener('voiceschanged', pickVoice); } }catch(_){}
 function speak(text){
-  return new Promise(res=>{ try{ if (!('speechSynthesis' in window)) return res(); const u = new SpeechSynthesisUtterance(text); u.lang = STT_LANG; u.rate = 1; u.onend = res; u.onerror = res; speechSynthesis.cancel(); speechSynthesis.speak(u); setTimeout(res, 15000); }catch(e){ res(); } });
+  return new Promise(res=>{ try{ if (!('speechSynthesis' in window)) return res(); const u = new SpeechSynthesisUtterance(text);
+    const v = DVOICE || pickVoice(); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = STT_LANG;
+    u.pitch = 0.78; u.rate = 0.93; u.volume = 1;
+    u.onend = res; u.onerror = res; speechSynthesis.cancel(); speechSynthesis.speak(u); setTimeout(res, 20000); }catch(e){ res(); } });
 }
 function vaCard(){
   const mode = assignMode(now().mins);
@@ -2566,9 +2590,9 @@ function paintAI(){
           : `<div class="ai-st ${m.status==='done'?'ok':''}">${m.status==='done'?'✓ Done':m.status==='cancelled'?'Cancelled':esc(m.status)}</div>`}</div>`;
     }
     return x + `</div>`; }).join('');
-  p.innerHTML = `<div class="ai-h"><b>${BOT_IC} ${BOT} <small class="bot-sub">AI assistant</small></b>
+  p.innerHTML = `<div class="ai-h"><b>${BOT_IC}${BOT}</b>
       <button type="button" class="btn sm ${WAKE.on?'':'ghost'} ai-v" data-act="ai-wake" aria-pressed="${WAKE.on}" title="Listen for “Hey Denson” while the portal is open">${WAKE.on?'● Hey Denson':'Hey Denson'}</button>
-      <button type="button" class="btn sm ${AST.voice?'':'ghost'} ai-v" data-act="ai-voice" aria-pressed="${AST.voice}" title="Spoken replies, hands-free">${SPK_IC}<span>${AST.voice?'Voice on':'Voice'}</span></button>
+      <button type="button" class="btn sm ${AST.voice?'':'ghost'} ai-v" data-act="ai-voice" aria-pressed="${AST.voice}" title="Spoken replies, hands-free${DVOICE?' · voice: '+esc(DVOICE.name):''}">${SPK_IC}<span>${AST.voice?'Voice on':'Voice'}</span></button>
       <button type="button" class="btn sm ghost" data-act="ai-close" aria-label="Close">×</button></div>
     <div class="ai-msgs">${msgs || `<div class="ai-hello"><b>Hi ${esc(getUser(ui.user).name.split(' ')[0])}, I'm Denson — how can I help?</b><br>Type or tap the mic. For example:
       <ul>${(assignableBy(ui.user).length?[`“Assign ${esc(assignableBy(ui.user).filter(x=>!isGm(x.id))[0]?.name.split(' ')[0]||assignableBy(ui.user)[0].name.split(' ')[0])} to send the price list to the client by Thursday”`]:[]).concat(['“Open my projects”','“What is left on my plan today?”', isMgmt(ui.user)?'“Who has not submitted their closure report?”':'“Take a photo”']).map(s=>`<li>${s}</li>`).join('')}</ul>
