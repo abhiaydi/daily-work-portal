@@ -114,12 +114,60 @@ async function askGemini(key: string, prompt: string, maxTokens: number, json = 
   return parts.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text || "").join("").trim();
 }
 
-/** Ask the AI. Throws if no AI key is set or the request fails. */
+/* Groq (free plan, OpenAI-style API): handles text-only requests so Gemini's small free quota is kept for files. */
+const GROQ = "https://api.groq.com/openai/v1";
+let groqList: string[] = [], groqModel = "";
+const groqSpent = new Map<string, number>();
+async function groqModels(key: string): Promise<string[]> {
+  if (groqList.length) return groqList;
+  const l = await fetch(`${GROQ}/models`, { headers: { Authorization: `Bearer ${key}` } }).then((r) => r.json()).catch(() => ({}));
+  const ids: string[] = (l.data || []).map((m: { id: string }) => m.id).filter((id: string) => !/whisper|tts|orpheus|guard|safeguard|playai|distil|compound|embed/i.test(id));
+  const rank = (id: string) => (/gpt-oss-120b/.test(id) ? 0 : /qwen/.test(id) ? 1 : /gpt-oss/.test(id) ? 2 : /llama.*(70b|maverick|scout)/.test(id) ? 3 : 5);
+  groqList = ids.sort((a, b) => rank(a) - rank(b)).slice(0, 5);
+  return groqList;
+}
+async function askGroq(key: string, prompt: string, maxTokens: number, json = false) {
+  for (const [m, t] of groqSpent) if (t < Date.now()) groqSpent.delete(m);
+  const env = Deno.env.get("GROQ_MODEL");
+  const list = [...new Set([groqModel, env, ...(await groqModels(key)), "openai/gpt-oss-120b"].filter(Boolean) as string[])].filter((m) => !groqSpent.has(m));
+  let last = "";
+  for (const m of list) {
+    const r = await fetch(`${GROQ}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: m, max_tokens: Math.min(Math.max(maxTokens, 1500), 3000), messages: [
+        ...(json ? [{ role: "system", content: "Reply with one valid JSON object only, no other text." }] : []),
+        { role: "user", content: prompt }] }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      const text = String(d?.choices?.[0]?.message?.content || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      if (text) { if (m !== groqModel) console.log("Groq model in use:", m); groqModel = m; return text; }
+      last = "empty reply"; continue;
+    }
+    last = `${r.status}: ${d?.error?.message || "request failed"}`;
+    if (r.status === 429) groqSpent.set(m, Date.now() + (/day|TPD|RPD/i.test(last) ? 3600_000 : 60_000));
+    else if (r.status === 401 || r.status === 403) break;
+  }
+  throw new Error(`Groq ${last}`);
+}
+
+/** Ask the AI. Throws if no AI key is set or the request fails.
+ *  Order: Claude (if set) → for text: Groq then Gemini; for files (PDF/images): Gemini only. */
 export async function askAI(prompt: string, maxTokens = 1500, json = false, files: AIFile[] = []): Promise<string> {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY"), geminiKey = Deno.env.get("GEMINI_API_KEY");
+  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY"), geminiKey = Deno.env.get("GEMINI_API_KEY"), groqKey = Deno.env.get("GROQ_API_KEY");
   if (claudeKey) return await askClaude(claudeKey, prompt, maxTokens, files);
-  if (geminiKey) return await askGemini(geminiKey, prompt, Math.max(maxTokens, 8192), json, files);   // room for Gemini's thinking tokens
+  const gem = () => askGemini(geminiKey!, prompt, Math.max(maxTokens, 8192), json, files);   // room for Gemini's thinking tokens
+  if (groqKey && !files.length) {
+    try { const t = await askGroq(groqKey, prompt, maxTokens, json); lastProvider = "groq"; return t; }
+    catch (e) { console.error("Groq failed, trying Gemini:", (e as Error).message); if (!geminiKey) throw new AIQuotaError("The AI is busy or has reached today's free limit. Please try again a little later."); }
+  }
+  if (geminiKey) {
+    try { const t = await gem(); lastProvider = "gemini"; return t; }
+    catch (e) { if (e instanceof AIQuotaError && groqKey && !files.length) throw new AIQuotaError("Both free AI services have reached today's limit. Please try again later."); throw e; }
+  }
   throw new Error("AI is not set up yet. The administrator needs to add an AI key.");
 }
-export const aiModelInUse = () => geminiModel;
-export const aiReady = () => !!(Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("GEMINI_API_KEY"));
+let lastProvider = "";
+export const aiModelInUse = () => lastProvider === "groq" ? `groq:${groqModel}` : geminiModel;
+export const aiReady = () => !!(Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GROQ_API_KEY"));

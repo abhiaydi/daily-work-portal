@@ -2516,7 +2516,7 @@ async function aiSend(text){
   AST.msgs.push({ role:'user', text }); AST.busy = true; paintAI();
   let j;
   try { j = parseJSONLoose(await aiAsk(aiPrompt(text), true)); }
-  catch(e){ AST.busy = false; AST.msgs.push({ role:'ai', text: /free daily limit/.test(e.message) ? e.message : 'Sorry, something went wrong: '+e.message+' Please try again.' }); paintAI(); return; }
+  catch(e){ AST.busy = false; AST.msgs.push({ role:'ai', text: /free daily limit|today's limit|free limit/.test(e.message) ? e.message : 'Sorry, something went wrong: '+e.message+' Please try again.' }); paintAI(); return; }
   AST.busy = false;
   let reply = String(j.reply||'').trim();
   const raw = Array.isArray(j.actions) ? j.actions : (j.action ? [j.action] : []);
