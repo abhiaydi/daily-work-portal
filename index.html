@@ -207,6 +207,8 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:99px;
   background:linear-gradient(135deg,var(--accent),#6b3fd4);color:#fff;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 8px 24px rgba(26,94,212,.35)}
 #aiFab[hidden]{display:none}
+.bot-ic{font-size:20px;line-height:1;display:inline-block}
+.ai-h .bot-ic{font-size:18px}.bot-sub{font-weight:500;color:var(--muted);font-size:12px;margin-left:4px}
 #chatFab{position:fixed;right:18px;bottom:76px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:11px 16px 11px 13px;border:1px solid var(--line);border-radius:99px;
   background:var(--bg);color:var(--ink);font:600 15px var(--f-body);cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.14)}
 #chatFab svg{color:var(--accent)}#chatFab[hidden]{display:none}
@@ -2046,10 +2048,10 @@ function projectDetail(p, n){
     <div class="pchat">${msgs.length ? msgs.map(m=>{
       if (m.sys) return `<div class="msg sys">${esc(userName(m.by))} ${esc(m.text)} · ${fmtTime(m.at)}</div>`;
       const fl = (m.files||[]).map(id=>db.pfiles.find(f=>f.id===id)).filter(Boolean);
-      return `<div class="msg ${m.ai?'ai':m.by===me?'me':''}"><small>${m.ai?`AI assistant · asked by ${esc(userName(m.by))}`:esc(userName(m.by))}${m.toAi?' → AI':''} · ${fmtTime(m.at)}</small>${m.ai?esc(m.text):mentionHtml(m.text)}${fl.length?`<div>${fl.map(f=>`<button class="btn sm ghost fchip" data-act="pf-get" data-id="${f.id}">${FILE_IC}${esc(f.name)}</button>`).join('')}</div>`:''}</div>`; }).join('') : '<div class="empty">No messages yet. Say hello, or ask the AI about this project.</div>'}
-      ${AIBUSY[p.id]?'<div class="msg ai"><small>AI assistant</small>Thinking…</div>':''}</div>
-    <form class="pchatf" data-id="${p.id}" novalidate><label class="f grow"><span class="sr">Message</span><textarea name="txt" rows="2" placeholder="Write a message… or ask the AI, e.g. “Find the latest quotation” or “What did the contract say about payment?”"></textarea></label>
-      <div class="row end"><button type="button" class="btn ghost" data-act="pc-ai" ${AIBUSY[p.id]?'disabled':''}>Ask AI</button><button class="btn">Send</button></div></form></section>`;
+      return `<div class="msg ${m.ai?'ai':m.by===me?'me':''}"><small>${m.ai?`👨‍💼 Denson · asked by ${esc(userName(m.by))}`:esc(userName(m.by))}${m.toAi?' → Denson':''} · ${fmtTime(m.at)}</small>${m.ai?esc(m.text):mentionHtml(m.text)}${fl.length?`<div>${fl.map(f=>`<button class="btn sm ghost fchip" data-act="pf-get" data-id="${f.id}">${FILE_IC}${esc(f.name)}</button>`).join('')}</div>`:''}</div>`; }).join('') : '<div class="empty">No messages yet. Say hello, or ask Denson about this project.</div>'}
+      ${AIBUSY[p.id]?'<div class="msg ai"><small>👨‍💼 Denson</small>Thinking…</div>':''}</div>
+    <form class="pchatf" data-id="${p.id}" novalidate><label class="f grow"><span class="sr">Message</span><textarea name="txt" rows="2" placeholder="Write a message… or ask Denson, e.g. “Find the latest quotation” or “What did the contract say about payment?”"></textarea></label>
+      <div class="row end"><button type="button" class="btn ghost" data-act="pc-ai" ${AIBUSY[p.id]?'disabled':''}>Ask Denson</button><button class="btn">Send</button></div></form></section>`;
   return h;
 }
 const FOLDER_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -2333,14 +2335,15 @@ document.addEventListener('keydown', e=>{ if (e.key!=='Escape') return; if (CAMS
 document.addEventListener('input', e=>{ if (e.target.id!=='phQ') return; ui.phQ = e.target.value; const q = ui.phQ.toLowerCase().trim();
   document.querySelectorAll('.ph').forEach(b=>{ b.hidden = !!q && !b.dataset.s.includes(q); }); });
 
-/* ===== AI assistant: floating button on every page; typed or spoken; navigates and does tasks (with confirmation) ===== */
+const BOT = 'Denson', BOT_IC = '<span class="bot-ic" aria-hidden="true">👨‍💼</span>';
+/* ===== AI assistant ("Denson"): floating button on every page; typed or spoken; navigates and does tasks (with confirmation) ===== */
 const AI_IC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>';
 const SPK_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
 const AST = { open:false, msgs:[], busy:false, voice:false, listening:false, pending:null, log:[] };
 function aiPrompt(text){
   const hist = AST.msgs.slice(-13, -1).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.text}${m.actions?' [proposed: '+m.actions.map(a=>a.type).join(', ')+' — '+(m.status||'')+']':''}`).join('\n');
   const done = AST.log.filter(x=>!x.undone).map(x=>`#${x.n}: ${x.desc}`).join('\n');
-  return `You are the assistant inside the "Daily Work Portal" of a UAE company. You CAN navigate the portal and carry out the actions below on the user's behalf: the portal shows your proposed actions to the user and runs them after they confirm. Never say you are unable to assign work, add tasks or create projects — if the person is in the list, you can.
+  return `You are Denson, the friendly AI assistant inside the "Daily Work Portal" of Al Yamuna Densons, a UAE company. If asked your name, say you are Denson. You CAN navigate the portal and carry out the actions below on the user's behalf: the portal shows your proposed actions to the user and runs them after they confirm. Never say you are unable to assign work, add tasks or create projects — if the person is in the list, you can.
 Think step by step about what the user wants. If anything essential is missing or unclear (who, what, which project, which of two similar names, whether to undo something), ASK a short question and propose no action. Do not guess.
 Reply with ONLY a JSON object: {"reply":"...","actions":[]}
 Possible actions (use exact ids from the context; at most 5 per reply; they are confirmed together):
@@ -2536,8 +2539,8 @@ function aiContext(){
 }
 function ensureFab(show){
   let fab = document.getElementById('aiFab');
-  if (!fab){ fab = document.createElement('button'); fab.id = 'aiFab'; fab.type = 'button'; fab.dataset.act = 'ai-open'; fab.setAttribute('aria-label','AI assistant');
-    fab.innerHTML = `${AI_IC}<span>Ask AI</span>`; document.body.appendChild(fab); }
+  if (!fab){ fab = document.createElement('button'); fab.id = 'aiFab'; fab.type = 'button'; fab.dataset.act = 'ai-open'; fab.setAttribute('aria-label','Denson, the AI assistant');
+    fab.innerHTML = `${BOT_IC}<span>${BOT}</span>`; document.body.appendChild(fab); }
   fab.hidden = !show || AST.open;
   if (!show && AST.open){ AST.open = false; paintAI(); }
 }
@@ -2546,7 +2549,7 @@ function paintAI(){
   const fab = document.getElementById('aiFab'); if (fab) fab.hidden = AST.open || !ui.authed;
   if (!AST.open){ if (p) p.remove(); return; }
   const keep = p && p.querySelector('#aiIn') ? p.querySelector('#aiIn').value : '';
-  if (!p){ p = document.createElement('section'); p.id = 'aiPanel'; p.setAttribute('aria-label','AI assistant'); document.body.appendChild(p); }
+  if (!p){ p = document.createElement('section'); p.id = 'aiPanel'; p.setAttribute('aria-label','Denson, the AI assistant'); document.body.appendChild(p); }
   const msgs = AST.msgs.map((m,i)=>{
     if (m.role==='user') return `<div class="msg me">${esc(m.text)}</div>`;
     let x = `<div class="msg ai">${esc(m.text)}`;
@@ -2556,14 +2559,14 @@ function paintAI(){
           : `<div class="ai-st ${m.status==='done'?'ok':''}">${m.status==='done'?'✓ Done':m.status==='cancelled'?'Cancelled':esc(m.status)}</div>`}</div>`;
     }
     return x + `</div>`; }).join('');
-  p.innerHTML = `<div class="ai-h"><b>${AI_IC} AI assistant</b>
+  p.innerHTML = `<div class="ai-h"><b>${BOT_IC} ${BOT} <small class="bot-sub">AI assistant</small></b>
       <button type="button" class="btn sm ${AST.voice?'':'ghost'} ai-v" data-act="ai-voice" aria-pressed="${AST.voice}" title="Spoken replies, hands-free">${SPK_IC}<span>${AST.voice?'Voice on':'Voice off'}</span></button>
       <button type="button" class="btn sm ghost" data-act="ai-close" aria-label="Close">×</button></div>
-    <div class="ai-msgs">${msgs || `<div class="ai-hello"><b>Hi ${esc(getUser(ui.user).name.split(' ')[0])}, what can I do?</b><br>Type or tap the mic. For example:
+    <div class="ai-msgs">${msgs || `<div class="ai-hello"><b>Hi ${esc(getUser(ui.user).name.split(' ')[0])}, I'm Denson 👨‍💼 — how can I help?</b><br>Type or tap the mic. For example:
       <ul>${(assignableBy(ui.user).length?[`“Assign ${esc(assignableBy(ui.user).filter(x=>!isGm(x.id))[0]?.name.split(' ')[0]||assignableBy(ui.user)[0].name.split(' ')[0])} to send the price list to the client by Thursday”`]:[]).concat(['“Open my projects”','“What is left on my plan today?”', isMgmt(ui.user)?'“Who has not submitted their closure report?”':'“Take a photo”']).map(s=>`<li>${s}</li>`).join('')}</ul>
       Turn on <b>Voice</b> to talk hands-free: I'll read my answers aloud and listen for your reply.</div>`}
       ${AST.busy?'<div class="msg ai">Thinking…</div>':''}${AST.listening?'<div class="msg ai">Listening… speak now</div>':''}</div>
-    <form id="aiForm" class="ai-f" novalidate><input id="aiIn" autocomplete="off" placeholder="Ask or tell me what to do…" aria-label="Message to the AI assistant">
+    <form id="aiForm" class="ai-f" novalidate><input id="aiIn" autocomplete="off" placeholder="Ask Denson or tell him what to do…" aria-label="Message to Denson">
       <button type="button" class="stt-btn ai-mic ${AST.listening?'rec':''}" data-act="ai-mic" aria-label="Speak">${MIC}</button><button class="btn sm" ${AST.busy?'disabled':''}>Send</button></form>`;
   const inp = p.querySelector('#aiIn'); inp.value = keep;
   const box = p.querySelector('.ai-msgs'); box.scrollTop = box.scrollHeight;
@@ -3011,7 +3014,7 @@ function ensureChatFab(show){
 function chatMsgHtml(m, room){
   if (m.sys) return `<div class="msg sys">${esc(userName(m.by))} ${esc(m.text)} · ${fmtTime(m.at)}</div>`;
   const mine = m.by===ui.user, forMe = (m.mentions||[]).includes(ui.user);
-  return `<div class="msg ${m.ai?'ai':mine?'me':''} ${forMe&&!mine?'tagme':''}"><small>${m.ai?'AI assistant':esc(userName(m.by))} · ${fmtTime(m.at)}</small>${mentionHtml(m.text)}</div>`;
+  return `<div class="msg ${m.ai?'ai':mine?'me':''} ${forMe&&!mine?'tagme':''}"><small>${m.ai?'👨‍💼 Denson':esc(userName(m.by))} · ${fmtTime(m.at)}</small>${mentionHtml(m.text)}</div>`;
 }
 function paintChat(){
   let p = document.getElementById('chatPanel');
