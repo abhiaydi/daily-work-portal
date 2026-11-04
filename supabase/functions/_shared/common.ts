@@ -81,17 +81,33 @@ async function geminiModels(key: string): Promise<string[]> {
   return names.filter((n) => /^gemini/.test(n) && !/image|tts|live|audio|embedding|robotics|computer/.test(n))
     .sort((a, b) => rank(a) - rank(b) || ver(b) - ver(a));
 }
+// Models whose daily quota is used up, skipped until Google resets quotas (midnight US Pacific time).
+const spent = new Map<string, number>();
+function nextPacificMidnight(): number {
+  const now = new Date(), pt = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  const msToMidnight = (24 * 3600 - (pt.getHours() * 3600 + pt.getMinutes() * 60 + pt.getSeconds())) * 1000;
+  return now.getTime() + msToMidnight + 60_000;
+}
+const isDaily = (res: { d?: { error?: { message?: string } } }) => /per day|PerDay|daily/i.test(res.d?.error?.message || "");
+export class AIQuotaError extends Error {}
 async function askGemini(key: string, prompt: string, maxTokens: number, json = false, files: AIFile[] = []) {
-  const first = geminiModel || Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
-  let res = await geminiGenerate(key, first, prompt, maxTokens, json, files);
-  if (res.status === 429 || res.status === 503) { await new Promise((r) => setTimeout(r, 2000)); res = await geminiGenerate(key, first, prompt, maxTokens, json, files); }
-  if (res.ok) geminiModel = first;
-  else if ([400, 404, 429, 500, 503].includes(res.status)) {
-    // Retired or overloaded model: try the newest other available models instead.
-    for (const m of (await geminiModels(key)).filter((x) => x !== first).slice(0, 5)) {
-      res = await geminiGenerate(key, m, prompt, maxTokens, json, files);
-      if (res.ok) { geminiModel = m; console.log("Gemini model in use:", m); break; }
-    }
+  for (const [m, t] of spent) if (t < Date.now()) spent.delete(m);
+  const pref = geminiModel || Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+  const all = await geminiModels(key);
+  const order = [pref, ...all.filter((x) => x !== pref)].filter((m) => !spent.has(m)).slice(0, 12);
+  let res: { ok: boolean; status: number; d: any } = { ok: false, status: 429, d: {} }, quotaHits = 0, tried = 0;
+  for (const m of order) {
+    tried++;
+    res = await geminiGenerate(key, m, prompt, maxTokens, json, files);
+    if (!res.ok && res.status === 503) { await new Promise((r) => setTimeout(r, 1500)); res = await geminiGenerate(key, m, prompt, maxTokens, json, files); }
+    if (!res.ok && res.status === 429 && !isDaily(res)) { await new Promise((r) => setTimeout(r, 2500)); res = await geminiGenerate(key, m, prompt, maxTokens, json, files); }
+    if (res.ok) { if (m !== geminiModel) console.log("Gemini model in use:", m); geminiModel = m; break; }
+    if (res.status === 429) { quotaHits++; if (isDaily(res)) spent.set(m, nextPacificMidnight()); }
+    else if (![400, 404, 500, 503].includes(res.status)) break;
+  }
+  if (!res.ok && (res.status === 429 || (!tried && spent.size))) {
+    console.error("Gemini quota used up:", tried, "tried,", quotaHits, "quota errors,", spent.size, "models spent");
+    throw new AIQuotaError("The AI has used up its free daily limit from Google, so it can't answer right now. It resets around noon UAE time. The administrator can remove this limit by turning on billing for the Gemini key.");
   }
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${res.d?.error?.message || "request failed"}`);
   const parts = res.d?.candidates?.[0]?.content?.parts || [];
