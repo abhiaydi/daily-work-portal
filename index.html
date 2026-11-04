@@ -381,6 +381,14 @@ h3.sub::before,.team-h::before{content:"";flex:none;width:9px;height:9px;border-
 .chatf .stt{flex:1}
 /* MoM helper + prep */
 .ai-out{white-space:pre-wrap;background:var(--bg);border-radius:12px;padding:12px 14px;margin:10px 0;font-size:14px;line-height:1.55}
+.va-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+.va-mic{min-height:56px;font-size:16px;padding:0 22px!important;gap:10px}
+.va-mic svg{width:22px;height:22px}
+.va-mic.rec{background:var(--emg);border-color:var(--emg);animation:pulse 1.2s infinite}
+.va-mic::after{display:none!important}
+.va-said{font-size:16px;font-style:italic;margin:0 0 8px}
+.va-task{display:grid;gap:10px;background:var(--bg);border-radius:14px;padding:14px}
+.va-task b{display:block;font-size:16px}
 .helper{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
 .prep{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--card)}
 .prep summary{cursor:pointer;font-weight:600}
@@ -722,7 +730,7 @@ function staffView(n){
 
 function assignView(n){
   const me = ui.user, d = n.date, mode = assignMode(n.mins), reps = assignableBy(me);
-  let h = `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
+  let h = vaCard() + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
     mode==='plan'?pill('open','Goes to their morning plan'):mode==='extra'?pill('open','Goes to their extra work'):pill('locked','Closed')}</div>`;
   h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). From ${CONFIG.planClose} to ${CONFIG.closureOpen} it is added as extra work (Emergency or Important). The person cannot edit or delete work you assign.</p>`;
   if (mode==='closed') h += note(`Assigning work closed at ${CONFIG.closureOpen}.`, true);
@@ -1006,6 +1014,98 @@ function prepBox(m){
     <button type="button" class="btn sm ghost" data-act="prep-ai" data-id="${m.id}">Prepare with AI</button><div class="ai-out" hidden></div></details>`;
 }
 
+
+/* ===== Assign by voice (AI works out who / what / priority / days) ===== */
+let VA = null;   // { stage: listening|thinking|confirm|done|error, said, task, msg }
+function listenOnce(){
+  return new Promise((resolve, reject)=>{
+    if (!SR) return reject(new Error('Voice is not available in this browser. Please use Chrome, Edge or Safari.'));
+    const r = new SR(); r.lang = STT_LANG; r.interimResults = false; r.continuous = false; let got = '';
+    r.onresult = e=>{ got = Array.from(e.results).map(x=>x[0].transcript).join(' '); };
+    r.onerror = e=>reject(new Error(e.error==='not-allowed' || e.error==='service-not-allowed' ? 'Microphone permission was refused. Allow the microphone for this page and try again.'
+      : e.error==='no-speech' ? 'No speech was heard.' : e.error==='network' ? 'Voice needs an internet connection.' : 'Voice could not start ('+e.error+').'));
+    r.onend = ()=>resolve(got.trim());
+    try { r.start(); } catch(err){ reject(new Error('Voice could not start. Try again.')); }
+  });
+}
+function speak(text){
+  return new Promise(res=>{ try{ if (!('speechSynthesis' in window)) return res(); const u = new SpeechSynthesisUtterance(text); u.lang = STT_LANG; u.rate = 1; u.onend = res; u.onerror = res; speechSynthesis.cancel(); speechSynthesis.speak(u); setTimeout(res, 15000); }catch(e){ res(); } });
+}
+function vaCard(){
+  const mode = assignMode(now().mins);
+  if (mode==='closed') return `<section class="card" id="vaCard"><div class="sec-h"><h2>Assign by voice</h2>${pill('locked','Closed after '+CONFIG.closureOpen)}</div>${note('Assigning work is closed after '+CONFIG.closureOpen+'. It opens again tomorrow morning.')}</section>`;
+  const where = mode==='plan' ? 'their morning plan' : 'their extra work';
+  let body = '';
+  const v = VA || {};
+  if (!VA) body = `<div class="va-row"><button class="btn va-mic" data-act="va-start">${MIC}<span>Tap and speak</span></button>
+      <p class="hint" style="margin:0">Say who and what, for example: <i>“Give Shamim the copper stock count, important, by tomorrow.”</i> It goes into ${where}.</p></div>`;
+  else if (v.stage==='listening') body = `<div class="va-row"><button class="btn va-mic rec" data-act="va-stop">${MIC}<span>Listening… speak now</span></button></div>`;
+  else if (v.stage==='thinking') body = `<p class="va-said">“${esc(v.said)}”</p><p class="hint">Working out the task…</p>`;
+  else if (v.stage==='confirm'){ const t = v.task;
+    body = `<p class="va-said">“${esc(v.said)}”</p>
+      <div class="va-task"><div><span class="hint" style="margin:0">Assign to</span><b>${esc(userName(t.owner))}</b><span class="hint" style="margin:0">${esc(getUser(t.owner).title)}</span></div>
+        <div><span class="hint" style="margin:0">Task</span><b>${esc(t.title)}</b>${t.details?`<span class="hint" style="margin:0">${esc(t.details)}</span>`:''}</div>
+        <div class="badges">${priBadge(t.priority)}<span class="b">${t.days} day${t.days===1?'':'s'}</span><span class="b">${mode==='plan'?'Morning plan':'Extra work'}</span></div></div>
+      <p class="hint">Say <b>yes</b> to confirm or <b>no</b> to cancel, or use the buttons.</p>
+      <div class="row end"><button class="btn ghost" data-act="va-cancel">Cancel</button><button class="btn ghost" data-act="va-start">Say it again</button><button class="btn" data-act="va-ok">Confirm and assign</button></div>`; }
+  else if (v.stage==='done') body = `<div class="ok-msg">Assigned to ${esc(userName(v.task.owner))}: ${esc(v.task.title)}</div><div class="row"><button class="btn va-mic" data-act="va-start">${MIC}<span>Assign another</span></button></div>`;
+  else if (v.stage==='error') body = `${v.said?`<p class="va-said">“${esc(v.said)}”</p>`:''}${note(esc(v.msg), false, true)}<div class="row" style="margin-top:10px"><button class="btn va-mic" data-act="va-start">${MIC}<span>Try again</span></button><button class="btn ghost" data-act="va-cancel">Close</button></div>`;
+  return `<section class="card" id="vaCard"><div class="sec-h"><h2>Assign by voice</h2><span class="hint" style="margin:0">Hands-free: it reads the task back and listens for “yes”</span></div>${body}
+    <p class="hint">If you are driving, use it only with the phone in a holder.</p></section>`;
+}
+function setVA(v){ VA = v; const el = document.getElementById('vaCard'); if (el) el.outerHTML = vaCard(); }
+function parseJSONLoose(t){ const a = t.indexOf('{'), b = t.lastIndexOf('}'); if (a<0 || b<a) throw new Error('The AI reply could not be read.'); return JSON.parse(t.slice(a, b+1)); }
+async function voiceAssign(){
+  const n = now(), mode = assignMode(n.mins);
+  if (mode==='closed'){ setVA(null); speak('Assigning work is closed after 6 PM.'); return; }
+  setVA({ stage:'listening' });
+  let said;
+  try { said = await listenOnce(); } catch(e){ setVA({ stage:'error', msg:e.message }); speak(e.message); return; }
+  if (!said){ setVA({ stage:'error', msg:'No speech was heard. Tap the mic and try again.' }); return; }
+  setVA({ stage:'thinking', said });
+  const people = assignableBy(ui.user), pri = mode==='plan' ? PLAN_PRI : EXTRA_PRI;
+  const prompt = `You turn a manager's spoken instruction into one work task. Reply with ONLY a JSON object, no other text, like:
+{"assignee_id":"","title":"","details":"","priority":"","days":1,"question":""}
+Rules:
+- assignee_id: exactly one id from the list below. Match first names, surnames or nicknames. If the name could fit more than one person, or no one fits, leave it empty and write a short question.
+- title: the task, short (at most 12 words), in plain English.
+- details: anything else useful (deadline, quantities, place), or empty.
+- priority: one of ${pri.map(p=>'"'+p+'"').join(', ')}. ${mode==='extra'?'Use "Emergency" only if they say urgent, emergency or immediately.':'Use "Important" if they say important or urgent, "Daily Work" for routine daily jobs, otherwise "Moderate".'}
+- days: how many days the task takes. If they give a deadline (e.g. "by Thursday"), count days from today up to and including that day. Default 1.
+- question: empty unless something essential is unclear.
+Today is ${fmtDate(n.date)}, ${n.label} UAE time.
+People (id: name, job title):
+${people.map(u=>`${u.id}: ${u.name}, ${u.title}`).join('\n')}
+Spoken instruction: "${said.replace(/"/g,"'")}"`;
+  let j;
+  try { j = parseJSONLoose(await aiAsk(prompt)); } catch(e){ setVA({ stage:'error', said, msg:e.message }); speak('Sorry, I could not work that out.'); return; }
+  const owner = people.some(u=>u.id===j.assignee_id) ? j.assignee_id : '';
+  const title = String(j.title||'').trim().slice(0,140);
+  if (!owner || !title){
+    const q = String(j.question||'').trim() || "I couldn't tell who or what. Please say the person's name and the task.";
+    setVA({ stage:'error', said, msg:q }); await speak(q); return;
+  }
+  const task = { owner, title, details:String(j.details||'').trim().slice(0,500), priority: pri.includes(j.priority) ? j.priority : pri[pri.length===3?1:1], days: Math.max(1, Math.min(60, parseInt(j.days,10)||1)) };
+  setVA({ stage:'confirm', said, task });
+  await speak(`Assign to ${userName(owner)}: ${title}. ${task.priority}, ${task.days} day${task.days===1?'':'s'}. Say yes to confirm, or no to cancel.`);
+  if (!VA || VA.stage!=='confirm') return;
+  let ans = '';
+  try { ans = (await listenOnce()).toLowerCase(); } catch(e){ return; }
+  if (!VA || VA.stage!=='confirm') return;
+  if (/\b(yes|yeah|yep|confirm|confirmed|ok|okay|sure|go ahead|do it|haan|ha)\b/.test(ans)) confirmVoiceTask();
+  else if (/\b(no|nope|cancel|stop|don't)\b/.test(ans)){ setVA(null); speak('Cancelled.'); }
+}
+function confirmVoiceTask(){
+  if (!VA || !VA.task) return;
+  const t = VA.task, n = now(), mode = assignMode(n.mins), me = ui.user;
+  if (mode==='closed'){ setVA({ stage:'error', msg:'Assigning closed at '+CONFIG.closureOpen+'.' }); return; }
+  if (!assignableBy(me).some(u=>u.id===t.owner)) return;
+  db.tasks.push({ id:uid(), owner:t.owner, assignedBy:me, category:mode==='plan'?'planned':'extra', priority:t.priority, title:t.title,
+    details:t.details, days:t.days, startDate:n.date, dueDate:addDays(n.date, t.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString(), byVoice:true });
+  emailPeople([t.owner], `New ${mode==='plan'?'task':'extra work'} from ${userName(me)}`, `${userName(me)} assigned you: ${t.title}\nPriority: ${t.priority}\nDuration: ${t.days} day(s)${t.details?'\nDetails: '+t.details:''}`);
+  save(); setVA({ stage:'done', task:t }); speak(`Done. Assigned to ${userName(t.owner)}.`);
+  const list = document.querySelector('#main'); if (list && ui.view==='assign') setTimeout(()=>{ if (!document.activeElement || !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) render(); }, 2500);
+}
 /* ===== Sales: day login, meetings, reminders ===== */
 const LOGIN_BY = '09:00';                        // sales staff must log in at or before this time
 const REMIND_BEFORE = [1440,720,360,60,15,10];   // reminder offsets, minutes before the meeting
@@ -1773,6 +1873,10 @@ document.addEventListener('click', e=>{
   else if (act==='ai-summary'){ const out = document.getElementById('aiSum'); a.disabled = true; a.textContent = 'Summarising…';
     aiAsk(summaryPrompt()).then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Summarise with AI'; }); return; }
   else if (act==='forgot'){ forgotPassword(); return; }
+  else if (act==='va-start'){ voiceAssign(); return; }
+  else if (act==='va-stop'){ try{ speechSynthesis.cancel(); }catch(_){} return; }
+  else if (act==='va-ok'){ confirmVoiceTask(); return; }
+  else if (act==='va-cancel'){ setVA(null); try{ speechSynthesis.cancel(); }catch(_){} return; }
   else if (act==='mk-all'){ const ids = USERS.filter(u=>u.id!==ui.user && LOGINS && LOGINS[u.id] && LOGINS[u.id].emailOk && !LOGINS[u.id].hasLogin).map(u=>u.id); loginAction('create', ids, a); return; }
   else if (act==='mk-login'){ loginAction('create', [a.dataset.id], a); return; }
   else if (act==='reset-login'){ loginAction('reset', [a.dataset.id], a); return; }
