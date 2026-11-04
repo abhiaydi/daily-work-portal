@@ -150,3 +150,11 @@ drop policy if exists "remove own photos" on storage.objects;
 create policy "staff read photos" on storage.objects for select to authenticated using (bucket_id = 'photos' and public.is_staff());
 create policy "staff add photos" on storage.objects for insert to authenticated with check (bucket_id = 'photos' and public.is_staff());
 create policy "remove own photos" on storage.objects for delete to authenticated using (bucket_id = 'photos' and (owner_id = auth.uid()::text or public.is_management()));
+
+-- Login / logout locations for everyone (kind = signin | open | signout). Location may be missing
+-- if the person refused it; the reason goes in "note".
+alter table public.locations alter column lat drop not null;
+alter table public.locations alter column lng drop not null;
+alter table public.locations add column if not exists note text;
+alter table public.locations add column if not exists device text;
+create index if not exists locations_kind_time_idx on public.locations(kind, created_at desc);
