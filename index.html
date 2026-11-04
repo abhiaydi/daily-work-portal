@@ -765,7 +765,7 @@ function reviewView(n){
     .sort((a,b)=>a.date.localeCompare(b.date) || userName(a.owner).localeCompare(userName(b.owner)));
   let h = `<section class="card"><div class="sec-h"><h2>Waiting for your review</h2>${
     pending.length?pill('locked',`${pending.length} report${pending.length===1?'':'s'}`):pill('open','All reviewed')}</div>`;
-  if (!pending.length) h += note(`No reports waiting. A review box appears here as soon as someone in your team submits their closure report (from ${CONFIG.closureOpen}).`);
+  if (!pending.length) h += note('No reports waiting. A review box appears here as soon as someone in your team finishes their day and submits their closure report.');
   pending.forEach(x=>{
     const u = getUser(x.owner);
     h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span></div>${reportBlock(x.owner,x.date,true)}</div>`;
@@ -797,7 +797,7 @@ function reviewView(n){
     if (c && c.review) h += reportBlock(u.id,d,false);
     else if (c) h += `<div class="hint" style="margin-top:0">Write your review in "Waiting for your review" at the top.</div>`;
     else if (missed) h += note(`No closure report was submitted by the ${deadlineOf(u.id)} deadline.`, false, true);
-    else h += note(`Closure window: ${CONFIG.closureOpen} – ${deadlineOf(u.id)}. The review box appears once ${esc(u.name)} submits.`);
+    else h += note(`Not finished yet (deadline ${deadlineOf(u.id)}). The review box appears once ${esc(u.name)} presses Finish my day and submits.`);
     h += `</div>`;
   });
   h += `</section>`;
