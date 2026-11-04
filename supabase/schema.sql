@@ -43,6 +43,7 @@ create index if not exists locations_ref_idx on public.locations(ref);
 
 alter table public.people add column if not exists phone text;
 alter table public.people add column if not exists sort integer;   -- organisation chart order
+alter table public.people add column if not exists dotted text[] not null default '{}';  -- indirect managers: their work for this person needs GM approval
 
 -- Keep updated_at current.
 create or replace function public.touch_updated_at() returns trigger language plpgsql set search_path = public as $$

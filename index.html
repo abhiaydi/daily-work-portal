@@ -485,6 +485,13 @@ const uid = () => Math.random().toString(36).slice(2,10);
 const getUser = id => USERS.find(u=>u.id===id) || { id, name:id, title:'', role:'', managers:[] };
 const userName = id => getUser(id).name;
 const reportsOf = id => USERS.filter(u=>u.managers.includes(id));
+/* Indirect (dotted-line) reports: work for them, and work sent up to the GM, needs the GM's approval first */
+const indirectOf = id => USERS.filter(u=>(u.dotted||[]).includes(id));
+const gmIds = () => USERS.filter(u=>u.role==='General Manager').map(u=>u.id);
+const isGm = id => getUser(id).role==='General Manager';
+const needsGm = (me, owner) => !['CEO','General Manager'].includes(getUser(me).role) && (indirectOf(me).some(u=>u.id===owner) || isGm(owner));
+const teamOf = id => { const seen = new Set(); return reportsOf(id).concat(indirectOf(id)).filter(u=>!seen.has(u.id) && seen.add(u.id)); };
+const assignerChecks = (t) => t.viaGm && t.assignedBy && !isGm(t.owner) && !reportsOf(t.assignedBy).some(u=>u.id===t.owner);
 const mgrNames = id => getUser(id).managers.map(userName).join(' & ') || '—';
 const hasOwnReport = id => !NO_OWN_REPORT.includes(getUser(id).role);
 const deadlineOf = id => CLOSURE_DEADLINE[getUser(id).role] || '22:00';
@@ -493,8 +500,8 @@ function load(key, fallback){ try{ const v = localStorage.getItem(key); return v
 function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
 
 /* ===== Shared data: Supabase database (table "records") ===== */
-const COLS = ['tasks','closures','meetings','notifications','checkins'];
-let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[] };
+const COLS = ['tasks','closures','meetings','notifications','checkins','requests'];
+let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[] };
 let ui = load(UI_KEY, null) || { view:'staff', reviewDate:null };
 ui.user = null; ui.authed = false; ui.editing = null;
 let sb = null, LOCS = {}, booting = true, saveErrShown = false;
@@ -565,6 +572,7 @@ function prevProgress(t, date){
 function canEdit(t, me, n){
   if (t.category!=='planned' || t.startDate!==n.date) return false;
   if (db.closures[t.owner+'|'+n.date]) return false;
+  if (t.viaGm) return false;
   if (t.assignedBy) return t.assignedBy===me && assignMode(n.mins)==='plan';
   return t.owner===me && phaseFor(n.mins, me)==='plan';
 }
@@ -601,6 +609,8 @@ function taskCard(t, n, showOwner){
       ${priBadge(t.priority)}
       <span class="b">${t.category==='extra'?'Additional work':'Planned'}</span>
       ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
+      ${t.approvedBy?`<span class="b">${t.delegatedFrom?'Passed on':'Approved'} by ${esc(userName(t.approvedBy))}</span>`:''}
+      ${t.check?`<span class="b ${t.check.ok?'':'emg'}">${t.check.ok?'Marked done':'Marked not done'} by ${esc(userName(t.check.by))}</span>`:''}
       <span class="b">Day ${dayN} of ${t.days}</span>
       ${carried?`<span class="b">Carried forward from ${fmtShort(t.startDate)}</span>`:''}
       ${overdue?'<span class="b emg">Overdue</span>':''}
@@ -750,10 +760,13 @@ function assignView(n){
   let h = vaCard() + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
     mode==='plan'?pill('open','Goes to their morning plan'):pill('open','Goes to their additional work')}</div>`;
   h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). After ${CONFIG.planClose}, including after ${CONFIG.closureOpen}, it is added as additional work (Emergency or Important) until that person finishes their day. The person cannot edit or delete work you assign.</p>`;
+  const viaGm = reps.filter(u=>needsGm(me, u.id));
+  if (viaGm.length) h += note(`Work for ${viaGm.map(u=>esc(u.name)).join(', ')} goes to the General Manager first. ${viaGm.filter(u=>!isGm(u.id)).length?'It reaches the person only after the GM approves it. ':''}The GM can decline with a reason.`);
   h += taskForm('assign', mode);
   const mine = db.tasks.filter(t=>t.assignedBy===me && t.startDate===d);
   h += `<h3 class="sub">Assigned by me today</h3>` + (mine.length ? mine.map(t=>taskCard(t,n,true)).join('') : `<div class="empty">Nothing assigned today.</div>`);
   h += `</section>`;
+  h += myRequestsView(n) + checksView(n);
   return h;
 }
 
@@ -888,7 +901,8 @@ function assignableBy(id){
   const r = getUser(id).role;
   if (r==='CEO') return USERS.filter(u=>u.id!==id);                                  // CEO: everyone
   if (r==='General Manager') return USERS.filter(u=>u.id!==id && u.role!=='CEO');   // GM: everyone except the CEO
-  return reportsOf(id);                                                                // others: direct team
+  const ind = indirectOf(id);                                                          // others: direct team,
+  return teamOf(id).concat(ind.length ? USERS.filter(u=>u.role==='General Manager' && getUser(id).managers.includes(u.id)) : []); // + indirect team and their GM
 }
 
 /* ===== Person finder (type a letter or open the dropdown) ===== */
@@ -1075,7 +1089,7 @@ function vaCard(){
         <div class="badges">${priBadge(t.priority)}<span class="b">${t.days} day${t.days===1?'':'s'}</span><span class="b">${mode==='plan'?'Morning plan':'Additional work'}</span></div></div>
       <p class="hint">Say <b>yes</b> to confirm or <b>no</b> to cancel, or use the buttons.</p>
       <div class="row end"><button class="btn ghost" data-act="va-cancel">Cancel</button><button class="btn ghost" data-act="va-start">Say it again</button><button class="btn" data-act="va-ok">Confirm and assign</button></div>`; }
-  else if (v.stage==='done') body = `<div class="ok-msg">Assigned to ${esc(userName(v.task.owner))}: ${esc(v.task.title)}</div><div class="row"><button class="btn va-mic" data-act="va-start">${MIC}<span>Assign another</span></button></div>`;
+  else if (v.stage==='done') body = `<div class="ok-msg">${v.pending ? (isGm(v.task.owner) ? 'Sent to '+esc(userName(v.task.owner)) : 'Sent to the General Manager for approval — for '+esc(userName(v.task.owner))) : 'Assigned to '+esc(userName(v.task.owner))}: ${esc(v.task.title)}</div><div class="row"><button class="btn va-mic" data-act="va-start">${MIC}<span>Assign another</span></button></div>`;
   else if (v.stage==='error') body = `${v.said?`<p class="va-said">“${esc(v.said)}”</p>`:''}${note(esc(v.msg), false, true)}<div class="row" style="margin-top:10px"><button class="btn va-mic" data-act="va-start">${MIC}<span>Try again</span></button><button class="btn ghost" data-act="va-cancel">Close</button></div>`;
   return `<section class="card" id="vaCard"><div class="sec-h"><h2>Assign by voice</h2><span class="hint" style="margin:0">Hands-free: it reads the task back and listens for “yes”</span></div>${body}
     <p class="hint">If you are driving, use it only with the phone in a holder.</p></section>`;
@@ -1126,10 +1140,10 @@ function confirmVoiceTask(){
   const t = VA.task, n = now(), mode = assignMode(n.mins), me = ui.user;
   if (closedToday(t.owner, n.date)){ setVA({ stage:'error', msg:`${userName(t.owner)} has already finished their day.` }); return; }
   if (!assignableBy(me).some(u=>u.id===t.owner)) return;
-  db.tasks.push({ id:uid(), owner:t.owner, assignedBy:me, category:mode==='plan'?'planned':'extra', priority:t.priority, title:t.title,
-    details:t.details, days:t.days, startDate:n.date, dueDate:addDays(n.date, t.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString(), byVoice:true });
-  emailPeople([t.owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(me)}`, `${userName(me)} assigned you: ${t.title}\nPriority: ${t.priority}\nDuration: ${t.days} day(s)${t.details?'\nDetails: '+t.details:''}`);
-  save(); setVA({ stage:'done', task:t }); speak(`Done. Assigned to ${userName(t.owner)}.`);
+  const f = { title:t.title, details:t.details, priority:t.priority, days:t.days, byVoice:true };
+  if (needsGm(me, t.owner)){ sendRequest(me, t.owner, f); save(); setVA({ stage:'done', task:t, pending:true });
+    speak(isGm(t.owner) ? `Done. Sent to ${userName(t.owner)}.` : `Done. Sent to the General Manager for approval.`); }
+  else { makeTask(t.owner, me, f, mode); save(); setVA({ stage:'done', task:t }); speak(`Done. Assigned to ${userName(t.owner)}.`); }
   const list = document.querySelector('#main'); if (list && ui.view==='assign') setTimeout(()=>{ if (!document.activeElement || !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) render(); }, 2500);
 }
 /* ===== Sales: day login, meetings, reminders ===== */
@@ -1612,6 +1626,127 @@ function dashView(n){
   return h;
 }
 
+/* ===== GM approvals: indirect-team work and work sent up to the GM ===== */
+function makeTask(owner, by, f, mode, extra){
+  const n = now(), cat = mode==='plan' ? 'planned' : 'extra';
+  const t = Object.assign({ id:uid(), owner, assignedBy:by, category:cat, priority:f.priority, title:f.title, details:f.details||'', days:f.days,
+    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, extra||{});
+  db.tasks.push(t);
+  emailPeople([owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(by)}`, `${userName(by)} assigned you: ${f.title}\nPriority: ${f.priority}\nDuration: ${f.days} day(s)${f.details?'\nDetails: '+f.details:''}${extra&&extra.approvedBy?`\n${extra.delegatedFrom?'Passed on':'Approved'} by ${userName(extra.approvedBy)}`:''}`);
+  return t;
+}
+function sendRequest(me, owner, f){
+  const up = isGm(owner), at = nowAbs();
+  db.requests.push({ id:uid(), from:me, to:owner, kind: up?'up':'approval', title:f.title, details:f.details||'', priority:f.priority, days:f.days,
+    byVoice:!!f.byVoice, status:'pending', createdAt:new Date().toISOString(), date:now().date });
+  const gms = up ? [owner] : gmIds();
+  const txt = up ? `${userName(me)} has sent you a task: ${f.title}. Accept it, pass it to their team, or decline it.`
+                 : `${userName(me)} wants to assign a task to ${userName(owner)}: ${f.title}. Approve or decline it.`;
+  gms.forEach(g=>notify(g, txt, at, null));
+  emailPeople(gms, up ? `Task from ${userName(me)} — your decision` : `Approval needed: task for ${userName(owner)} from ${userName(me)}`,
+    `${txt}\nPriority: ${f.priority}\nDuration: ${f.days} day(s)${f.details?'\nDetails: '+f.details:''}`);
+}
+const gmPendingCount = id => db.requests.filter(r=>r.status==='pending' && (r.kind==='up' ? r.to===id : true)).length
+  + db.tasks.filter(t=>t.check && !t.check.ok && !t.check.handled).length;
+function priOptions(mode, cur){ const list = mode==='plan' ? PLAN_PRI : EXTRA_PRI, sel = list.includes(cur) ? cur : list[0];
+  return list.map(p=>`<option ${p===sel?'selected':''}>${p}</option>`).join(''); }
+function approvalsView(n){
+  const me = ui.user, mode = assignMode(n.mins);
+  const pend = db.requests.filter(r=>r.status==='pending' && (r.kind==='up' ? r.to===me : true)).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+  let h = `<section class="card"><div class="sec-h"><h2>Waiting for your approval</h2>${pend.length?pill('locked',`${pend.length} request${pend.length===1?'':'s'}`):pill('open','Nothing waiting')}</div>
+    <p class="hint" style="margin-top:0">When a sales head assigns work to someone who is not their direct report, or sends work to you, it waits here. Approved work goes in as ${mode==='plan'?'a morning-plan task':'additional work'} (decided by the time you approve it). If you decline, write a short reason; the sender gets it by email and notification.</p>`;
+  if (!pend.length) h += note('No requests waiting.');
+  pend.forEach(r=>{
+    const team = teamOf(r.from).filter(u=>u.id!==me);
+    h += `<form class="crow rq" data-id="${r.id}" onsubmit="return false">
+      <div class="ctitle" style="margin-bottom:6px">${r.kind==='up' ? `${esc(userName(r.from))} → <b>you</b>` : `${esc(userName(r.from))} → ${esc(userName(r.to))}`}
+        <span class="b">${r.kind==='up'?'Sent to you':'Needs approval'}</span> <span class="b">${fmtShort(r.date)}</span>${r.byVoice?' <span class="b">By voice</span>':''}</div>
+      <div class="task-title">${esc(r.title)}</div>${r.details?`<div class="task-det">${esc(r.details)}</div>`:''}
+      <div class="badges">${priBadge(r.priority)}<span class="b">${r.days} day${r.days===1?'':'s'}</span></div>
+      <div class="row" style="margin-top:10px">
+        <label class="f">Priority<select class="sel rq-pri">${priOptions(mode, r.priority)}</select></label>
+        ${r.kind==='up'?`<label class="f">Pass it to<select class="sel rq-dlg"><option value="">— choose a person —</option>${team.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select></label>`:''}
+      </div>
+      <label class="f">Reason (needed only if you decline)<textarea class="rq-reason" rows="2" placeholder="Why it is declined"></textarea></label>
+      <div class="err" hidden></div>
+      <div class="row end"><button type="button" class="btn ghost danger" data-act="rq-reject">Decline</button>
+        ${r.kind==='up' ? `<button type="button" class="btn ghost" data-act="rq-delegate">Pass it on</button><button type="button" class="btn" data-act="rq-accept">Accept — I'll do it</button>`
+                        : `<button type="button" class="btn" data-act="rq-approve">Approve</button>`}</div></form>`;
+  });
+  h += `</section>`;
+  const nd = db.tasks.filter(t=>t.check && !t.check.ok && !t.check.handled);
+  h += `<section class="card"><div class="sec-h"><h2>Marked “work not done”</h2>${nd.length?pill('miss',`${nd.length}`):pill('open','None')}</div>
+    <p class="hint" style="margin-top:0">A sales head cannot review someone who is not their direct report. They can only say done or not done. “Not done” comes to you to act on.</p>`;
+  if (!nd.length) h += note('Nothing to act on.');
+  nd.forEach(t=>{ h += `<form class="crow rq" data-id="${t.id}" onsubmit="return false">${taskCard(t,n,true)}
+      <div class="hint">Marked not done by ${esc(userName(t.check.by))} on ${fmtShort(t.check.at.slice(0,10))}. Latest progress: <b>${progOn(t,n.date)}%</b></div>
+      <label class="f">Your action (optional — sent to both)<textarea class="rq-reason" rows="2"></textarea></label>
+      <div class="row end"><button type="button" class="btn" data-act="nd-handled">Mark as handled</button></div></form>`; });
+  h += `</section>`;
+  const past = db.requests.filter(r=>r.status!=='pending').sort((a,b)=>(b.decidedAt||'').localeCompare(a.decidedAt||'')).slice(0,25);
+  if (past.length) h += `<section class="card"><h2>Recent decisions</h2>${past.map(reqLine).join('')}</section>`;
+  return h;
+}
+function reqLine(r){
+  const st = r.status==='approved' ? pill('open','Approved') : r.status==='accepted' ? pill('open',`Accepted by ${esc(userName(r.decidedBy))}`)
+    : r.status==='delegated' ? pill('open',`Passed to ${esc(userName(r.delegatedTo))}`) : r.status==='rejected' ? pill('miss','Declined') : pill('soon','Waiting for GM');
+  return `<div class="crow"><div class="sec-h"><div class="ctitle">${esc(r.title)} <span class="b">${esc(userName(r.from))} → ${esc(userName(r.to))}</span> <span class="b">${fmtShort(r.date)}</span></div>${st}</div>
+    ${r.status==='rejected'?`<div class="note bad"><span>Reason from ${esc(userName(r.decidedBy))}: ${esc(r.reason)}</span></div>`:''}</div>`;
+}
+function myRequestsView(n){
+  const mine = db.requests.filter(r=>r.from===ui.user && (r.status==='pending' || diffDays(r.date, n.date)<=7)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  if (!mine.length) return '';
+  return `<section class="card"><div class="sec-h"><h2>Sent to the General Manager</h2>${pill('open',`${mine.filter(r=>r.status==='pending').length} waiting`)}</div>${mine.map(reqLine).join('')}</section>`;
+}
+function checksView(n){
+  const list = db.tasks.filter(t=>t.assignedBy===ui.user && assignerChecks(t) && !t.check && (t.completedOn || Object.keys(t.log||{}).length));
+  if (!list.length) return '';
+  return `<section class="card"><div class="sec-h"><h2>Was the work done?</h2>${pill('locked',`${list.length}`)}</div>
+    <p class="hint" style="margin-top:0">These people do not report to you directly, so you cannot review their reports. Just say whether the work was done. “Not done” goes to the General Manager.</p>
+    ${list.map(t=>`<div class="crow">${taskCard(t,n,true)}<div class="hint">Latest progress: <b>${progOn(t,n.date)}%</b></div>
+      <div class="row end"><button class="btn ghost danger" data-act="chk-not" data-id="${t.id}">Work not done</button><button class="btn" data-act="chk-done" data-id="${t.id}">Work done</button></div></div>`).join('')}</section>`;
+}
+function decideRequest(kind, form){
+  const r = db.requests.find(x=>x.id===form.dataset.id), me = ui.user, n = now(), mode = assignMode(n.mins);
+  const err = form.querySelector('.err'), fail = m => { err.hidden=false; err.textContent=m; };
+  if (!r || r.status!=='pending' || !isGm(me)) { render(); return; }
+  const pri = form.querySelector('.rq-pri').value, reason = form.querySelector('.rq-reason').value.trim(), at = nowAbs();
+  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice };
+  const done = (status, extra) => { Object.assign(r, { status, decidedBy:me, decidedAt:new Date().toISOString() }, extra||{}); save(); render(); };
+  if (kind==='reject'){
+    if (reason.split(/\s+/).filter(Boolean).length < 2) return fail('Write a short reason (a few words) before declining.');
+    if (!confirm('Decline this task? The sender will get your reason.')) return;
+    notify(r.from, `${userName(me)} declined your task “${r.title}” for ${r.to===me?'them':userName(r.to)}. Reason: ${reason}`, at, null);
+    emailPeople([r.from], `Task declined: ${r.title}`, `${userName(me)} declined your task “${r.title}” for ${r.to===me?userName(me):userName(r.to)}.\nReason: ${reason}`);
+    return done('rejected', { reason });
+  }
+  const owner = kind==='delegate' ? form.querySelector('.rq-dlg').value : kind==='accept' ? me : r.to;
+  if (!owner) return fail('Choose the person to pass it to.');
+  if (closedToday(owner, n.date)) return fail(`${userName(owner)} has already finished their day. Approve it tomorrow morning, or speak to them directly.`);
+  const t = makeTask(owner, r.from, f, mode, { viaGm:true, approvedBy:me, requestId:r.id, ...(kind==='delegate'?{ delegatedFrom:me }:{}) });
+  const msg = kind==='approve' ? `${userName(me)} approved your task “${r.title}” for ${userName(owner)}.`
+    : kind==='accept' ? `${userName(me)} accepted your task “${r.title}”.` : `${userName(me)} passed your task “${r.title}” to ${userName(owner)}.`;
+  notify(r.from, msg, at, null); if (owner!==me) notify(owner, `New task from ${userName(r.from)}${kind==='approve'?' (approved by '+userName(me)+')':' (passed on by '+userName(me)+')'}: ${r.title}`, at, null);
+  emailPeople([r.from], `Task ${kind==='approve'?'approved':kind==='accept'?'accepted':'passed on'}: ${r.title}`, msg);
+  done(kind==='approve'?'approved':kind==='accept'?'accepted':'delegated', { taskId:t.id, ...(kind==='delegate'?{ delegatedTo:owner }:{}) });
+}
+function checkTask(id, ok){
+  const t = db.tasks.find(x=>x.id===id); if (!t || t.assignedBy!==ui.user || t.check) return;
+  if (!confirm(ok ? `Mark “${t.title}” as done?` : `Mark “${t.title}” as NOT done? The General Manager will be told.`)) return;
+  t.check = { by:ui.user, ok, at:new Date().toISOString() };
+  if (!ok){ const txt = `${userName(ui.user)} marked “${t.title}” (${userName(t.owner)}) as NOT done. Latest progress ${progOn(t, now().date)}%. Please take action.`;
+    gmIds().forEach(g=>notify(g, txt, nowAbs(), null)); emailPeople(gmIds(), `Work not done: ${t.title} (${userName(t.owner)})`, txt); }
+  save(); render();
+}
+function handleNotDone(form){
+  const t = db.tasks.find(x=>x.id===form.dataset.id); if (!t || !t.check || !isGm(ui.user)) return;
+  const txt = form.querySelector('.rq-reason').value.trim();
+  t.check.handled = { by:ui.user, at:new Date().toISOString(), text:txt };
+  if (txt){ [t.check.by, t.owner].forEach(id=>notify(id, `${userName(ui.user)} on “${t.title}”: ${txt}`, nowAbs(), null));
+    emailPeople([t.check.by, t.owner], `Action on “${t.title}”`, `${userName(ui.user)}: ${txt}`); }
+  save(); render();
+}
+
 /* ===== Render ===== */
 function tabsFor(id){
   const t = [];
@@ -1620,7 +1755,8 @@ function tabsFor(id){
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
   if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
-  if (reportsOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
+  if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
+  if (reportsOf(id).length || indirectOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
       + (getUser(id).role==='CEO' ? Object.keys(db.closures).filter(k=>needsCeoReview(k.split('|')[0]) && !db.closures[k].ceoReview).length : 0);
     t.push(['assign','Assign work']); t.push(['review', nP?`Team reports (${nP})`:'Team reports']); }
   return t;
@@ -1641,7 +1777,7 @@ function render(){
   tabsEl.hidden = !ui.authed || gate;
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   main.innerHTML = gate ? gateView(n)
-    : ui.view==='dash' ? dashView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
@@ -1745,7 +1881,7 @@ async function afterLogin(){
   if (error || !me || !me.id){ ui.authed = false; ui.noAccess = true; render(); return; }
   const ppl = await sb.from('people').select('*');
   if (ppl.error){ tip('Could not load', ppl.error.message); return; }
-  USERS = ppl.data.map(p=>({ id:p.id, name:p.name, title:p.title||'', role:p.role, managers:p.managers||[], email:p.email||'', phone:p.phone||'', sort:p.sort??999, field:!!p.is_field }))
+  USERS = ppl.data.map(p=>({ id:p.id, name:p.name, title:p.title||'', role:p.role, managers:p.managers||[], email:p.email||'', phone:p.phone||'', sort:p.sort??999, field:!!p.is_field, dotted:p.dotted||[] }))
     .sort((x,y)=>sortName(x).localeCompare(sortName(y)));
   FIELD_STAFF = USERS.filter(u=>u.field).map(u=>u.id);
   ui.user = me.id; ui.authed = true; ui.noAccess = false;
@@ -1755,7 +1891,7 @@ async function afterLogin(){
   render();
 }
 async function loadAll(){
-  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[] }; COLS.forEach(c=>shadow[c].clear());
+  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[] }; COLS.forEach(c=>shadow[c].clear());
   for (let from = 0; ; from += 1000){
     const { data, error } = await sb.from('records').select('collection,id,data').range(from, from+999);
     if (error){ tip('Could not load', error.message); break; }
@@ -1814,9 +1950,14 @@ function addOrSaveTask(form){
     if (kind==='assign' && !owner){ err.hidden=false; err.textContent='Choose who to assign this to. Type a name or open the list.'; return; }
     if (kind==='assign' && !assignableBy(me).some(r=>r.id===owner)) return;
     if (kind==='assign' && closedToday(owner, n.date)){ err.hidden=false; err.textContent=`${userName(owner)} has already finished their day and submitted the closure report. Assign it tomorrow morning, or speak to them directly.`; return; }
+    if (kind==='assign' && needsGm(me, owner)){
+      if (!confirm(`${isGm(owner)?'Send this task to '+userName(owner):'This goes to the General Manager for approval first. Send it'}?`)) return;
+      sendRequest(me, owner, { title, details:form.details.value.trim(), priority, days });
+      save(); render(); tip('Sent for approval', isGm(owner) ? `${userName(owner)} can accept it, pass it to someone in your team, or decline it with a reason.` : `It will reach ${userName(owner)} once the General Manager approves it.`); return;
+    }
     if (mode==='extra' && !confirm(`Add this as additional work${kind==='assign'?' for '+userName(owner):''}? It will be locked and cannot be edited.`)) return;
-    if (kind==='assign') emailPeople([owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(me)}`, `${userName(me)} assigned you: ${title}\nPriority: ${priority}\nDuration: ${days} day(s)${form.details.value.trim()?'\nDetails: '+form.details.value.trim():''}`);
-    db.tasks.push({ id:uid(), owner, assignedBy:kind==='assign'?me:null, category:mode==='plan'?'planned':'extra', priority, title,
+    if (kind==='assign') makeTask(owner, me, { title, details:form.details.value.trim(), priority, days }, mode);
+    else db.tasks.push({ id:uid(), owner, assignedBy:null, category:mode==='plan'?'planned':'extra', priority, title,
       details:form.details.value.trim(), days, startDate:n.date, dueDate:addDays(n.date,days-1),
       log:{}, completedOn:null, createdAt:new Date().toISOString() });
   }
@@ -1872,6 +2013,9 @@ document.addEventListener('click', e=>{
     db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
   }
   else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (act && act.startsWith('rq-')){ decideRequest(act.slice(3), a.closest('.rq')); return; }
+  else if (act==='chk-done' || act==='chk-not'){ checkTask(a.dataset.id, act==='chk-done'); return; }
+  else if (act==='nd-handled'){ handleNotDone(a.closest('.rq')); return; }
   else if (act==='ceo-ok' || act==='ceo-comment'){
     const k = a.dataset.k, ta = document.querySelector(`.ceotxt[data-k="${k}"]`), txt = ta ? ta.value.trim() : '';
     const err = ta ? ta.closest('label').parentElement.querySelector('.err') : null;
