@@ -2682,22 +2682,40 @@ function getPos(ms){
   });
 }
 /* kind: signin (password entered) | open (portal opened, already logged in) | signout */
-async function logSession(kind, ms){
+async function logSession(kind, ms, got){
   if (!sb || !ui.user) return;
   try{ const k = 'dwp-open-'+ui.user, last = +localStorage.getItem(k)||0;
     if (kind==='open' && Date.now()-last < 30*60000) return;
     if (kind!=='signout') localStorage.setItem(k, Date.now()); else localStorage.removeItem(k); }catch(_){}
-  const r = await getPos(ms || 10000), p = r.pos, g = p ? gpsInfo(p) : null;
+  const r = got || await getPos(ms || 10000), p = r.pos, g = p ? gpsInfo(p) : null;
   const row = { person:ui.user, kind, ref:null, lat:p?p.coords.latitude:null, lng:p?p.coords.longitude:null, acc:p?p.coords.accuracy:null,
     gps_time:g?g.gpsTime:null, device_time:g?g.devTime:GPS_DTF.format(new Date()), gps_diff:g?g.gpsDiff:null, note:r.note||null, device:deviceName() };
   try{ await sb.from('locations').insert(row); }catch(_){}
 }
+/* Logging out needs the person's location: no location, no logout. */
 async function doLogout(btn){
-  if (btn){ btn.disabled = true; btn.textContent = 'Logging out…'; }
-  try{ await logSession('signout', 8000); }catch(_){}
+  if (!ui.authed || !ui.user){ ui.authed = false; ui.noAccess = false; stopPresence(); if (sb) await sb.auth.signOut(); render(); return; }   // not a staff session: nothing to record
+  const label = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = 'Getting location…'; }
+  const r = await getPos(15000);
+  if (!r.pos){ if (btn){ btn.disabled = false; btn.textContent = label || 'Log out'; } locNeeded(r.note); return; }
+  closeLocModal();
+  if (btn) btn.textContent = 'Logging out…';
+  try{ await logSession('signout', 0, r); }catch(_){}
   ui.authed = false; ui.noAccess = false; ui.editing = null; ui.proj = null; AST.open = false; paintAI();
   stopPresence(); if (sb) await sb.auth.signOut(); render();
 }
+function locNeeded(why){
+  const el = modalEl('locModal'), ios = /iPhone|iPad/.test(navigator.userAgent), and = /Android/.test(navigator.userAgent);
+  const steps = /refused/i.test(why||'') ? (ios
+      ? '<li>Open the iPhone <b>Settings</b> → <b>Privacy & Security</b> → <b>Location Services</b>: make sure it is on, and that <b>Safari Websites</b> (or Chrome) is set to <b>While Using</b>.</li><li>Back here, reload the page and press <b>Try again</b>. If asked, choose <b>Allow</b>.</li>'
+      : '<li>Tap the <b>lock / settings icon</b> next to the web address at the top.</li><li>Choose <b>Location</b> (or Permissions) → <b>Allow</b>.</li><li>Press <b>Try again</b>.</li>')
+    : `<li>Turn on your ${and||ios?'phone\'s location (GPS)':'device location (Windows: Settings → Privacy → Location)'}.</li><li>If you are indoors, move near a window, then press <b>Try again</b>.</li>`;
+  el.innerHTML = `<div class="modal-box"><h2>Location needed to log out</h2>
+    <p style="margin-top:0">You can only log out after your location is recorded. ${esc(why||'')}.</p><ol style="padding-left:20px">${steps}</ol>
+    <div class="row end"><button type="button" class="btn ghost" data-act="loc-x">Stay logged in</button><button type="button" class="btn" data-act="loc-retry">Try again</button></div></div>`;
+}
+function closeLocModal(){ const el = document.getElementById('locModal'); if (el) el.remove(); }
 async function loadSessions(){
   const since = new Date(Date.now() - 45*86400000).toISOString();
   const { data } = await sb.from('locations').select('*').in('kind', SESS_KINDS.concat(['login'])).gte('created_at', since).order('created_at', { ascending:false }).limit(3000);
@@ -3246,6 +3264,8 @@ document.addEventListener('click', e=>{
   else if (act==='msendback'){ decideMeeting(a.dataset.id,'returned'); return; }
   else if (act==='perm'){ try{ Notification.requestPermission().then(()=>render()); }catch(_){ } return; }
   else if (act==='logout'){ doLogout(a); return; }
+  else if (act==='loc-x'){ closeLocModal(); return; }
+  else if (act==='loc-retry'){ a.disabled = true; a.textContent = 'Getting location…'; doLogout(document.querySelector('#whoBox [data-act=logout]')); return; }
   save(); render();
 });
 
