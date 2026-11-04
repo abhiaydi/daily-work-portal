@@ -382,6 +382,10 @@ h3.sub::before,.team-h::before{content:"";flex:none;width:9px;height:9px;border-
 .tabs{background:var(--bar-2);border-radius:999px;padding:4px}
 .tabs button{border-radius:999px;color:rgba(255,255,255,.82)}
 .tabs button.on{background:#fff;color:#1d1d1d;box-shadow:none}
+.tabs{flex-wrap:wrap;overflow:visible;border-radius:18px;row-gap:2px}
+.tabs button{padding:8px 13px}
+@media (max-width:560px){ .tabs button{padding:7px 11px;font-size:14px} }
+#main{padding-bottom:84px}
 .lgchip{border-radius:999px}
 /* day timeline */
 .tl{background:var(--card);border:0;border-radius:var(--r)}
