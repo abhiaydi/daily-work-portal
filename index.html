@@ -445,8 +445,8 @@ h3.sub::before,.team-h::before{content:"";flex:none;width:9px;height:9px;border-
    ===================================================================== */
 const CONFIG = {
   planOpen:    '09:00',   // morning plan opens
-  planClose:   '09:45',   // morning plan locks; extra work starts
-  closureOpen: '18:00',   // closure report opens; extra work ends
+  planClose:   '09:45',   // morning plan locks; additional work starts
+  closureOpen: '18:00',   // normal end of the working day (closure is by button, not forced)
   minWords:    12,
   timeZone:    'Asia/Dubai'   // all windows run on UAE time, whatever the device's time zone
 };
@@ -538,16 +538,19 @@ function now(){
 function phaseFor(m, userId){
   if (m <  toMins(CONFIG.planOpen))    return 'before';
   if (m <  toMins(CONFIG.planClose))   return 'plan';
-  if (m <  toMins(CONFIG.closureOpen)) return 'extra';
-  if (m <= toMins(deadlineOf(userId))) return 'closure';
+  if (m <= toMins(deadlineOf(userId))) return 'extra';   // additional work open; the person closes their day with a button
   return 'over';
 }
-/* Assignment by a manager: before 09:45 → plan, 09:45–18:00 → extra, otherwise closed */
+/* Assignment by a manager: before 09:45 → their morning plan; after → additional work (until that person closes their day) */
 function assignMode(m){
-  if (m < toMins(CONFIG.planClose))   return 'plan';
-  if (m < toMins(CONFIG.closureOpen)) return 'extra';
-  return 'closed';
+  if (m < toMins(CONFIG.planClose)) return 'plan';
+  return 'extra';
 }
+const closedToday = (id, d) => !!db.closures[id+'|'+d];
+/* Sales heads' closure reports also go to the CEO for a second review */
+const ceoIds = () => USERS.filter(u=>u.role==='CEO').map(u=>u.id);
+const needsCeoReview = id => isField(id) && !ceoIds().includes(id);
+const isCeo = id => getUser(id).role==='CEO';
 const ORDER = { before:0, plan:1, extra:2, closure:3, over:4 };
 
 function activeTasks(owner, date){
@@ -573,12 +576,14 @@ const note = (txt, lock, bad) => `<div class="note ${bad?'bad':''}">${lock?LOCK:
 const bar = (v, label) => `<div class="bar">${label}: <b>${v}%</b><div class="trk"><div class="fil ${v>=100?'full':''}" style="width:${v}%"></div></div></div>`;
 
 function timeline(ph, userId){
+  const closing = ui.closing && ph==='extra';
   const steps = [
-    ['plan','Morning plan',`${CONFIG.planOpen} – ${CONFIG.planClose}`],
-    ['extra','Extra work',`${CONFIG.planClose} – ${CONFIG.closureOpen}`],
-    ['closure','Closure report',`${CONFIG.closureOpen} – ${deadlineOf(userId)}`]
+    ['plan','Morning plan',`${CONFIG.planOpen} – ${CONFIG.planClose}`, ph==='plan'],
+    ['extra','Additional work',`from ${CONFIG.planClose}`, ph==='extra' && !closing],
+    ['closure','Closure report',`when you finish · by ${deadlineOf(userId)}`, closing]
   ];
-  return `<div class="tl">${steps.map(s=>`<div class="st ${s[0]===ph?'on':''} ${ORDER[s[0]]<ORDER[ph]?'done':''}"><b>${s[1]}</b><span>${s[2]}</span></div>`).join('')}</div>`;
+  const done = s => s[0]==='plan' ? ORDER[ph]>ORDER.plan : s[0]==='extra' ? (closing || ORDER[ph]>ORDER.extra) : ph==='over';
+  return `<div class="tl">${steps.map(s=>`<div class="st ${s[3]?'on':''} ${!s[3]&&done(s)?'done':''}"><b>${s[1]}</b><span>${s[2]}</span></div>`).join('')}</div>`;
 }
 
 function taskCard(t, n, showOwner){
@@ -594,7 +599,7 @@ function taskCard(t, n, showOwner){
     ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
     <div class="badges">
       ${priBadge(t.priority)}
-      <span class="b">${t.category==='extra'?'Extra work':'Planned'}</span>
+      <span class="b">${t.category==='extra'?'Additional work':'Planned'}</span>
       ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
       <span class="b">Day ${dayN} of ${t.days}</span>
       ${carried?`<span class="b">Carried forward from ${fmtShort(t.startDate)}</span>`:''}
@@ -611,12 +616,12 @@ function taskForm(kind, mode){
   if (t && (kind==='assign') !== !!t.assignedBy) t = null;
   const reps = assignableBy(ui.user);
   const label = t ? 'Save changes'
-    : kind==='assign' ? (mode==='plan' ? 'Assign to their plan' : 'Assign as extra work')
-    : (mode==='plan' ? 'Add to plan' : 'Add extra work');
+    : kind==='assign' ? (mode==='plan' ? 'Assign to their plan' : 'Assign as additional work')
+    : (mode==='plan' ? 'Add to plan' : 'Add additional work');
   return `<form class="tform" data-kind="${kind}" data-mode="${mode}" novalidate>
     ${kind==='assign' ? (t ? `<div class="f">Assigned to<b style="color:var(--ink)">${esc(userName(t.owner))}</b><input type="hidden" name="target" value="${t.owner}"></div>`
       : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to', 'Type a name or a letter, e.g. G')}</div>`) : ''}
-    <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What extra work came up?'}"></label>
+    <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     <div class="row">
       <fieldset class="f"><legend>Priority</legend><div class="seg">
@@ -629,7 +634,7 @@ function taskForm(kind, mode){
       ${t?'<button type="button" class="btn ghost" data-act="cancel-edit">Cancel</button>':''}
       <button class="btn">${label}</button>
     </div>
-    ${mode==='extra'?'<p class="hint">Extra work is locked as soon as it is added — it cannot be edited afterwards.</p>':''}
+    ${mode==='extra'?'<p class="hint">Additional work is locked as soon as it is added — it cannot be edited afterwards.</p>':''}
   </form>`;
 }
 
@@ -639,7 +644,7 @@ function closureForm(tasks, d){
   return tasks.map(t=>{
     const p = prevProgress(t,d);
     return `<div class="crow" data-id="${t.id}">
-      <div class="ctitle">${esc(t.title)} ${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Extra':'Planned'}</span>
+      <div class="ctitle">${esc(t.title)} ${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span>
         ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
         <span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span></div>
       <div class="prog">
@@ -665,13 +670,13 @@ function reportBlock(owner, d, canReview){
   let h = `<div class="sum">
     <div><b>${ts.length}</b>tasks</div><div><b>${done}</b>completed</div>
     <div><b>${ts.length-done}</b>carried to next day</div><div><b>${avg}%</b>avg. progress</div>
-    <div><b>${extra}</b>extra work</div>${emg?`<div><b>${emg}</b>emergency</div>`:''}
+    <div><b>${extra}</b>additional work</div>${emg?`<div><b>${emg}</b>emergency</div>`:''}
   </div>`;
   if (ts.length){
     h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>Progress</th><th>Reason if incomplete</th></tr></thead><tbody>
     ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
       <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}</td>
-      <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Extra':'Planned'}</span></td>
+      <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span></td>
       <td class="pct ${l.progress>=100?'full':'part'}">${l.progress}%</td>
       <td>${l.justification?esc(l.justification):'—'}</td></tr>`; }).join('')}
     </tbody></table></div>`;
@@ -685,6 +690,15 @@ function reportBlock(owner, d, canReview){
       <div class="row end"><button class="btn" data-act="save-review" data-k="${k}">Submit review</button></div></div>`;
   } else {
     h += `<div class="hint">Awaiting review by ${esc(mgrNames(owner))}.</div>`;
+  }
+  if (needsCeoReview(owner)){
+    if (c.ceoReview){
+      h += `<div class="review" style="border-left-color:var(--brand)"><div class="meta">CEO review by ${esc(userName(c.ceoReview.by))} · ${fmtStamp(c.ceoReview.at)}</div><p>${c.ceoReview.ok&&!c.ceoReview.text?'Okay ✓':esc(c.ceoReview.text)}${c.ceoReview.ok&&c.ceoReview.text?' <span class="b asg">Okay ✓</span>':''}</p></div>`;
+    } else if (isCeo(ui.user)){
+      h += `<div style="margin-top:12px"><label class="f">CEO comment (optional for "Okay")<textarea rows="2" class="ceotxt" data-k="${k}" placeholder="Add a comment for ${esc(userName(owner))}"></textarea></label>
+        <div class="err" hidden></div>
+        <div class="row end"><button class="btn ghost" data-act="ceo-comment" data-k="${k}">Add comment</button><button class="btn" data-act="ceo-ok" data-k="${k}">Okay</button></div></div>`;
+    } else h += `<div class="hint">Also goes to the CEO for review.</div>`;
   }
   return h;
 }
@@ -709,21 +723,24 @@ function staffView(n){
   h += `</section>`;
 
   const extraOpen = ph==='extra' && !ck;
-  h += `<section class="card"><div class="sec-h"><h2>2 · Extra work</h2>${
-    extraOpen?pill('open',`Open until ${CONFIG.closureOpen}`):ORDER[ph]<ORDER.extra?pill('soon',`Opens ${CONFIG.planClose}`):pill('locked','Closed')}</div>`;
+  h += `<section class="card"><div class="sec-h"><h2>2 · Additional work</h2>${
+    extraOpen?pill('open','Open until you finish your day'):ORDER[ph]<ORDER.extra?pill('soon',`Opens ${CONFIG.planClose}`):pill('locked','Closed')}</div>`;
   if (extraOpen) h += taskForm('self','extra');
-  else if (ORDER[ph]<ORDER.extra) h += note(`Extra work can be logged after the morning plan closes at ${CONFIG.planClose}.`);
-  else h += note(`Extra work logging closed at ${CONFIG.closureOpen}.`, true);
-  h += `<h3 class="sub">Extra work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No extra work logged.</div>`);
+  else if (ORDER[ph]<ORDER.extra) h += note(`Additional work can be added after the morning plan closes at ${CONFIG.planClose}.`);
+  else h += note(ck ? 'You have finished your day. Additional work is closed.' : `Additional work closed at ${deadlineOf(u)}.`, true);
+  h += `<h3 class="sub">Additional work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No additional work.</div>`);
   h += `</section>`;
 
   const dl = deadlineOf(u);
-  h += `<section class="card"><div class="sec-h"><h2>3 · Closure report</h2>${
-    ck?pill('locked','Submitted'):ph==='closure'?pill('open',`Open until ${dl}`):ph==='over'?pill('miss','Deadline missed'):pill('soon',`Opens ${CONFIG.closureOpen}`)}</div>`;
+  h += `<section class="card" id="closureCard"><div class="sec-h"><h2>3 · Closure report</h2>${
+    ck?pill('locked','Submitted'):ph==='over'?pill('miss','Deadline missed'):ui.closing&&ph==='extra'?pill('open',`Submit by ${dl}`):ph==='extra'?pill('soon','When you finish'):pill('soon',`From ${CONFIG.planClose}`)}</div>`;
   if (ck) h += `<div class="ok-msg">Closure report submitted to ${esc(mgrNames(u))}. Incomplete tasks will appear automatically tomorrow morning.</div>` + reportBlock(u,d,false);
-  else if (ph==='closure') h += meetingBlock(u) + `<p class="hint" style="margin-top:0">Update progress on every task, including extra work. Anything below 100% needs a reason of at least ${CONFIG.minWords} words. Deadline: ${dl}.</p>` + closureForm(act,d);
+  else if (ph==='extra' && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">Update progress on every task, including additional work. Anything below 100% needs a reason of at least ${CONFIG.minWords} words. Deadline: ${dl}.</p>` + closureForm(act,d)
+      + `<div class="row" style="margin-top:6px"><button class="btn sm ghost" data-act="close-cancel">Not yet, keep working</button></div>`;
+  else if (ph==='extra') h += `<div class="va-row"><button class="btn" data-act="close-start">Finish my day</button>
+      <p class="hint" style="margin:0">When your work is done, press this to write your closure report. Until then, you and your manager can keep adding additional work. Deadline: ${dl}.</p></div>`;
   else if (ph==='over') h += note(`The closure deadline (${dl}) has passed and no report was submitted. This will show as missed to ${esc(mgrNames(u))}. Open tasks will still carry forward.`, true, true);
-  else h += note(`The closure portal opens at ${CONFIG.closureOpen} and closes at ${dl}.`);
+  else h += note(`You can write your closure report after ${CONFIG.planClose}, whenever you finish your day. Deadline: ${dl}.`);
   h += `</section>`;
   return h;
 }
@@ -731,10 +748,9 @@ function staffView(n){
 function assignView(n){
   const me = ui.user, d = n.date, mode = assignMode(n.mins), reps = assignableBy(me);
   let h = vaCard() + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
-    mode==='plan'?pill('open','Goes to their morning plan'):mode==='extra'?pill('open','Goes to their extra work'):pill('locked','Closed')}</div>`;
-  h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). From ${CONFIG.planClose} to ${CONFIG.closureOpen} it is added as extra work (Emergency or Important). The person cannot edit or delete work you assign.</p>`;
-  if (mode==='closed') h += note(`Assigning work closed at ${CONFIG.closureOpen}.`, true);
-  else h += taskForm('assign', mode);
+    mode==='plan'?pill('open','Goes to their morning plan'):pill('open','Goes to their additional work')}</div>`;
+  h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). After ${CONFIG.planClose}, including after ${CONFIG.closureOpen}, it is added as additional work (Emergency or Important) until that person finishes their day. The person cannot edit or delete work you assign.</p>`;
+  h += taskForm('assign', mode);
   const mine = db.tasks.filter(t=>t.assignedBy===me && t.startDate===d);
   h += `<h3 class="sub">Assigned by me today</h3>` + (mine.length ? mine.map(t=>taskCard(t,n,true)).join('') : `<div class="empty">Nothing assigned today.</div>`);
   h += `</section>`;
@@ -755,6 +771,18 @@ function reviewView(n){
     h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span></div>${reportBlock(x.owner,x.date,true)}</div>`;
   });
   h += `</section>`;
+
+  /* 1b. CEO: sales heads' reports, with the GM's review */
+  if (isCeo(me)){
+    const sp = Object.keys(db.closures).map(k=>{ const [owner,date] = k.split('|'); return { k, owner, date, c:db.closures[k] }; })
+      .filter(x=>needsCeoReview(x.owner) && !x.c.ceoReview).sort((a,b)=>a.date.localeCompare(b.date));
+    h += `<section class="card"><div class="sec-h"><h2>Sales heads — your review</h2>${sp.length?pill('locked',`${sp.length} report${sp.length===1?'':'s'}`):pill('open','All reviewed')}</div>
+      <p class="hint" style="margin-top:0">Closure reports from the regional sales heads, with the General Manager's review. Say "Okay" or add your comment; they will see it on their report.</p>`;
+    if (!sp.length) h += note('No sales reports waiting for you.');
+    sp.forEach(x=>{ const u = getUser(x.owner);
+      h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span>${x.c.review?pill('open','GM reviewed'):pill('soon','GM review pending')}</div>${reportBlock(x.owner,x.date,false)}</div>`; });
+    h += `</section>`;
+  }
 
   /* 2. History by date */
   h += `<section class="card"><div class="sec-h"><h2>Team reports by date</h2>
@@ -1033,8 +1061,7 @@ function speak(text){
 }
 function vaCard(){
   const mode = assignMode(now().mins);
-  if (mode==='closed') return `<section class="card" id="vaCard"><div class="sec-h"><h2>Assign by voice</h2>${pill('locked','Closed after '+CONFIG.closureOpen)}</div>${note('Assigning work is closed after '+CONFIG.closureOpen+'. It opens again tomorrow morning.')}</section>`;
-  const where = mode==='plan' ? 'their morning plan' : 'their extra work';
+  const where = mode==='plan' ? 'their morning plan' : 'their additional work';
   let body = '';
   const v = VA || {};
   if (!VA) body = `<div class="va-row"><button class="btn va-mic" data-act="va-start">${MIC}<span>Tap and speak</span></button>
@@ -1045,7 +1072,7 @@ function vaCard(){
     body = `<p class="va-said">“${esc(v.said)}”</p>
       <div class="va-task"><div><span class="hint" style="margin:0">Assign to</span><b>${esc(userName(t.owner))}</b><span class="hint" style="margin:0">${esc(getUser(t.owner).title)}</span></div>
         <div><span class="hint" style="margin:0">Task</span><b>${esc(t.title)}</b>${t.details?`<span class="hint" style="margin:0">${esc(t.details)}</span>`:''}</div>
-        <div class="badges">${priBadge(t.priority)}<span class="b">${t.days} day${t.days===1?'':'s'}</span><span class="b">${mode==='plan'?'Morning plan':'Extra work'}</span></div></div>
+        <div class="badges">${priBadge(t.priority)}<span class="b">${t.days} day${t.days===1?'':'s'}</span><span class="b">${mode==='plan'?'Morning plan':'Additional work'}</span></div></div>
       <p class="hint">Say <b>yes</b> to confirm or <b>no</b> to cancel, or use the buttons.</p>
       <div class="row end"><button class="btn ghost" data-act="va-cancel">Cancel</button><button class="btn ghost" data-act="va-start">Say it again</button><button class="btn" data-act="va-ok">Confirm and assign</button></div>`; }
   else if (v.stage==='done') body = `<div class="ok-msg">Assigned to ${esc(userName(v.task.owner))}: ${esc(v.task.title)}</div><div class="row"><button class="btn va-mic" data-act="va-start">${MIC}<span>Assign another</span></button></div>`;
@@ -1057,13 +1084,12 @@ function setVA(v){ VA = v; const el = document.getElementById('vaCard'); if (el)
 function parseJSONLoose(t){ const a = t.indexOf('{'), b = t.lastIndexOf('}'); if (a<0 || b<a) throw new Error('The AI reply could not be read.'); return JSON.parse(t.slice(a, b+1)); }
 async function voiceAssign(){
   const n = now(), mode = assignMode(n.mins);
-  if (mode==='closed'){ setVA(null); speak('Assigning work is closed after 6 PM.'); return; }
   setVA({ stage:'listening' });
   let said;
   try { said = await listenOnce(); } catch(e){ setVA({ stage:'error', msg:e.message }); speak(e.message); return; }
   if (!said){ setVA({ stage:'error', msg:'No speech was heard. Tap the mic and try again.' }); return; }
   setVA({ stage:'thinking', said });
-  const people = assignableBy(ui.user), pri = mode==='plan' ? PLAN_PRI : EXTRA_PRI;
+  const people = assignableBy(ui.user).filter(u=>!closedToday(u.id, n.date)), pri = mode==='plan' ? PLAN_PRI : EXTRA_PRI;
   const prompt = `You turn a manager's spoken instruction into one work task. Reply with ONLY a JSON object, no other text, like:
 {"assignee_id":"","title":"","details":"","priority":"","days":1,"question":""}
 Rules:
@@ -1098,11 +1124,11 @@ Spoken instruction: "${said.replace(/"/g,"'")}"`;
 function confirmVoiceTask(){
   if (!VA || !VA.task) return;
   const t = VA.task, n = now(), mode = assignMode(n.mins), me = ui.user;
-  if (mode==='closed'){ setVA({ stage:'error', msg:'Assigning closed at '+CONFIG.closureOpen+'.' }); return; }
+  if (closedToday(t.owner, n.date)){ setVA({ stage:'error', msg:`${userName(t.owner)} has already finished their day.` }); return; }
   if (!assignableBy(me).some(u=>u.id===t.owner)) return;
   db.tasks.push({ id:uid(), owner:t.owner, assignedBy:me, category:mode==='plan'?'planned':'extra', priority:t.priority, title:t.title,
     details:t.details, days:t.days, startDate:n.date, dueDate:addDays(n.date, t.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString(), byVoice:true });
-  emailPeople([t.owner], `New ${mode==='plan'?'task':'extra work'} from ${userName(me)}`, `${userName(me)} assigned you: ${t.title}\nPriority: ${t.priority}\nDuration: ${t.days} day(s)${t.details?'\nDetails: '+t.details:''}`);
+  emailPeople([t.owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(me)}`, `${userName(me)} assigned you: ${t.title}\nPriority: ${t.priority}\nDuration: ${t.days} day(s)${t.details?'\nDetails: '+t.details:''}`);
   save(); setVA({ stage:'done', task:t }); speak(`Done. Assigned to ${userName(t.owner)}.`);
   const list = document.querySelector('#main'); if (list && ui.view==='assign') setTimeout(()=>{ if (!document.activeElement || !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) render(); }, 2500);
 }
@@ -1474,7 +1500,7 @@ function personInfo(u, d, n){
   let st, cls, flag=false;
   if (c){ st = c.review ? 'Closed · reviewed' : 'Closed · awaiting review'; cls = c.review ? 'open' : 'locked'; }
   else if (ph==='over'){ st='Closure missed'; cls='miss'; flag=true; }
-  else if (ph==='closure'){ st='Closure pending'; cls='soon'; }
+  else if (ph==='extra' && isToday && n.mins >= toMins(CONFIG.closureOpen)){ st='Closure pending'; cls='soon'; }
   else if (!act.length && ORDER[ph]>=ORDER.extra){ st='No plan'; cls='miss'; flag=true; }
   else if (!act.length){ st='Not started'; cls='soon'; }
   else { st='Working'; cls='open'; }
@@ -1518,7 +1544,7 @@ function dashView(n){
     <div class="tiles">
       ${tile(`${withPlan}/${people.length}`,isToday?'people with work today':'people with work')}
       ${tile(tasks,'tasks in progress')}
-      ${tile(extraN,'extra work added')}
+      ${tile(extraN,'additional work added')}
       ${tile(emg,'emergencies',true)}
       ${tile(overdueN,'overdue tasks',true)}
       ${tile(`${closed}/${people.length}`,'closure reports in')}
@@ -1555,7 +1581,7 @@ function dashView(n){
   const show = i => (!selP || i.u.id===selP.id) && (dv.team==='all' || (i.head&&i.head.id===dv.team)) &&
     (dv.status==='all' || (dv.status==='flag'&&i.flag) || (dv.status==='closed'&&i.c) || (dv.status==='working'&&!i.c&&!i.flag));
   h += `<section class="card"><div class="sec-h"><h2>What everyone is doing</h2><span class="hint" style="margin:0">Click a person to see their tasks</span></div>
-    <div class="phead"><span>Person</span><span style="text-align:left">Status</span><span>Planned</span><span>Extra</span><span>Carried</span><span>Avg. progress</span><span></span></div>`;
+    <div class="phead"><span>Person</span><span style="text-align:left">Status</span><span>Planned</span><span>Additional</span><span>Carried</span><span>Avg. progress</span><span></span></div>`;
   const groups = heads.map(hd=>({ hd, list: infos.filter(i=>i.head&&i.head.id===hd.id && show(i)) })).filter(g=>g.list.length);
   if (!groups.length) h += note('No one matches these filters.');
   groups.forEach(g=>{
@@ -1573,7 +1599,7 @@ function dashView(n){
         <div class="body">${i.act.length ? `<div class="tscroll"><table class="mini"><thead><tr><th>Task</th><th>Priority</th><th>Type</th><th>Day</th><th>Progress</th><th>Reason if incomplete</th></tr></thead><tbody>
           ${i.act.map(t=>{ const p=progOn(t,d), j=t.log[d]?.justification; return `<tr>
             <td><b>${esc(t.title)}</b>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${d>t.dueDate?' <span class="b emg">Overdue</span>':''}</td>
-            <td>${priBadge(t.priority)}</td><td>${t.category==='extra'?'Extra':'Planned'}${t.startDate<d?' · carried':''}</td>
+            <td>${priBadge(t.priority)}</td><td>${t.category==='extra'?'Additional':'Planned'}${t.startDate<d?' · carried':''}</td>
             <td>${diffDays(t.startDate,d)+1}/${t.days}</td>
             <td class="pct ${p>=100?'full':'part'}">${p}%${t.log[d]?'':' <span class="hint">(last)</span>'}</td>
             <td>${j?esc(j):'—'}</td></tr>`; }).join('')}
@@ -1594,7 +1620,8 @@ function tabsFor(id){
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
   if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
-  if (reportsOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length;
+  if (reportsOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
+      + (getUser(id).role==='CEO' ? Object.keys(db.closures).filter(k=>needsCeoReview(k.split('|')[0]) && !db.closures[k].ceoReview).length : 0);
     t.push(['assign','Assign work']); t.push(['review', nP?`Team reports (${nP})`:'Team reports']); }
   return t;
 }
@@ -1786,8 +1813,9 @@ function addOrSaveTask(form){
     const owner = kind==='assign' ? form.target.value : me;
     if (kind==='assign' && !owner){ err.hidden=false; err.textContent='Choose who to assign this to. Type a name or open the list.'; return; }
     if (kind==='assign' && !assignableBy(me).some(r=>r.id===owner)) return;
-    if (mode==='extra' && !confirm(`Add this as extra work${kind==='assign'?' for '+userName(owner):''}? It will be locked and cannot be edited.`)) return;
-    if (kind==='assign') emailPeople([owner], `New ${mode==='plan'?'task':'extra work'} from ${userName(me)}`, `${userName(me)} assigned you: ${title}\nPriority: ${priority}\nDuration: ${days} day(s)${form.details.value.trim()?'\nDetails: '+form.details.value.trim():''}`);
+    if (kind==='assign' && closedToday(owner, n.date)){ err.hidden=false; err.textContent=`${userName(owner)} has already finished their day and submitted the closure report. Assign it tomorrow morning, or speak to them directly.`; return; }
+    if (mode==='extra' && !confirm(`Add this as additional work${kind==='assign'?' for '+userName(owner):''}? It will be locked and cannot be edited.`)) return;
+    if (kind==='assign') emailPeople([owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(me)}`, `${userName(me)} assigned you: ${title}\nPriority: ${priority}\nDuration: ${days} day(s)${form.details.value.trim()?'\nDetails: '+form.details.value.trim():''}`);
     db.tasks.push({ id:uid(), owner, assignedBy:kind==='assign'?me:null, category:mode==='plan'?'planned':'extra', priority, title,
       details:form.details.value.trim(), days, startDate:n.date, dueDate:addDays(n.date,days-1),
       log:{}, completedOn:null, createdAt:new Date().toISOString() });
@@ -1797,7 +1825,7 @@ function addOrSaveTask(form){
 
 function submitClosure(){
   const n = now(), u = ui.user, d = n.date, k = u+'|'+d;
-  if (phaseFor(n.mins,u)!=='closure' || db.closures[k]){ alert('The closure window is not open.'); render(); return; }
+  if (phaseFor(n.mins,u)!=='extra' || db.closures[k]){ alert('The closure report cannot be submitted now.'); render(); return; }
   if (isField(u)){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
   const rows = [...document.querySelectorAll('.crow')], out = []; let ok = true;
   rows.forEach(row=>{
@@ -1815,7 +1843,8 @@ function submitClosure(){
     if (o.v>=100) t.completedOn = d;
   });
   db.closures[k] = { submittedAt:new Date().toISOString(), tasks:out.map(o=>o.id) };
-  emailPeople(getUser(u).managers, `Closure report from ${userName(u)} — ${fmtDate(d)}`, out.map(o=>{ const t = db.tasks.find(x=>x.id===o.id); return `• ${t?t.title:''}: ${o.v}%${o.v<100?' — '+o.j:''}`; }).join('\n') + '\n\nPlease review it in the portal (Team reports).');
+  ui.closing = false;
+  emailPeople(getUser(u).managers.concat(needsCeoReview(u) ? ceoIds() : []), `Closure report from ${userName(u)} — ${fmtDate(d)}`, out.map(o=>{ const t = db.tasks.find(x=>x.id===o.id); return `• ${t?t.title:''}: ${o.v}%${o.v<100?' — '+o.j:''}`; }).join('\n') + '\n\nPlease review it in the portal (Team reports).');
   save(); render();
 }
 
@@ -1843,6 +1872,17 @@ document.addEventListener('click', e=>{
     db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
   }
   else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (act==='ceo-ok' || act==='ceo-comment'){
+    const k = a.dataset.k, ta = document.querySelector(`.ceotxt[data-k="${k}"]`), txt = ta ? ta.value.trim() : '';
+    const err = ta ? ta.closest('label').parentElement.querySelector('.err') : null;
+    if (act==='ceo-comment' && !txt){ if (err){ err.hidden=false; err.textContent='Write your comment first, or press "Okay".'; } return; }
+    if (!db.closures[k] || !isCeo(ui.user)) return;
+    db.closures[k].ceoReview = { by:ui.user, ok: act==='ceo-ok', text:txt, at:new Date().toISOString() };
+    const owner = k.split('|')[0], gm = USERS.filter(u=>u.role==='General Manager').map(u=>u.id);
+    const msg = act==='ceo-ok' && !txt ? 'Okay.' : txt;
+    emailPeople([owner].concat(gm), `CEO review of ${userName(owner)}'s closure report (${fmtShort(k.split('|')[1])})`, `${userName(ui.user)}: ${msg}`);
+    notify(owner, `CEO review of your closure report (${fmtShort(k.split('|')[1])}): ${msg}`, nowAbs(), null);
+  }
   else if (act==='save-review'){
     const k = a.dataset.k, ta = document.querySelector(`.revtxt[data-k="${k}"]`), txt = ta.value.trim();
     const err = ta.closest('label').parentElement.querySelector('.err');
@@ -1873,6 +1913,8 @@ document.addEventListener('click', e=>{
   else if (act==='ai-summary'){ const out = document.getElementById('aiSum'); a.disabled = true; a.textContent = 'Summarising…';
     aiAsk(summaryPrompt()).then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Summarise with AI'; }); return; }
   else if (act==='forgot'){ forgotPassword(); return; }
+  else if (act==='close-start'){ if (now().mins < toMins(CONFIG.closureOpen) && !confirm(`It's before ${CONFIG.closureOpen}. Are you finishing your work for today?`)) return; ui.closing = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
+  else if (act==='close-cancel'){ ui.closing = false; }
   else if (act==='va-start'){ voiceAssign(); return; }
   else if (act==='va-stop'){ try{ speechSynthesis.cancel(); }catch(_){} return; }
   else if (act==='va-ok'){ confirmVoiceTask(); return; }
