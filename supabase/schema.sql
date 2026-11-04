@@ -138,3 +138,15 @@ create index if not exists project_file_text_project on public.project_file_text
 alter table public.drive_folders enable row level security;
 alter table public.project_file_text enable row level security;
 revoke all on public.drive_folders, public.project_file_text from anon, authenticated;
+
+-- Photo library: pictures in a private storage bucket. Any staff member can view and add; only the
+-- person who added a photo (or the CEO/GM) can delete it.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('photos', 'photos', false, 10485760, array['image/jpeg','image/png','image/webp'])
+on conflict (id) do nothing;
+drop policy if exists "staff read photos" on storage.objects;
+drop policy if exists "staff add photos" on storage.objects;
+drop policy if exists "remove own photos" on storage.objects;
+create policy "staff read photos" on storage.objects for select to authenticated using (bucket_id = 'photos' and public.is_staff());
+create policy "staff add photos" on storage.objects for insert to authenticated with check (bucket_id = 'photos' and public.is_staff());
+create policy "remove own photos" on storage.objects for delete to authenticated using (bucket_id = 'photos' and (owner_id = auth.uid()::text or public.is_management()));

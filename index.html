@@ -158,6 +158,22 @@ table.mst .pn{width:64px}
 .sum-h{cursor:pointer;list-style:revert}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .b.proj{background:var(--accent-soft);color:var(--accent)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:1000;padding:16px}
+.modal-box{background:var(--bg);color:var(--ink);border-radius:16px;padding:20px;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box}
+.modal-box h2{margin-top:0}
+.cam-ch{display:grid;gap:10px;margin:14px 0}
+.cam-big{justify-content:center;padding:16px;font-size:16px;gap:10px;display:flex;align-items:center}
+#camVid,.cam-prev,.lb img{width:100%;max-height:55vh;object-fit:contain;border-radius:10px;background:#000;display:block;margin:8px 0}
+.lb img{min-height:120px}
+.btn.sm.cam{background:var(--brand);color:#fff;border-color:var(--brand);display:inline-flex;align-items:center;justify-content:center}
+.btn.sm.cam:hover{filter:brightness(1.08)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:12px}
+.ph{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card);min-width:0}
+.ph[hidden]{display:none}
+.ph img{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--lock-bg);display:block}
+.ph-n{padding:6px 8px 0;font-weight:600;font-size:13px;overflow-wrap:anywhere}
+.ph-m{padding:0 8px 8px;font-size:11px;color:var(--muted)}
+.ph:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .ok-msg{background:var(--ok-bg);color:var(--ok);border-radius:var(--r-s);padding:10px 12px;font-size:14px;margin-bottom:12px;font-weight:600}
 .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
 
@@ -535,8 +551,8 @@ function load(key, fallback){ try{ const v = localStorage.getItem(key); return v
 function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
 
 /* ===== Shared data: Supabase database (table "records") ===== */
-const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles'];
-let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[] };
+const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles','photos'];
+let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[] };
 let ui = load(UI_KEY, null) || { view:'staff', reviewDate:null };
 ui.user = null; ui.authed = false; ui.editing = null;
 let sb = null, LOCS = {}, booting = true, saveErrShown = false;
@@ -1005,7 +1021,7 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const MIC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 let recog = null, recogEl = null;
 function decorateSTT(){
-  document.querySelectorAll('#main textarea, #main input[type=text], #main input:not([type]), #main input[type=search]').forEach(el=>{
+  document.querySelectorAll('#main textarea, #main input[type=text], #main input:not([type]), #main input[type=search], #camModal textarea, #camModal input[name=name]').forEach(el=>{
     if (el.dataset.stt || el.classList.contains('pick-in') || el.closest('.stt')) return;
     el.dataset.stt = '1';
     const w = document.createElement('span'); w.className = 'stt';
@@ -2075,6 +2091,141 @@ function projClick(act, a){
   return false;
 }
 
+/* ===== Photo library: camera button in the header, photos stored in Supabase Storage (bucket "photos") ===== */
+const CAM_IC = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg>';
+const IMG_IC = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>';
+let CAMST = null, PHBOX = null;
+const SURL = {};
+function modalEl(id){ let el = document.getElementById(id); if (!el){ el = document.createElement('div'); el.id = id; el.className = 'modal'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true'); document.body.appendChild(el); } return el; }
+function camOpen(){ camStop(); CAMST = { stage:'choose' }; paintCam(); }
+function camStop(){ if (CAMST && CAMST.stream){ CAMST.stream.getTracks().forEach(t=>t.stop()); CAMST.stream = null; } }
+function camClose(){ camStop(); if (CAMST && CAMST.url) URL.revokeObjectURL(CAMST.url); CAMST = null; paintCam(); }
+function paintCam(){
+  const old = document.getElementById('camModal');
+  if (!CAMST){ if (old) old.remove(); return; }
+  const s = CAMST, el = modalEl('camModal'); let b = '';
+  if (s.stage==='choose') b = `<h2>Add a photo</h2>
+    <p class="hint">Saw something useful for our work or industry? Take a photo or attach a picture. Everyone in the company can see it in the Photo library.</p>
+    <div class="cam-ch"><button type="button" class="btn cam-big" data-act="cam-shoot">${CAM_IC}<span>Take a photo</span></button>
+      <button type="button" class="btn ghost cam-big" data-act="cam-pick">${IMG_IC}<span>Choose a picture from this device</span></button></div>
+    <input type="file" id="camShoot" accept="image/*" capture="environment" hidden><input type="file" id="camPick" accept="image/*" hidden>
+    <p class="hint" style="margin:0">Only pictures (JPG, PNG, WebP…) can be added.</p>
+    <div class="err" ${s.err?'':'hidden'}>${esc(s.err||'')}</div><div class="row end"><button type="button" class="btn ghost" data-act="cam-x">Cancel</button></div>`;
+  else if (s.stage==='live') b = `<h2>Take a photo</h2><video id="camVid" autoplay playsinline muted></video>
+    <div class="row end"><button type="button" class="btn ghost" data-act="cam-x">Cancel</button><button type="button" class="btn" data-act="cam-snap">${CAM_IC}<span>Capture</span></button></div>`;
+  else b = `<h2>Name this photo</h2><img class="cam-prev" src="${s.url}" alt="Preview of the photo">
+    <form id="camForm" novalidate><label class="f">What is it?<input name="name" maxlength="120" placeholder="e.g. New coil stock at a Sharjah warehouse"></label>
+      <label class="f">Note (optional)<textarea name="note" rows="2" placeholder="Where it was, why it matters"></textarea></label>
+      <div class="err" hidden></div>
+      <div class="row end"><button type="button" class="btn ghost" data-act="cam-again">Choose another</button><button class="btn" id="camSave">Save photo</button></div></form>`;
+  el.innerHTML = `<div class="modal-box">${b}</div>`;
+  if (s.stage==='live') document.getElementById('camVid').srcObject = s.stream;
+  decorateSTT();
+  const f = el.querySelector('input[name=name]') || el.querySelector('.btn'); if (f) f.focus();
+}
+async function camShoot(){
+  const touch = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  if (touch || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ document.getElementById('camShoot').click(); return; }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ ideal:1920 } }, audio:false });
+    CAMST = { stage:'live', stream }; paintCam();
+  }catch(e){ CAMST.err = 'The camera could not be opened (no camera found, or permission was refused). You can choose a picture from this device instead.'; paintCam(); }
+}
+function camSnap(){
+  const v = document.getElementById('camVid'); if (!v || !v.videoWidth) return;
+  const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+  c.toBlob(b=>{ camStop(); camDetails(b); }, 'image/jpeg', 0.9);
+}
+function camFile(file){
+  if (!file) return;
+  if (!/^image\//.test(file.type||'')){ CAMST = { stage:'choose', err:'Only picture files can be added (JPG, PNG, WebP…).' }; paintCam(); return; }
+  camDetails(file);
+}
+function camDetails(blob){ if (CAMST && CAMST.url) URL.revokeObjectURL(CAMST.url); CAMST = { stage:'details', raw:blob, url:URL.createObjectURL(blob) }; paintCam(); }
+function loadImg(url){ return new Promise((ok, bad)=>{ const i = new Image(); i.onload = ()=>ok(i); i.onerror = bad; i.src = url; }); }
+function shrink(img, max, q){
+  const k = Math.min(1, max/Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(img, 0, 0, c.width, c.height);
+  return new Promise(r=>c.toBlob(b=>r({ blob:b, w:c.width, h:c.height }), 'image/jpeg', q));
+}
+async function camSave(form){
+  const err = form.querySelector('.err'), fail = m => { err.hidden = false; err.textContent = m; };
+  const name = form.name.value.trim(), noteTxt = form.note.value.trim();
+  if (name.length < 3) return fail('Please write what the photo is (a few words).');
+  const btn = document.getElementById('camSave'); btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    let img; try{ img = await loadImg(CAMST.url); }catch(_){ throw new Error('This picture format cannot be read here. Please use a JPG or PNG picture.'); }
+    const [full, thumb] = await Promise.all([shrink(img, 2000, 0.85), shrink(img, 480, 0.75)]);
+    const id = uid(), path = `${now().date}/${id}.jpg`, tpath = `thumbs/${id}.jpg`, st = sb.storage.from('photos');
+    const a = await st.upload(path, full.blob, { contentType:'image/jpeg', upsert:false }); if (a.error) throw a.error;
+    const b = await st.upload(tpath, thumb.blob, { contentType:'image/jpeg', upsert:false }); if (b.error) throw b.error;
+    db.photos.push({ id, name, note:noteTxt, path, thumb:tpath, by:ui.user, at:new Date().toISOString(), w:full.w, h:full.h, size:full.blob.size });
+    save(); camClose(); tip('Photo saved', 'It is now in the Photo library for everyone.');
+    if (ui.view==='photos') render();
+  }catch(e){ btn.disabled = false; btn.textContent = 'Save photo'; fail((e && e.message) || 'Could not save. Check your internet connection.'); }
+}
+async function signed(paths){
+  const t = Date.now(), need = [...new Set(paths)].filter(p=>p && !(SURL[p] && SURL[p].until > t));
+  if (need.length){ const { data } = await sb.storage.from('photos').createSignedUrls(need, 3600);
+    (data||[]).forEach(x=>{ if (x.signedUrl) SURL[x.path] = { url:x.signedUrl, until:t + 50*60000 }; }); }
+}
+async function fillImgs(){
+  if (!sb || !ui.authed) return;
+  const imgs = [...document.querySelectorAll('img[data-path]')].filter(i=>!i.getAttribute('src'));
+  if (!imgs.length) return;
+  try{ await signed(imgs.map(i=>i.dataset.path)); }catch(_){ return; }
+  imgs.forEach(i=>{ const s = SURL[i.dataset.path]; if (s) i.src = s.url; });
+}
+function photosView(){
+  const ps = db.photos.slice().sort((a,b)=>b.at.localeCompare(a.at)), q = ui.phQ || '';
+  return `<section class="card"><div class="sec-h"><h2>Photo library</h2><button class="btn" data-act="cam">${CAM_IC}<span>Add a photo</span></button></div>
+    <p class="hint" style="margin-top:0">Pictures from the field: sites, products, competitors, exhibitions — anything useful for our work. Everyone in the company can see them.</p>
+    ${ps.length ? `<label class="f"><span class="sr">Search photos</span><input type="search" id="phQ" value="${esc(q)}" placeholder="Search by name, note or person"></label>
+    <div class="pgrid">${ps.map(p=>{ const s = (p.name+' '+(p.note||'')+' '+userName(p.by)).toLowerCase();
+      return `<button type="button" class="ph" data-act="ph-open" data-id="${p.id}" data-s="${esc(s)}" ${q && !s.includes(q.toLowerCase())?'hidden':''}><img data-path="${esc(p.thumb)}" alt="${esc(p.name)}"><span class="ph-n">${esc(p.name)}</span><span class="ph-m">${esc(userName(p.by))} · ${fmtTime(p.at)}</span></button>`; }).join('')}</div>`
+    : note('No photos yet. Press the camera button at the top of any page to add the first one.')}</section>`;
+}
+function paintBox(){
+  const old = document.getElementById('phBox'), p = PHBOX && db.photos.find(x=>x.id===PHBOX);
+  if (!p){ PHBOX = null; if (old) old.remove(); return; }
+  const el = modalEl('phBox'), can = p.by===ui.user || isMgmt(ui.user);
+  el.innerHTML = `<div class="modal-box lb"><img data-path="${esc(p.path)}" alt="${esc(p.name)}"><h2 style="margin:10px 0 2px">${esc(p.name)}</h2>
+    ${p.note?`<p style="margin:0 0 6px;white-space:pre-wrap">${esc(p.note)}</p>`:''}<div class="hint" style="margin:0">${esc(userName(p.by))} · ${fmtTime(p.at)}</div>
+    <div class="row end" style="margin-top:12px">${can?'<button type="button" class="btn ghost danger" data-act="ph-del">Delete</button>':''}<button type="button" class="btn ghost" data-act="ph-dl">Download</button><button type="button" class="btn" data-act="ph-x">Close</button></div></div>`;
+  fillImgs();
+}
+async function photoDownload(btn){
+  const p = db.photos.find(x=>x.id===PHBOX); if (!p) return; btn.disabled = true;
+  try{ await signed([p.path]); const r = await fetch(SURL[p.path].url); const url = URL.createObjectURL(await r.blob()), a = document.createElement('a');
+    a.href = url; a.download = p.name.replace(/[\\/:*?"<>|]+/g,' ').trim() + '.jpg'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); }
+  catch(e){ tip('Could not download', 'Check your internet connection.'); }
+  btn.disabled = false;
+}
+async function photoDelete(){
+  const p = db.photos.find(x=>x.id===PHBOX); if (!p || !(p.by===ui.user || isMgmt(ui.user)) || !confirm(`Delete the photo “${p.name}”? This cannot be undone.`)) return;
+  const r = await sb.storage.from('photos').remove([p.path, p.thumb]);
+  if (r.error){ tip('Could not delete', r.error.message); return; }
+  db.photos = db.photos.filter(x=>x.id!==p.id); PHBOX = null; paintBox(); save(); render();
+}
+function camClick(act, a){
+  if (act==='cam'){ camOpen(); return true; }
+  if (act==='cam-x'){ camClose(); return true; }
+  if (act==='cam-shoot'){ camShoot(); return true; }
+  if (act==='cam-pick'){ document.getElementById('camPick').click(); return true; }
+  if (act==='cam-snap'){ camSnap(); return true; }
+  if (act==='cam-again'){ camOpen(); return true; }
+  if (act==='ph-open'){ PHBOX = a.dataset.id; paintBox(); return true; }
+  if (act==='ph-x'){ PHBOX = null; paintBox(); return true; }
+  if (act==='ph-dl'){ photoDownload(a); return true; }
+  if (act==='ph-del'){ photoDelete(); return true; }
+  return false;
+}
+document.addEventListener('click', e=>{ if (e.target.id==='camModal') camClose(); else if (e.target.id==='phBox'){ PHBOX = null; paintBox(); } });
+document.addEventListener('keydown', e=>{ if (e.key!=='Escape') return; if (CAMST) camClose(); else if (PHBOX){ PHBOX = null; paintBox(); } });
+document.addEventListener('input', e=>{ if (e.target.id!=='phQ') return; ui.phQ = e.target.value; const q = ui.phQ.toLowerCase().trim();
+  document.querySelectorAll('.ph').forEach(b=>{ b.hidden = !!q && !b.dataset.s.includes(q); }); });
+
 /* ===== Render ===== */
 function tabsFor(id){
   const t = [];
@@ -2083,7 +2234,7 @@ function tabsFor(id){
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
   if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
-  t.push(['proj','Projects']);
+  t.push(['proj','Projects']); t.push(['photos','Photo library']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
   if (reportsOf(id).length || indirectOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
       + (getUser(id).role==='CEO' ? Object.keys(db.closures).filter(k=>needsCeoReview(k.split('|')[0]) && !db.closures[k].ceoReview).length : 0);
@@ -2106,16 +2257,17 @@ function render(){
   tabsEl.hidden = !ui.authed || gate;
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   main.innerHTML = gate ? gateView(n)
-    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
   const lgT = isField(ui.user) && loginOf(ui.user, n.date);
   who.innerHTML = `${lgT?`<span class="lgchip ${lgT.late?'late':''}">Logged in ${lgT.time}</span>`:''}<button class="whoname" data-act="account" title="My account" style="background:none;border:0;color:inherit;cursor:pointer;text-align:right;padding:0"><b>${esc(me.name)}</b><br><small>${esc(me.title)}</small></button>
+    <button class="btn sm cam" data-act="cam" aria-label="Add a photo" title="Add a photo">${CAM_IC}</button>
     <button class="btn sm ghost bell" data-act="view" data-v="alerts" aria-label="Notifications">${BELL}${unread?`<span class="cnt">${unread}</span>`:''}</button>
     <button class="btn sm ghost" data-act="logout">Log out</button>`;
   flushFresh();
-  decorateSTT(); document.querySelectorAll(".pchat").forEach(c=>{ c.scrollTop = c.scrollHeight; });
+  decorateSTT(); fillImgs(); document.querySelectorAll(".pchat").forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
 
 /* ===== Actions ===== */
@@ -2220,7 +2372,7 @@ async function afterLogin(){
   render();
 }
 async function loadAll(){
-  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[] }; COLS.forEach(c=>shadow[c].clear());
+  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[] }; COLS.forEach(c=>shadow[c].clear());
   for (let from = 0; ; from += 1000){
     const { data, error } = await sb.from('records').select('collection,id,data').range(from, from+999);
     if (error){ tip('Could not load', error.message); break; }
@@ -2325,6 +2477,7 @@ document.addEventListener('submit', e=>{
   if (e.target.id==='loginForm') return doLogin();
   if (e.target.id==='newPwForm' || e.target.id==='chPwForm') return setNewPassword();
   if (e.target.id==='meetForm') return scheduleMeeting(false);
+  if (e.target.id==='camForm') return camSave(e.target);
   if (e.target.classList.contains('projf')) return createProject(e.target);
   if (e.target.classList.contains('projedit')) return saveProjectEdit(e.target);
   if (e.target.classList.contains('msf')) return addMilestone(e.target);
@@ -2347,6 +2500,7 @@ document.addEventListener('click', e=>{
     db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
   }
   else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (camClick(act, a)) return;
   else if (projClick(act, a)) return;
   else if (act && act.startsWith('rq-')){ decideRequest(act.slice(3), a.closest('.rq')); return; }
   else if (act==='chk-done' || act==='chk-not'){ checkTask(a.dataset.id, act==='chk-done'); return; }
@@ -2430,7 +2584,7 @@ document.addEventListener('input', e=>{
   document.querySelectorAll('.team-h').forEach(hd=>{ let el=hd.nextElementSibling, any=false; while(el && el.classList.contains('prow')){ if(!el.hidden) any=true; el=el.nextElementSibling; } hd.hidden=!any; });
 });
 
-document.addEventListener('change', e=>{ if (e.target.classList && e.target.classList.contains('pf-in')){ if (e.target.files.length) uploadFiles(e.target.dataset.id, e.target.files); e.target.value=''; return; } });
+document.addEventListener('change', e=>{ if (e.target.id==='camShoot' || e.target.id==='camPick'){ camFile(e.target.files[0]); return; } if (e.target.classList && e.target.classList.contains('pf-in')){ if (e.target.files.length) uploadFiles(e.target.dataset.id, e.target.files); e.target.value=''; return; } });
 document.addEventListener('change', e=>{
   if (e.target.name==='oc'){ const pp = e.target.closest('form').querySelector('.pp'); if (pp) pp.hidden = e.target.value!=='postponed'; return; }
   const id = e.target.id;
