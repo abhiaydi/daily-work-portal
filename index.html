@@ -176,6 +176,7 @@ table.mst .pn{width:64px}
 .tfiles{margin:6px 0}.tfile{margin:4px 0;font-size:13px}
 .linkbtn{border:0;background:none;color:var(--accent);cursor:pointer;padding:0;font:inherit;display:inline-flex;align-items:center;gap:4px;text-align:left}
 .linkbtn:hover{text-decoration:underline}
+.daychip{cursor:pointer;border:1px solid var(--line)}.daychip.on{background:var(--accent);color:var(--accent-ink)}
 .linkbtn.tf-del{color:var(--emg);font-size:12px;margin-left:8px}.tf-add{font-size:13px;margin-top:6px}
 .tbrief{margin:3px 0 0 18px;padding:6px 9px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--ink)}
 .feas{margin-top:8px;padding:9px 11px;border:1px solid var(--accent);border-radius:10px;background:var(--accent-soft);font-size:14px}
@@ -3195,8 +3196,51 @@ function feasRepliesView(){
     ${list.map(t=>`<div class="crow"><div class="ctitle">${esc(userName(t.owner))} · ${esc(t.title)}</div>${feasHtml(t)}</div>`).join('')}</section>`;
 }
 
+/* ===== Attachments by day (CEO/GM): files are stored in one server folder per day; this page browses them ===== */
+function allAttachments(){
+  const by = new Map();
+  db.tasks.forEach(t=>(t.files||[]).forEach(f=>{ const x = by.get(f.id) || { ...f, owners:[], tasks:[] };
+    if (!x.owners.includes(t.owner)) x.owners.push(t.owner); if (!x.tasks.includes(t.title)) x.tasks.push(t.title); by.set(f.id, x); }));
+  db.requests.forEach(r=>(r.files||[]).forEach(f=>{ if (!by.has(f.id)) by.set(f.id, { ...f, owners:[r.to], tasks:[r.title+' (waiting for GM approval)'] }); }));
+  return [...by.values()];
+}
+function archiveView(n){
+  const all = allAttachments(), d = ui.arcDate && ui.arcDate<=n.date ? ui.arcDate : n.date;
+  const day = all.filter(f=>uaeDay(f.at)===d).sort((a,b)=>String(a.at).localeCompare(String(b.at)));
+  const counts = {}; all.forEach(f=>{ const k = uaeDay(f.at); counts[k] = (counts[k]||0)+1; });
+  const recent = Object.keys(counts).sort().reverse().slice(0,14);
+  let h = `<section class="card"><div class="sec-h"><h2>Attachments by day</h2><label class="who">Date <input type="date" id="arcDate" value="${d}" max="${n.date}" class="sel"></label></div>
+    <p class="hint" style="margin-top:0">Every file attached to a task is kept on the server in a folder for the day it was attached. Pick a day to see and download them.</p>
+    ${recent.length?`<div class="chips">${recent.map(k=>`<button type="button" class="chip daychip ${k===d?'on':''}" data-act="arc-day" data-d="${k}">${fmtShort(k)} · ${counts[k]}</button>`).join('')}</div>`:''}</section>`;
+  h += `<section class="card"><div class="sec-h"><h2>${fmtDate(d)}</h2>${day.length?`<button class="btn" data-act="arc-zip" data-d="${d}">Download all (${day.length}) as ZIP</button>`:pill('soon','No files')}</div>
+    ${day.length ? `<div class="tblwrap"><table class="mst"><thead><tr><th>Time</th><th>File</th><th>Task / person</th><th>Attached by</th><th>AI brief</th></tr></thead><tbody>${day.map(f=>`<tr>
+      <td>${uaeHM(f.at)}</td><td><button type="button" class="linkbtn" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button><br><span class="hint" style="margin:0">${Math.max(1,Math.round((f.size||0)/1024))} KB</span></td>
+      <td>${f.tasks.map(esc).join('<br>')}<br><span class="hint" style="margin:0">${f.owners.map(userName).map(esc).join(', ')}</span></td>
+      <td>${esc(userName(f.by))}</td><td style="max-width:360px">${f.brief?esc(f.brief):'<span class="hint" style="margin:0">—</span>'}</td></tr>`).join('')}</tbody></table></div>` : note('No files were attached on this day.')}</section>`;
+  return h;
+}
+async function zipDay(d, btn){
+  const files = allAttachments().filter(f=>uaeDay(f.at)===d); if (!files.length) return;
+  const old = btn.textContent; btn.disabled = true;
+  try{
+    const JZ = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip'), zip = new JZ(), used = {};
+    for (let i=0; i<files.length; i++){
+      const f = files[i]; btn.textContent = `Preparing ${i+1} of ${files.length}…`;
+      const { data, error } = await sb.storage.from('taskfiles').createSignedUrl(f.path, 300); if (error) throw error;
+      const blob = await (await fetch(data.signedUrl)).blob();
+      const folder = (userName(f.owners[0]||f.by)||'Staff').replace(/[\\/:*?"<>|]+/g,' ').trim();
+      let nm = `${folder}/${uaeHM(f.at).replace(':','')} ${f.name}`; while (used[nm]) nm = nm.replace(/(\.[^.]+)?$/, ' (2)$1'); used[nm] = 1;
+      zip.file(nm, blob);
+    }
+    const out = await zip.generateAsync({ type:'blob' }), url = URL.createObjectURL(out), a = document.createElement('a');
+    a.href = url; a.download = `Attachments ${d}.zip`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  }catch(e){ tip('Could not make the ZIP', e.message || 'Check the internet connection.'); }
+  btn.disabled = false; btn.textContent = old;
+}
+document.addEventListener('change', e=>{ if (e.target.id==='arcDate'){ ui.arcDate = e.target.value; render(); } });
+
 /* Admin portal (CEO and GM only) and employee portal. */
-const ADMIN_TABS = ['dash','logins','activity','mrev','appr'];
+const ADMIN_TABS = ['dash','logins','activity','files','mrev','appr'];
 const isAdminUser = id => DASH_ROLES.includes(getUser(id).role);
 function tabsFor(id){
   const all = allTabs(id); if (!isAdminUser(id)) return all;
@@ -3206,7 +3250,7 @@ function tabsFor(id){
 }
 function allTabs(id){
   const t = [];
-  if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']); t.push(['activity','Login activity']); t.push(['logins','Staff logins']);
+  if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']); t.push(['activity','Login activity']); t.push(['files','Attachments by day']); t.push(['logins','Staff logins']);
     const fsIds = subtree(id).filter(u=>isField(u.id)).map(u=>u.id);
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
@@ -3240,7 +3284,7 @@ function render(){
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
-    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
@@ -3514,6 +3558,8 @@ document.addEventListener('click', e=>{
   else if (act==='close-edit-cancel'){ ui.editClosure = false; }
   else if (act.startsWith('feas-') && feasClick(act, a)) return;
   else if (act==='tf-get'){ getTaskFile(a.dataset.path, a.dataset.name, a); return; }
+  else if (act==='arc-day'){ ui.arcDate = a.dataset.d; render(); return; }
+  else if (act==='arc-zip'){ zipDay(a.dataset.d, a); return; }
   else if (act==='tf-del'){ removeTaskFile(a.dataset.id, a.dataset.path, a.dataset.name, a); return; }
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
   else if (chatClick(act, a)) return;
