@@ -643,8 +643,8 @@ function load(key, fallback){ try{ const v = localStorage.getItem(key); return v
 function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
 
 /* ===== Shared data: Supabase database (table "records") ===== */
-const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles','photos','aisum','gchat'];
-let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[], gchat:[] };
+const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles','photos','aisum','gchat','sys'];   // sys: server-only signals (e.g. data reset)
+let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[], gchat:[], sys:[] };
 let ui = load(UI_KEY, null) || { view:'staff', reviewDate:null };
 ui.user = null; ui.authed = false; ui.editing = null;
 let sb = null, LOCS = {}, booting = true, saveErrShown = false;
@@ -3538,7 +3538,41 @@ function loginsView(){
     const ph = u.phone ? `<a href="tel:${esc(u.phone)}">${esc(u.phone.replace(/^(\+\d{3})(\d{2})(\d{3})(\d+)$/,'$1 $2 $3 $4'))}</a>` : '<span class="hint" style="margin:0">No phone</span>';
     h += `<div class="ci" style="align-items:flex-start"><span style="min-width:200px;flex:1 1 200px"><b>${onDot(u.id)}${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span>
       <span style="flex:2 1 260px;min-width:0">${L.emailOk?esc(u.email):'<span class="hint" style="margin:0">No email yet</span>'}<br>${ph}</span>${st}${act}</div>`; });
-  return h + '</section>';
+  return h + '</section>' + resetCard();
+}
+/* ===== Reset trial data (CEO / GM, at most 2 times per month; enforced on the server) ===== */
+let RESET_ST = null, RESET_BUSY = false;
+async function refreshResetStatus(){ try{ const { data } = await sb.functions.invoke('admin-reset', { body:{ action:'status' } }); RESET_ST = data && !data.error ? data : { error:(data&&data.error)||'unavailable' }; }catch(_){ RESET_ST = { error:'unavailable' }; } scheduleRender(); }
+function resetCard(){
+  if (!['CEO','General Manager'].includes(getUser(ui.user).role)) return '';
+  if (!RESET_ST){ refreshResetStatus(); return ''; }
+  const st = RESET_ST, left = st.error ? 0 : Math.max(0, st.limit - st.used);
+  return `<section class="card"><div class="sec-h"><h2>Reset trial data</h2>${st.error?'':`<button class="btn sm ${left?'':'ghost'}" style="${left?'background:#b42318;border-color:#b42318':''}" data-act="trial-reset" ${left?'':'disabled'}>Reset all data…</button>`}</div>
+    <p class="hint" style="margin-top:0">Deletes everything people have entered: tasks, plans and closure reports, meetings, approvals, projects, chats, notifications, photos, PDF/Excel and other attachments, AI summaries, and login/logout times and locations. Staff, logins, passwords and reporting lines stay. This cannot be undone.</p>
+    <p class="hint">${st.error?'Reset is not available right now.':`Used ${st.used} of ${st.limit} resets this month.${st.last?` Last reset: ${esc(new Date(st.last.at).toLocaleString('en-GB',{timeZone:CONFIG.timeZone,day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}))} by ${esc(userName(st.last.by_person))}.`:''}`}</p></section>`;
+}
+function resetModal(){
+  const el = modalEl('resetModal');
+  el.innerHTML = `<div class="modal-box"><h2>Reset all trial data?</h2>
+    <p style="margin-top:0">Everything entered so far is permanently deleted for <b>everyone</b>: tasks, reports, meetings, projects, chats, photos, attachments and login records. Staff and logins stay. Anyone with the portal open will see it reload.</p>
+    <label class="f">Type <b>RESET</b> to confirm<input id="resetTxt" autocomplete="off" autocapitalize="characters"></label>
+    <div class="err" id="resetErr" hidden></div>
+    <div class="row end"><button type="button" class="btn ghost" data-act="trial-reset-x">Cancel</button><button type="button" class="btn" style="background:#b42318;border-color:#b42318" data-act="trial-reset-go">Delete everything</button></div></div>`;
+  setTimeout(()=>{ const i = document.getElementById('resetTxt'); if (i) i.focus(); }, 50);
+}
+async function runReset(btn){
+  const v = (document.getElementById('resetTxt')||{}).value || '', err = document.getElementById('resetErr');
+  const fail = m => { err.hidden = false; err.textContent = m; };
+  if (v.trim().toUpperCase()!=='RESET') return fail('Type RESET to confirm.');
+  if (RESET_BUSY) return; RESET_BUSY = true; btn.disabled = true; btn.textContent = 'Deleting…';
+  try{
+    const { data, error } = await sb.functions.invoke('admin-reset', { body:{ action:'reset', confirm:'RESET' } });
+    if (error && !data) throw new Error('The server could not be reached.');
+    if (!data || data.error) throw new Error((data&&data.error)||'Reset failed.');
+    document.getElementById('resetModal')?.remove();
+    tip('Data reset', 'All trial data has been deleted. Reloading…'); setTimeout(()=>location.reload(), 1500);
+  }catch(e){ fail(e.message); btn.disabled = false; btn.textContent = 'Delete everything'; RESET_ST = null; }
+  finally{ RESET_BUSY = false; }
 }
 async function loginAction(action, ids, btn){
   if (!ids.length) return;
@@ -3587,7 +3621,7 @@ async function afterLogin(){
   logSession(JUST_SIGNED_IN ? 'signin' : 'open', 0, JUST_SIGNED_IN && LOGIN_POS && (Date.now() - LOGIN_POS.pos.timestamp) < 15*60000 ? LOGIN_POS : undefined); JUST_SIGNED_IN = false; LOGIN_POS = null;
 }
 async function loadAll(){
-  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[], gchat:[] }; COLS.forEach(c=>shadow[c].clear());
+  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[], gchat:[], sys:[] }; COLS.forEach(c=>shadow[c].clear());
   for (let from = 0; ; from += 1000){
     const { data, error } = await sb.from('records').select('collection,id,data').range(from, from+999);
     if (error){ tip('Could not load', error.message); break; }
@@ -3619,6 +3653,7 @@ function subscribe(){
   startPresence();
   sb.channel('records-live').on('postgres_changes', { event:'*', schema:'public', table:'records' }, p=>{
     const r = (p.new && p.new.collection) ? p.new : p.old; if (!r || !COLS.includes(r.collection)) return;
+    if (r.collection==='sys' && r.id==='reset' && p.eventType!=='DELETE'){ tip('Data reset', 'The trial data has been cleared by management. The portal will reload.'); setTimeout(()=>location.reload(), 2500); return; }
     applyRemote(r.collection, r.id, p.eventType==='DELETE' ? null : p.new.data); scheduleRender();
     if (r.collection==='gchat' || r.collection==='pchat') chatRefresh();
   }).subscribe();
@@ -3739,6 +3774,9 @@ document.addEventListener('click', e=>{
   else if (act==='arc-zip'){ zipDay(a.dataset.d, a); return; }
   else if (act==='tf-del'){ removeTaskFile(a.dataset.id, a.dataset.path, a.dataset.name, a); return; }
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
+  else if (act==='trial-reset'){ resetModal(); return; }
+  else if (act==='trial-reset-x'){ document.getElementById('resetModal')?.remove(); return; }
+  else if (act==='trial-reset-go'){ runReset(a); return; }
   else if (planClick(act)) return;
   else if (chatClick(act, a)) return;
   else if (mydClick(act, a)) return;

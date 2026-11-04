@@ -187,3 +187,23 @@ drop policy if exists "remove own task files" on storage.objects;
 create policy "staff read task files" on storage.objects for select to authenticated using (bucket_id = 'taskfiles' and public.is_staff());
 create policy "staff add task files" on storage.objects for insert to authenticated with check (bucket_id = 'taskfiles' and public.is_staff());
 create policy "remove own task files" on storage.objects for delete to authenticated using (bucket_id = 'taskfiles' and (owner_id = auth.uid()::text or public.is_management()));
+
+-- ===== Trial data reset (CEO / GM, max 2 per month; see functions/admin-reset) =====
+create table if not exists public.trial_resets (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  by_person text not null,
+  counts jsonb
+);
+alter table public.trial_resets enable row level security;
+revoke all on public.trial_resets from anon, authenticated;
+create or replace function public.storage_object_names(b text)
+returns setof text language sql security definer set search_path = '' as $$
+  select name from storage.objects where bucket_id = b;
+$$;
+revoke all on function public.storage_object_names(text) from public, anon, authenticated;
+grant execute on function public.storage_object_names(text) to service_role;
+-- 'sys' records are written by the server only (e.g. the reset signal that makes open portals reload).
+alter policy "staff add records" on public.records with check (is_staff() and collection <> 'sys');
+alter policy "staff change records" on public.records using (is_staff() and collection <> 'sys') with check (is_staff() and collection <> 'sys');
+alter policy "staff delete records" on public.records using (is_staff() and collection <> 'sys');
