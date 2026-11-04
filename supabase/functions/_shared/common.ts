@@ -59,36 +59,48 @@ async function askClaude(key: string, prompt: string, maxTokens: number) {
 }
 
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
-async function geminiGenerate(key: string, model: string, prompt: string, maxTokens: number) {
+async function geminiGenerate(key: string, model: string, prompt: string, maxTokens: number, json = false) {
   const r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": key, "content-type": "application/json" },
-    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens } }),
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: "application/json" } : {}) } }),
   });
   const d = await r.json().catch(() => ({}));
   return { ok: r.ok, status: r.status, d };
 }
-async function askGemini(key: string, prompt: string, maxTokens: number) {
-  let model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
-  let res = await geminiGenerate(key, model, prompt, maxTokens);
-  if (res.status === 404) {
-    // The default model may have been retired: pick an available "flash" model instead.
-    const l = await fetch(`${GEMINI}/models`, { headers: { "x-goog-api-key": key } }).then((r) => r.json()).catch(() => ({}));
-    const names = (l.models || []).filter((m: { supportedGenerationMethods?: string[] }) => (m.supportedGenerationMethods || []).includes("generateContent"))
-      .map((m: { name: string }) => m.name.replace(/^models\//, ""));
-    const pick = names.find((n: string) => /flash/.test(n) && !/lite|image|tts|live/.test(n)) || names[0];
-    if (pick) { model = pick; res = await geminiGenerate(key, model, prompt, maxTokens); }
+let geminiModel = "";   // the model that last worked (remembered while the function stays warm)
+async function geminiModels(key: string): Promise<string[]> {
+  const l = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { "x-goog-api-key": key } }).then((r) => r.json()).catch(() => ({}));
+  const names: string[] = (l.models || []).filter((m: { supportedGenerationMethods?: string[] }) => (m.supportedGenerationMethods || []).includes("generateContent"))
+    .map((m: { name: string }) => m.name.replace(/^models\//, ""));
+  const ver = (n: string) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || "0");
+  const rank = (n: string) => (/flash/.test(n) ? 0 : 2) + (/lite/.test(n) ? 1 : 0) + (/preview|exp/.test(n) ? 0.5 : 0);
+  return names.filter((n) => /^gemini/.test(n) && !/image|tts|live|audio|embedding|robotics|computer/.test(n))
+    .sort((a, b) => rank(a) - rank(b) || ver(b) - ver(a));
+}
+async function askGemini(key: string, prompt: string, maxTokens: number, json = false) {
+  const first = geminiModel || Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+  let res = await geminiGenerate(key, first, prompt, maxTokens, json);
+  if (res.status === 429 || res.status === 503) { await new Promise((r) => setTimeout(r, 2000)); res = await geminiGenerate(key, first, prompt, maxTokens, json); }
+  if (res.ok) geminiModel = first;
+  else if (res.status === 404 || res.status === 400) {
+    // The model may have been retired: try the newest available "flash" models instead.
+    for (const m of (await geminiModels(key)).filter((x) => x !== first).slice(0, 5)) {
+      res = await geminiGenerate(key, m, prompt, maxTokens, json);
+      if (res.ok) { geminiModel = m; console.log("Gemini model in use:", m); break; }
+    }
   }
-  if (!res.ok) throw new Error(res.d?.error?.message || `AI request failed (${res.status}).`);
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${res.d?.error?.message || "request failed"}`);
   const parts = res.d?.candidates?.[0]?.content?.parts || [];
-  return parts.map((p: { text?: string }) => p.text || "").join("").trim();
+  return parts.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text || "").join("").trim();
 }
 
 /** Ask the AI. Throws if no AI key is set or the request fails. */
-export async function askAI(prompt: string, maxTokens = 1500): Promise<string> {
+export async function askAI(prompt: string, maxTokens = 1500, json = false): Promise<string> {
   const claudeKey = Deno.env.get("ANTHROPIC_API_KEY"), geminiKey = Deno.env.get("GEMINI_API_KEY");
   if (claudeKey) return await askClaude(claudeKey, prompt, maxTokens);
-  if (geminiKey) return await askGemini(geminiKey, prompt, Math.max(maxTokens, 2048));
+  if (geminiKey) return await askGemini(geminiKey, prompt, Math.max(maxTokens, 8192), json);   // room for Gemini's thinking tokens
   throw new Error("AI is not set up yet. The administrator needs to add an AI key.");
 }
+export const aiModelInUse = () => geminiModel;
 export const aiReady = () => !!(Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("GEMINI_API_KEY"));

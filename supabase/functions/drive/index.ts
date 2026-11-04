@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
           `- folder: reuse an existing folder when it fits; otherwise a new short folder name in Title Case (1-3 words), e.g. Contracts, Quotations, Drawings, Invoices, Reports, Correspondence, Photos.\n` +
           `- name: a clear file name WITHOUT the extension: what it is, who/what it is about, and the document's date if it has one (YYYY-MM-DD). Max 80 characters.\n` +
           `- summary: one sentence on what the file contains.`;
-        const j = parseJson(await askAI(prompt, 400).catch(() => "")) || {};
+        const j = parseJson(await askAI(prompt, 400, true).catch(() => "")) || {};
         if (!folder) folder = clean(j.folder || "", 40);
         name = clean(j.name || "", 80); summary = String(j.summary || "").slice(0, 300);
       }
@@ -233,7 +233,7 @@ Deno.serve(async (req) => {
         `Answer only from the information above. If it is not there, say so plainly; do not guess. Keep it short and practical.\n` +
         `If the person asks for a document or folder, or a file supports your answer, list those file ids.\n` +
         `Reply with JSON only: {"answer": "...", "file_ids": ["..."]}`;
-      const raw = await askAI(prompt, 1500);
+      const raw = await askAI(prompt, 1500, true);
       const j = parseJson(raw);
       const ids = new Set(files.map((f) => f.id));
       return json({ answer: String(j?.answer || raw).slice(0, 6000), file_ids: (Array.isArray(j?.file_ids) ? j!.file_ids : []).filter((x: string) => ids.has(x)).slice(0, 10) });

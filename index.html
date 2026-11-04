@@ -193,6 +193,7 @@ table.mst .pn{width:64px}
 .ai-hello{color:var(--muted);font-size:14px}.ai-hello b{color:var(--ink)}.ai-hello ul{margin:6px 0;padding-left:18px}
 .ai-act{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:13px;white-space:normal}
 .ai-act .t{font-weight:600;font-size:14px}
+.ai-a1+.ai-a1{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .ai-st{margin-top:6px;font-size:12px;color:var(--muted)}.ai-st.ok{color:var(--ok);font-weight:600}
 .ai-f{display:flex;gap:6px;align-items:center;padding:10px;border-top:1px solid var(--line)}
 .ai-f input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit}
@@ -1764,7 +1765,7 @@ function approvalsView(n){
 }
 function reqLine(r){
   const st = r.status==='approved' ? pill('open','Approved') : r.status==='accepted' ? pill('open',`Accepted by ${esc(userName(r.decidedBy))}`)
-    : r.status==='delegated' ? pill('open',`Passed to ${esc(userName(r.delegatedTo))}`) : r.status==='rejected' ? pill('miss','Declined') : pill('soon','Waiting for GM');
+    : r.status==='delegated' ? pill('open',`Passed to ${esc(userName(r.delegatedTo))}`) : r.status==='rejected' ? pill('miss','Declined') : r.status==='cancelled' ? pill('locked','Withdrawn') : pill('soon','Waiting for GM');
   return `<div class="crow"><div class="sec-h"><div class="ctitle">${esc(r.title)} <span class="b">${esc(userName(r.from))} → ${esc(userName(r.to))}</span> <span class="b">${fmtShort(r.date)}</span></div>${st}</div>
     ${r.status==='rejected'?`<div class="note bad"><span>Reason from ${esc(userName(r.decidedBy))}: ${esc(r.reason)}</span></div>`:''}</div>`;
 }
@@ -2245,7 +2246,178 @@ document.addEventListener('input', e=>{ if (e.target.id!=='phQ') return; ui.phQ 
 /* ===== AI assistant: floating button on every page; typed or spoken; navigates and does tasks (with confirmation) ===== */
 const AI_IC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>';
 const SPK_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
-const AST = { open:false, msgs:[], busy:false, voice:false, listening:false, pending:null };
+const AST = { open:false, msgs:[], busy:false, voice:false, listening:false, pending:null, log:[] };
+function aiPrompt(text){
+  const hist = AST.msgs.slice(-13, -1).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.text}${m.actions?' [proposed: '+m.actions.map(a=>a.type).join(', ')+' — '+(m.status||'')+']':''}`).join('\n');
+  const done = AST.log.filter(x=>!x.undone).map(x=>`#${x.n}: ${x.desc}`).join('\n');
+  return `You are the assistant inside the "Daily Work Portal" of a UAE company. You CAN navigate the portal and carry out the actions below on the user's behalf: the portal shows your proposed actions to the user and runs them after they confirm. Never say you are unable to assign work, add tasks or create projects — if the person is in the list, you can.
+Think step by step about what the user wants. If anything essential is missing or unclear (who, what, which project, which of two similar names, whether to undo something), ASK a short question and propose no action. Do not guess.
+Reply with ONLY a JSON object: {"reply":"...","actions":[]}
+Possible actions (use exact ids from the context; at most 5 per reply; they are confirmed together):
+- {"type":"navigate","page":"<page id>"}
+- {"type":"open_project","project_id":"..."}
+- {"type":"assign_task","assignee_id":"...","assignee_name":"...","title":"...","details":"","priority":"...","days":1,"project_id":""}
+- {"type":"add_my_task","title":"...","details":"","priority":"...","days":1,"project_id":""}
+- {"type":"create_project","name":"...","description":"","end":"YYYY-MM-DD or empty","member_ids":[]}
+- {"type":"undo","ref":<number of something you did in this chat>}   delete / cancel it
+- {"type":"edit","ref":<number>,"title":"...","details":"...","priority":"...","days":1}   correct something you did (only include fields to change)
+- {"type":"add_photo"}   open the camera
+- {"type":"finish_day"}   open the user's closure report
+Rules:
+- "reply": short, friendly, plain English (or the user's language). Say what you are proposing; never claim it is already done.
+- For questions, answer ONLY from the context; if it is not there, say so and suggest the page to check.
+- If the user says something you did was wrong, propose "undo" (and the corrected action if they told you what is right), or ask what it should have been.
+- Priority must be allowed for the current mode. "Emergency" only if they say urgent/emergency/immediately. Default: "Important" for additional work, "Moderate" for the morning plan.
+- days: for a deadline ("by Thursday"), count days from today up to and including that day. Default 1.
+Context:
+${aiContext()}
+${done ? 'Things done in this chat (ref: what):\n'+done : 'Nothing done in this chat yet.'}
+${hist ? 'Conversation so far:\n'+hist+'\n' : ''}User: ${text.replace(/\s+/g,' ').slice(0,1500)}`;
+}
+function findPerson(id, name, list){
+  if (id && list.some(u=>u.id===id)) return id;
+  const q = String(name||id||'').toLowerCase().trim(); if (!q) return '';
+  const hits = list.filter(u=>u.name.toLowerCase()===q).concat(list.filter(u=>u.name.toLowerCase().split(/\s+/).includes(q)), list.filter(u=>u.name.toLowerCase().includes(q)));
+  const uniq = [...new Set(hits.map(u=>u.id))]; return uniq.length===1 ? uniq[0] : '';
+}
+function logItem(ref){ return AST.log.find(x=>x.n===+ref && !x.undone); }
+function aiNormalize(a){
+  if (!a || typeof a!=='object' || !a.type) return null;
+  const n = now(), me = ui.user;
+  const pri = list => list.includes(a.priority) ? a.priority : (list===EXTRA_PRI ? 'Important' : 'Moderate');
+  a.days = Math.max(1, Math.min(60, parseInt(a.days,10)||1));
+  a.title = String(a.title||'').trim().slice(0,140); a.details = String(a.details||'').trim().slice(0,500);
+  if (a.project_id && !canSeeProject(projById(a.project_id), me)) a.project_id = '';
+  if (a.type==='assign_task'){
+    a.assignee_id = findPerson(a.assignee_id, a.assignee_name, assignableBy(me));
+    if (!a.assignee_id) return { error:`I couldn't tell exactly who${a.assignee_name?' “'+a.assignee_name+'” is':' that is for'}. Please say their full name.` };
+    if (!a.title) return { error:'What is the task?' };
+    if (closedToday(a.assignee_id, n.date)) return { error:`${userName(a.assignee_id)} has already finished their day. Assign it tomorrow morning.` };
+    a.priority = pri(assignMode(n.mins)==='plan' ? PLAN_PRI : EXTRA_PRI); return a;
+  }
+  if (a.type==='add_my_task'){
+    const ph = phaseFor(n.mins, me);
+    if (!hasOwnReport(me)) return { error:'You do not keep a daily plan, so I cannot add tasks for you.' };
+    if (closedToday(me, n.date)) return { error:'You have already finished your day.' };
+    if (ph!=='plan' && ph!=='extra') return { error: ph==='before' ? `Your plan opens at ${CONFIG.planOpen}.` : 'The time for adding work today has passed.' };
+    if (!a.title) return { error:'What is the task?' };
+    a._mode = ph==='plan' ? 'plan' : 'extra'; a.priority = pri(a._mode==='plan' ? PLAN_PRI : EXTRA_PRI); return a;
+  }
+  if (a.type==='create_project'){
+    a.name = String(a.name||'').trim().slice(0,100); if (!a.name) return { error:'What should the project be called?' };
+    a.description = String(a.description||'').trim().slice(0,2000); a.end = /^\d{4}-\d{2}-\d{2}$/.test(a.end||'') ? a.end : '';
+    a.member_ids = (Array.isArray(a.member_ids)?a.member_ids:[]).map(x=>findPerson(x, x, USERS)).filter(id=>id && id!==me); return a;
+  }
+  if (a.type==='undo' || a.type==='edit'){
+    const it = logItem(a.ref); if (!it) return { error:'I could not find that in what I did in this chat.' };
+    const chk = undoCheck(it); if (chk) return { error:chk };
+    if (a.type==='edit'){ if (it.kind==='project') return { error:'I can only correct tasks. For a project, open it and use “Edit project details”.' };
+      const t = it.kind==='task' ? db.tasks.find(x=>x.id===it.id) : db.requests.find(x=>x.id===it.id);
+      const ch = {}; if (a.title) ch.title = a.title; if (String(a.details||'')) ch.details = a.details; if (a.priority && [...PLAN_PRI,...EXTRA_PRI].includes(a.priority)) ch.priority = a.priority; if (parseInt(a.days,10)) ch.days = a.days;
+      if (!Object.keys(ch).length) return { error:'What should I change?' }; a._ch = ch; a._t = t; }
+    a._it = it; return a;
+  }
+  if (a.type==='navigate'){ const pg = pagesFor(me).find(p=>p[0]===a.page); return pg ? a : { error:'You do not have that page.' }; }
+  if (a.type==='open_project'){ const p = projById(a.project_id) || myProjects(me).find(x=>x.name.toLowerCase()===String(a.project_id||'').toLowerCase()); if (!canSeeProject(p, me)) return { error:'I could not find that project.' }; a.project_id = p.id; return a; }
+  if (['add_photo','finish_day'].includes(a.type)) return a;
+  return null;
+}
+/* Can something done in this chat still be undone / corrected? */
+function undoCheck(it){
+  if (it.kind==='task'){ const t = db.tasks.find(x=>x.id===it.id); if (!t) return 'That task no longer exists.';
+    if (Object.keys(t.log||{}).length) return `${userName(t.owner)} has already reported on that task, so I can't remove or change it. Speak to them or their manager.`; return ''; }
+  if (it.kind==='request'){ const r = db.requests.find(x=>x.id===it.id); if (!r) return 'That request no longer exists.';
+    if (r.status==='rejected') return 'The GM already declined that request.';
+    if (r.taskId){ const t = db.tasks.find(x=>x.id===r.taskId); if (t && Object.keys(t.log||{}).length) return 'That work was approved and has already been reported on, so it cannot be removed.'; }
+    return ''; }
+  if (it.kind==='project'){ const p = projById(it.id); if (!p || p.status==='deleted') return 'That project no longer exists.'; return ''; }
+  return '';
+}
+function actSummary(a){
+  const pj = a.project_id && projById(a.project_id);
+  if (a.type==='assign_task') return [`Assign to ${userName(a.assignee_id)}${needsGm(ui.user,a.assignee_id) ? (isGm(a.assignee_id)?' (the GM can accept, pass on or decline)':' (goes to the GM for approval first)') : ''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'} · ${assignMode(now().mins)==='plan'?'morning plan':'additional work'}`, a.details, pj?'Project: '+pj.name:''];
+  if (a.type==='add_my_task') return [`Add to my ${a._mode==='plan'?'morning plan':'additional work'}${a._mode==='extra'?' (locked once added)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'}`, a.details, pj?'Project: '+pj.name:''];
+  if (a.type==='create_project') return ['Create a new project', a.name, a.description, a.end?'Target end: '+fmtShort(a.end):'', a.member_ids.length?'People: '+a.member_ids.map(userName).join(', '):''];
+  if (a.type==='undo') return ['Undo', a._it.desc];
+  if (a.type==='edit') return ['Correct', a._it.desc, Object.entries(a._ch).map(([k,v])=>`${k}: ${v}`).join(' · ')];
+  return [];
+}
+function aiDo(a){
+  const n = now(), me = ui.user, f = { title:a.title, details:a.details, priority:a.priority, days:a.days, projectId:a.project_id||'' };
+  const log = (kind, id, desc) => { AST.log.push({ n:AST.log.length+1, kind, id, desc, at:new Date().toISOString() }); };
+  if (a.type==='assign_task'){
+    if (closedToday(a.assignee_id, n.date)) return `${userName(a.assignee_id)} has already finished their day.`;
+    if (needsGm(me, a.assignee_id)){ sendRequest(me, a.assignee_id, f); const r = db.requests[db.requests.length-1]; log('request', r.id, `request to ${isGm(a.assignee_id)?'send':'assign'} “${a.title}” to ${userName(a.assignee_id)}`);
+      return isGm(a.assignee_id) ? `Sent to ${userName(a.assignee_id)}.` : `Sent to the General Manager for approval.`; }
+    const t = makeTask(a.assignee_id, me, f, assignMode(n.mins)); log('task', t.id, `assigned “${a.title}” to ${userName(a.assignee_id)}`); return `Assigned to ${userName(a.assignee_id)}.`;
+  }
+  if (a.type==='add_my_task'){
+    const ph = phaseFor(n.mins, me); if (closedToday(me, n.date) || (ph!=='plan' && ph!=='extra')) return 'It is too late to add work today.';
+    const t = { id:uid(), owner:me, assignedBy:null, category:ph==='plan'?'planned':'extra', priority:a.priority, title:a.title, details:a.details, days:a.days,
+      startDate:n.date, dueDate:addDays(n.date, a.days-1), projectId:a.project_id||'', log:{}, completedOn:null, createdAt:new Date().toISOString() };
+    db.tasks.push(t); log('task', t.id, `added “${a.title}” to your day`); return 'Added to your day.';
+  }
+  if (a.type==='create_project'){
+    const p = { id:uid(), name:a.name, description:a.description, owner:me, members:[], start:n.date, end:a.end, status:'active', milestones:[], createdAt:new Date().toISOString() };
+    db.projects.push(p); addMembers(p, a.member_ids); log('project', p.id, `created the project “${p.name}”`); ui.view = 'proj'; ui.proj = p.id; return `Project “${p.name}” created.`;
+  }
+  if (a.type==='undo'){
+    const it = a._it, why = undoCheck(it); if (why) return why;
+    if (it.kind==='task'){ const t = db.tasks.find(x=>x.id===it.id); db.tasks = db.tasks.filter(x=>x.id!==it.id);
+      if (t.owner!==me){ notify(t.owner, `${userName(me)} removed the task “${t.title}” (it was assigned by mistake).`, nowAbs(), null); emailPeople([t.owner], `Task removed: ${t.title}`, `${userName(me)} removed the task “${t.title}”. It was assigned by mistake — please ignore it.`); } }
+    else if (it.kind==='request'){ const r = db.requests.find(x=>x.id===it.id);
+      if (r.taskId){ const t = db.tasks.find(x=>x.id===r.taskId); if (t){ db.tasks = db.tasks.filter(x=>x.id!==t.id); notify(t.owner, `${userName(me)} withdrew the task “${t.title}”.`, nowAbs(), null); } }
+      r.status = 'cancelled'; r.decidedBy = me; r.decidedAt = new Date().toISOString(); gmIds().forEach(g=>notify(g, `${userName(me)} withdrew the request “${r.title}”.`, nowAbs(), null)); }
+    else if (it.kind==='project'){ const p = projById(it.id); p.status = 'deleted'; if (ui.proj===p.id) ui.proj = null; }
+    it.undone = true; return `Undone: ${it.desc}.`;
+  }
+  if (a.type==='edit'){
+    const it = a._it, why = undoCheck(it); if (why) return why; const t = it.kind==='task' ? db.tasks.find(x=>x.id===it.id) : db.requests.find(x=>x.id===it.id);
+    Object.assign(t, a._ch); if (it.kind==='task' && a._ch.days) t.dueDate = addDays(t.startDate, t.days-1);
+    if (it.kind==='task' && t.owner!==me) notify(t.owner, `${userName(me)} corrected your task: ${t.title}${t.details?' — '+t.details:''} (${t.priority}, ${t.days} day${t.days===1?'':'s'}).`, nowAbs(), null);
+    if (a._ch.title) it.desc = it.desc.replace(/“[^”]*”/, `“${a._ch.title}”`);
+    return `Corrected: ${it.desc}.`;
+  }
+  return '';
+}
+const NAV_TYPES = ['navigate','open_project','add_photo','finish_day'];
+async function aiSend(text){
+  text = (text||'').trim(); if (!text || AST.busy) return;
+  const last = AST.msgs[AST.msgs.length-1];
+  if (last && last.status==='pending'){
+    if (YES.test(text) && !NO.test(text)){ AST.msgs.push({ role:'user', text }); return aiDecide(AST.msgs.length-2, true); }
+    if (/^\s*(no|nope|cancel|stop|nahi|mat)\b[\s.!]*$/i.test(text)){ AST.msgs.push({ role:'user', text }); return aiDecide(AST.msgs.length-2, false); }
+    last.status = 'cancelled';     // anything else: treat as a new instruction (e.g. a correction)
+  }
+  AST.msgs.push({ role:'user', text }); AST.busy = true; paintAI();
+  let j;
+  try { j = parseJSONLoose(await aiAsk(aiPrompt(text), true)); }
+  catch(e){ AST.busy = false; AST.msgs.push({ role:'ai', text:'Sorry, something went wrong: '+e.message+' Please try again.' }); paintAI(); return; }
+  AST.busy = false;
+  let reply = String(j.reply||'').trim();
+  const raw = Array.isArray(j.actions) ? j.actions : (j.action ? [j.action] : []);
+  const acts = [], errs = [];
+  raw.slice(0,5).forEach(x=>{ const a = aiNormalize(x); if (!a) return; if (a.error) errs.push(a.error); else acts.push(a); });
+  if (errs.length){ AST.msgs.push({ role:'ai', text:(reply && !acts.length ? reply+'\n\n' : '') + errs.join('\n') }); paintAI(); if (AST.voice){ await speak(errs.join('. ')); aiListen(); } return; }
+  const nav = acts.filter(a=>NAV_TYPES.includes(a.type)), work = acts.filter(a=>!NAV_TYPES.includes(a.type));
+  if (work.length){
+    const m = { role:'ai', text: reply || 'Please check and confirm:', actions:work, then:nav, status:'pending' }; AST.msgs.push(m); paintAI();
+    if (AST.voice){ await speak(`${reply ? reply.replace(/[:.]\s*$/,'')+'. ' : ''}${work.map(a=>actSummary(a).filter(Boolean).slice(0,2).join(', ')).join('. ').replace(/ · /g,', ')}. Say yes to confirm, or no to cancel.`); if (m.status==='pending') aiListen(); }
+    return;
+  }
+  AST.msgs.push({ role:'ai', text: reply || (nav.length ? 'Done.' : 'Sorry, I did not understand. Could you say it another way?') });
+  if (nav.length) aiGo(nav[nav.length-1]); else paintAI();
+  if (AST.voice){ await speak(reply || 'Done.'); if (AST.open && !nav.length) aiListen(); }
+}
+async function aiDecide(i, yes){
+  const m = AST.msgs[i]; if (!m || m.status!=='pending') return;
+  if (!yes){ m.status = 'cancelled'; AST.msgs.push({ role:'ai', text:'Okay, cancelled. Tell me what you would like instead.' }); paintAI(); if (AST.voice){ await speak('Cancelled. What would you like instead?'); aiListen(); } return; }
+  const outs = m.actions.map(a=>aiDo(a)).filter(Boolean); m.status = 'done'; save(); render();
+  AST.msgs.push({ role:'ai', text: outs.join('\n') + '\nIf anything is wrong, just tell me and I can undo or correct it.' });
+  if (m.then && m.then.length) aiGo(m.then[m.then.length-1]); else paintAI();
+  if (AST.voice) speak(outs.join(' '));
+}
+
 const PAGE_NAMES = { alerts:'Notifications', account:'My account' };
 function pagesFor(id){ return tabsFor(id).map(t=>[t[0], t[1].replace(/\s*\(\d+\)$/,'')]).concat([['alerts','Notifications'],['account','My account']]); }
 function aiContext(){
@@ -2257,6 +2429,7 @@ function aiContext(){
   const pendRev = reportsOf(me).filter(r=>Object.keys(db.closures).some(k=>k.startsWith(r.id+'|') && !db.closures[k].review)).length;
   const lines = [
     `User: ${u.name}, ${u.title} (${u.role}). Now: ${fmtDate(d)} ${n.label} UAE time.`,
+    `Calendar for counting days (a deadline on that date = that many days): ${Array.from({length:14},(_,i)=>{ const x = addDays(d,i); return `${new Date(x+'T12:00:00Z').toLocaleDateString('en-GB',{weekday:'short',timeZone:'UTC'})} ${x} = ${i+1} day${i?'s':''}`; }).join('; ')}.`,
     hasOwnReport(me) ? `User's day: ${ph==='before'?'before 09:00':ph==='plan'?'morning plan window (until '+CONFIG.planClose+')':ph==='extra'?(closedToday(me,d)?'day finished, closure submitted':'working; can add additional work; can finish the day'):'closure deadline passed'}.` : '',
     `Work assigned now goes in as: ${assignMode(n.mins)==='plan'?'morning plan (priorities Important, Moderate, Daily Work)':'additional work (priorities Emergency, Important)'}.`,
     `Pages the user can open (id: name): ${pagesFor(me).map(p=>p[0]+': '+p[1]).join('; ')}.`,
@@ -2271,41 +2444,12 @@ function aiContext(){
   ];
   return lines.filter(Boolean).join('\n');
 }
-function aiPrompt(text){
-  const hist = AST.msgs.slice(-9, -1).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.text}`).join('\n');
-  return `You are the assistant inside the "Daily Work Portal" of a UAE company. You help the user move around the portal and do things.
-Reply with ONLY a JSON object: {"reply":"...","action":null}  or with an action object.
-Actions (use exact ids from the context; never invent ids):
-- {"type":"navigate","page":"<page id>"}  open a page
-- {"type":"open_project","project_id":"..."}
-- {"type":"assign_task","assignee_id":"...","title":"...","details":"","priority":"...","days":1,"project_id":""}
-- {"type":"add_my_task","title":"...","details":"","priority":"...","days":1,"project_id":""}  add to the user's own plan / additional work
-- {"type":"create_project","name":"...","description":"","end":"YYYY-MM-DD or empty","member_ids":[]}
-- {"type":"add_photo"}  open the camera / photo upload
-- {"type":"finish_day"}  open the closure report so the user can finish the day
-Rules:
-- "reply": short, friendly, plain English (or the user's language). For questions, answer ONLY from the context below; if it is not there, say you cannot see that and suggest the page to check.
-- Only one action per reply. If something essential is missing or a name fits more than one person, ask a short question and use no action.
-- Priority must be one allowed for the current mode. Use "Emergency" only if they say urgent/emergency/immediately. Default: "Important" for additional work, "Moderate" for the morning plan.
-- days: if a deadline is given ("by Thursday"), count days from today up to and including that day. Default 1.
-- Never claim you have done something: actions that change data are shown to the user to confirm first.
-Context:
-${aiContext()}
-${hist ? 'Conversation so far:\n'+hist+'\n' : ''}User: ${text.replace(/\s+/g,' ').slice(0,1500)}`;
-}
 function ensureFab(show){
   let fab = document.getElementById('aiFab');
   if (!fab){ fab = document.createElement('button'); fab.id = 'aiFab'; fab.type = 'button'; fab.dataset.act = 'ai-open'; fab.setAttribute('aria-label','AI assistant');
     fab.innerHTML = `${AI_IC}<span>Ask AI</span>`; document.body.appendChild(fab); }
   fab.hidden = !show || AST.open;
   if (!show && AST.open){ AST.open = false; paintAI(); }
-}
-function actSummary(a){
-  const pj = a.project_id && projById(a.project_id);
-  if (a.type==='assign_task') return [`Assign to ${userName(a.assignee_id)}${needsGm(ui.user,a.assignee_id)&&!isGm(a.assignee_id)?' (goes to the GM for approval first)':isGm(a.assignee_id)?' (the GM can accept, pass on or decline)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'} · ${assignMode(now().mins)==='plan'?'morning plan':'additional work'}`, a.details, pj?'Project: '+pj.name:''];
-  if (a.type==='add_my_task') return [`Add to my ${a._mode==='plan'?'morning plan':'additional work'}${a._mode==='extra'?' (locked once added)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'}`, a.details, pj?'Project: '+pj.name:''];
-  if (a.type==='create_project') return ['Create a new project', a.name, a.description, a.end?'Target end: '+fmtShort(a.end):'', a.member_ids.length?'People: '+a.member_ids.map(userName).join(', '):''];
-  return [];
 }
 function paintAI(){
   let p = document.getElementById('aiPanel');
@@ -2316,9 +2460,8 @@ function paintAI(){
   const msgs = AST.msgs.map((m,i)=>{
     if (m.role==='user') return `<div class="msg me">${esc(m.text)}</div>`;
     let x = `<div class="msg ai">${esc(m.text)}`;
-    if (m.action && m.status){
-      const lines = actSummary(m.action).filter(Boolean);
-      x += `<div class="ai-act">${lines.map((l,j)=>`<div class="${j===1?'t':''}">${esc(l)}</div>`).join('')}
+    if (m.actions && m.status){
+      x += `<div class="ai-act">${m.actions.map((a,ai)=>`<div class="ai-a1">${actSummary(a).filter(Boolean).map((l,j)=>`<div class="${j===1?'t':''}">${esc(l)}</div>`).join('')}</div>`).join('')}
         ${m.status==='pending' ? `<div class="row end" style="margin-top:8px"><button type="button" class="btn sm ghost" data-act="ai-no" data-i="${i}">Cancel</button><button type="button" class="btn sm" data-act="ai-yes" data-i="${i}">Confirm</button></div>`
           : `<div class="ai-st ${m.status==='done'?'ok':''}">${m.status==='done'?'✓ Done':m.status==='cancelled'?'Cancelled':esc(m.status)}</div>`}</div>`;
     }
@@ -2336,36 +2479,6 @@ function paintAI(){
   const box = p.querySelector('.ai-msgs'); box.scrollTop = box.scrollHeight;
   if (!AST.listening && !AST.busy) inp.focus({ preventScroll:true });
 }
-function aiNormalize(a){
-  if (!a || typeof a!=='object' || !a.type) return null;
-  const n = now(), me = ui.user;
-  const pri = list => list.includes(a.priority) ? a.priority : (list===EXTRA_PRI ? 'Important' : 'Moderate');
-  a.days = Math.max(1, Math.min(60, parseInt(a.days,10)||1));
-  a.title = String(a.title||'').trim().slice(0,140); a.details = String(a.details||'').trim().slice(0,500);
-  if (a.project_id && !canSeeProject(projById(a.project_id), me)) a.project_id = '';
-  if (a.type==='assign_task'){
-    if (!assignableBy(me).some(u=>u.id===a.assignee_id) || !a.title) return { error:'I could not match that person or task. Please say the name and the task again.' };
-    if (closedToday(a.assignee_id, n.date)) return { error:`${userName(a.assignee_id)} has already finished their day. Assign it tomorrow morning.` };
-    a.priority = pri(assignMode(n.mins)==='plan' ? PLAN_PRI : EXTRA_PRI); return a;
-  }
-  if (a.type==='add_my_task'){
-    const ph = phaseFor(n.mins, me);
-    if (!hasOwnReport(me)) return { error:'You do not keep a daily plan, so I cannot add tasks for you.' };
-    if (closedToday(me, n.date)) return { error:'You have already finished your day.' };
-    if (ph!=='plan' && ph!=='extra') return { error: ph==='before' ? `Your plan opens at ${CONFIG.planOpen}.` : 'The time for adding work today has passed.' };
-    if (!a.title) return { error:'What is the task?' };
-    a._mode = ph==='plan' ? 'plan' : 'extra'; a.priority = pri(a._mode==='plan' ? PLAN_PRI : EXTRA_PRI); return a;
-  }
-  if (a.type==='create_project'){
-    a.name = String(a.name||'').trim().slice(0,100); if (!a.name) return { error:'What should the project be called?' };
-    a.description = String(a.description||'').trim().slice(0,2000); a.end = /^\d{4}-\d{2}-\d{2}$/.test(a.end||'') ? a.end : '';
-    a.member_ids = (Array.isArray(a.member_ids)?a.member_ids:[]).filter(id=>USERS.some(u=>u.id===id) && id!==me); return a;
-  }
-  if (a.type==='navigate'){ const pg = pagesFor(me).find(p=>p[0]===a.page); return pg ? a : { error:'You do not have that page.' }; }
-  if (a.type==='open_project') return canSeeProject(projById(a.project_id), me) ? a : { error:'I could not find that project.' };
-  if (['add_photo','finish_day'].includes(a.type)) return a;
-  return null;
-}
 function aiGo(a){
   AST.open = window.innerWidth >= 760;   // keep the chat open beside the page on big screens; close it on phones
   if (a.type==='navigate'){ ui.view = a.page; ui.proj = null; ui.editing = null; }
@@ -2375,57 +2488,7 @@ function aiGo(a){
   save(); render(); paintAI(); window.scrollTo(0,0);
   if (a.type==='finish_day') setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 80);
 }
-function aiDo(a){
-  const n = now(), me = ui.user, f = { title:a.title, details:a.details, priority:a.priority, days:a.days, projectId:a.project_id||'' };
-  if (a.type==='assign_task'){
-    if (closedToday(a.assignee_id, n.date)) return `${userName(a.assignee_id)} has already finished their day.`;
-    if (needsGm(me, a.assignee_id)){ sendRequest(me, a.assignee_id, f); save(); render(); return isGm(a.assignee_id) ? `Sent to ${userName(a.assignee_id)}.` : `Sent to the General Manager for approval.`; }
-    makeTask(a.assignee_id, me, f, assignMode(n.mins)); save(); render(); return `Assigned to ${userName(a.assignee_id)}.`;
-  }
-  if (a.type==='add_my_task'){
-    const ph = phaseFor(n.mins, me); if (closedToday(me, n.date) || (ph!=='plan' && ph!=='extra')) return 'It is too late to add work today.';
-    db.tasks.push({ id:uid(), owner:me, assignedBy:null, category:ph==='plan'?'planned':'extra', priority:a.priority, title:a.title, details:a.details, days:a.days,
-      startDate:n.date, dueDate:addDays(n.date, a.days-1), projectId:a.project_id||'', log:{}, completedOn:null, createdAt:new Date().toISOString() });
-    save(); render(); return 'Added to your day.';
-  }
-  if (a.type==='create_project'){
-    const p = { id:uid(), name:a.name, description:a.description, owner:me, members:[], start:n.date, end:a.end, status:'active', milestones:[], createdAt:new Date().toISOString() };
-    db.projects.push(p); addMembers(p, a.member_ids); save(); ui.view = 'proj'; ui.proj = p.id; render(); return `Project “${p.name}” created. You can add the schedule and files there.`;
-  }
-  return '';
-}
 const YES = /\b(yes|yeah|yep|yup|confirm|confirmed|ok|okay|sure|go ahead|do it|haan|han|ha|theek hai)\b/i, NO = /\b(no|nope|cancel|stop|don't|dont|nahi|mat)\b/i;
-async function aiSend(text){
-  text = (text||'').trim(); if (!text || AST.busy) return;
-  const last = AST.msgs[AST.msgs.length-1];
-  if (last && last.status==='pending'){                 // a reply to "confirm?" — yes / no
-    if (YES.test(text) && !NO.test(text)){ AST.msgs.push({ role:'user', text }); return aiDecide(AST.msgs.length-2, true); }
-    if (NO.test(text)){ AST.msgs.push({ role:'user', text }); return aiDecide(AST.msgs.length-2, false); }
-    last.status = 'cancelled';
-  }
-  AST.msgs.push({ role:'user', text }); AST.busy = true; paintAI();
-  let j;
-  try { j = parseJSONLoose(await aiAsk(aiPrompt(text))); }
-  catch(e){ AST.busy = false; AST.msgs.push({ role:'ai', text:'Sorry, I could not do that: '+e.message }); paintAI(); return; }
-  AST.busy = false;
-  let reply = String(j.reply||'').trim(), a = aiNormalize(j.action);
-  if (a && a.error){ reply = a.error; a = null; }
-  if (a && ['navigate','open_project','add_photo','finish_day'].includes(a.type)){
-    AST.msgs.push({ role:'ai', text: reply || 'Done.' }); aiGo(a); if (AST.voice) await speak(reply || 'Done.'); return;
-  }
-  if (a){
-    const m = { role:'ai', text: reply || 'Please check and confirm:', action:a, status:'pending' }; AST.msgs.push(m); paintAI();
-    if (AST.voice){ await speak(`${reply ? reply.replace(/[:.]\s*$/,'')+'. ' : ''}${actSummary(a).filter(Boolean).slice(0,3).join('. ').replace(/ · /g,', ')}. Say yes to confirm, or no to cancel.`); if (m.status==='pending') aiListen(); }
-    return;
-  }
-  AST.msgs.push({ role:'ai', text: reply || 'Sorry, I did not understand. Please try again.' }); paintAI();
-  if (AST.voice){ await speak(reply); if (AST.open && /\?\s*$/.test(reply)) aiListen(); }
-}
-async function aiDecide(i, yes){
-  const m = AST.msgs[i]; if (!m || m.status!=='pending') return;
-  if (!yes){ m.status = 'cancelled'; AST.msgs.push({ role:'ai', text:'Okay, cancelled.' }); paintAI(); if (AST.voice) speak('Cancelled.'); return; }
-  const out = aiDo(m.action); m.status = 'done'; AST.msgs.push({ role:'ai', text:out }); paintAI(); if (AST.voice) speak(out);
-}
 async function aiListen(){
   if (AST.listening) return;
   AST.listening = true; paintAI();
@@ -2764,8 +2827,8 @@ function emailPeople(ids, subject, text){
   if (!sb || !ids.length) return;
   sb.functions.invoke('notify', { body:{ to:ids, subject, text } }).catch(()=>{});
 }
-async function aiAsk(prompt){
-  const { data, error } = await sb.functions.invoke('ai', { body:{ prompt } });
+async function aiAsk(prompt, json){
+  const { data, error } = await sb.functions.invoke('ai', { body:{ prompt, json:!!json } });
   if (error) throw new Error('The AI service could not be reached.');
   if (!data || !data.text) throw new Error((data && data.error) || 'The AI gave no answer.');
   return data.text;
