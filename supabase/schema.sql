@@ -207,3 +207,11 @@ grant execute on function public.storage_object_names(text) to service_role;
 alter policy "staff add records" on public.records with check (is_staff() and collection <> 'sys');
 alter policy "staff change records" on public.records using (is_staff() and collection <> 'sys') with check (is_staff() and collection <> 'sys');
 alter policy "staff delete records" on public.records using (is_staff() and collection <> 'sys');
+
+-- ===== Meeting register (Excel) kept on the server; see functions/meeting-register =====
+insert into storage.buckets (id, name, public) values ('registers','registers', false) on conflict (id) do nothing;
+-- Hourly refresh of the company-wide register (pg_cron):
+-- select cron.schedule('meeting-register-refresh', '7 * * * *', $$ select net.http_post(
+--   url := 'https://<project>.supabase.co/functions/v1/meeting-register',
+--   headers := jsonb_build_object('Content-Type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')),
+--   body := '{"action":"refresh"}'::jsonb, timeout_milliseconds := 60000); $$);

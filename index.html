@@ -207,6 +207,9 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:99px;
   background:linear-gradient(135deg,var(--accent),#6b3fd4);color:#fff;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 8px 24px rgba(26,94,212,.35)}
 #aiFab[hidden]{display:none}
+.mch-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}.mch{width:100%;border-collapse:collapse;font-size:14px;min-width:720px}
+.mch th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}.mch td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.mch td small{color:var(--muted)}.mch .nw{white-space:nowrap}
 .plc{position:relative;display:block}.plc-list{position:absolute;left:0;right:0;top:100%;z-index:60;background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:4px;max-height:280px;overflow:auto}
 .plc-i{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;cursor:pointer;font:inherit;color:inherit}.plc-i:hover,.plc-i:focus{background:var(--soft,#f3f4f6);outline:none}.plc-i small{display:block;color:var(--muted);font-size:12px}
 .plc-st{display:block;padding:6px 12px;font-size:11px;color:var(--muted)}
@@ -363,6 +366,7 @@ legend{padding:0;margin-bottom:5px}
 .mtg .review{margin-top:8px}
 .login{max-width:460px;margin:28px auto}
 .login .mark{width:48px;height:48px;font-size:20px;margin-bottom:12px}
+.mark{font-size:11px!important;letter-spacing:.02em}.login .mark{width:56px!important;height:56px!important;font-size:14px!important}
 .login-gate{text-align:center}
 .login-gate .geo-btn{width:100%;min-height:60px;font-size:17px}
 #toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:calc(16px + env(safe-area-inset-top,0px));max-width:360px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:var(--r-s);padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:2px;z-index:50;font-size:14px;cursor:pointer}
@@ -571,7 +575,7 @@ body.adm .tabs button.on{box-shadow:inset 0 -3px 0 var(--brand)}
 
 
   <div class="top">
-    <div class="brand"><span class="mark" aria-hidden="true">AY</span>
+    <div class="brand"><span class="mark" aria-hidden="true">AYDI</span>
       <div><h1 id="appTitle">Daily Work Portal</h1><div class="clock" id="clock"></div></div>
     </div>
     <div class="row" style="align-items:center">
@@ -1418,11 +1422,11 @@ function captureMeetingGeo(id, auto, btn){
 
 /* ----- login screens ----- */
 function loginView(){
-  if (ui.recovery) return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>${ui.forced?'Choose your own password':'Set a new password'}</h2>${ui.forced?'<p class="hint" style="margin:2px 0 0">This is your first login. Your first password was your phone number, so please choose a new one that only you know.</p>':''}
+  if (ui.recovery) return `<section class="card login"><span class="mark" aria-hidden="true">AYDI</span><h2>${ui.forced?'Choose your own password':'Set a new password'}</h2>${ui.forced?'<p class="hint" style="margin:2px 0 0">This is your first login. Your first password was your phone number, so please choose a new one that only you know.</p>':''}
     <form id="newPwForm" novalidate style="margin-top:10px"><label class="f">New password (at least 8 characters)<input type="password" id="np1" autocomplete="new-password"></label>
     <label class="f">Repeat new password<input type="password" id="np2" autocomplete="new-password"></label><div class="err" id="npErr" hidden></div>
     <div class="row end"><button class="btn">Save password</button></div></form></section>`;
-  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Log in to the Daily Work Portal</h2><p class="hint" style="margin:2px 0 0">Al Yamuna Densons Industries</p><p class="hint" style="margin:6px 0 0">Your location is recorded when you log in and log out. Allow location when your browser asks.</p>
+  return `<section class="card login"><span class="mark" aria-hidden="true">AYDI</span><h2>Log in to the Daily Work Portal</h2><p class="hint" style="margin:2px 0 0">Al Yamuna Densons Industries</p><p class="hint" style="margin:6px 0 0">Your location is recorded when you log in and log out. Allow location when your browser asks.</p>
     <form id="loginForm" novalidate style="margin-top:10px">
       <label class="f">Work email<input type="email" id="lgEmail" autocomplete="username" inputmode="email"></label>
       <label class="f">Password<input type="password" id="lgPass" autocomplete="current-password"></label>
@@ -1480,7 +1484,7 @@ function doCheckin(btn, kind){
 
 /* ----- meetings (sales staff) ----- */
 const stPill = (m,na) => { const s = mState(m,na);
-  return s==='upcoming'?pill('soon','Upcoming'):s==='notes'?pill('miss','Notes needed'):s==='returned'?pill('miss','Sent back'):s==='review'?pill('locked','Awaiting approval'):pill('open','Approved'); };
+  return s==='cancelled'?pill('miss','Cancelled'):s==='upcoming'?pill('soon','Upcoming'):s==='notes'?pill('miss','Notes needed'):s==='returned'?pill('miss','Sent back'):s==='review'?pill('locked','Awaiting approval'):pill('open','Approved'); };
 function geoLine(m, full){
   if (!m.geo) return `<span class="b emg">Meeting check-in not recorded</span>`;
   return full ? `<span class="b">Meeting check-in ${esc(m.geo.time)}${m.geo.auto?' (automatic)':''}</span> ${locLinks(LOCS[m.id])}`
@@ -1514,7 +1518,8 @@ function meetingCard(m, na, mode, reviewer, mgmt){
   if (mode==='up'){
     const offs = REMIND_BEFORE.filter(o=>st-o>=m.createdAt);
     if (!mgmt) h += prepBox(m);
-    if (!mgmt && m.owner===ui.user) h += ui.rs && ui.rs.id===m.id ? reschedForm(m) : `<div class="row" style="margin-top:6px"><button type="button" class="btn sm ghost" data-act="rs-open" data-id="${m.id}">Reschedule</button></div>`;
+    if (!mgmt && m.owner===ui.user) h += ui.rs && ui.rs.id===m.id ? reschedForm(m) : ui.cx===m.id ? cancelForm(m)
+      : `<div class="row" style="margin-top:6px"><button type="button" class="btn sm ghost" data-act="rs-open" data-id="${m.id}">Reschedule</button><button type="button" class="btn sm ghost" data-act="cx-open" data-id="${m.id}">Cancel meeting</button></div>`;
     (m.resched||[]).slice(-2).forEach(r=>{ h += `<div class="hint" style="margin:4px 0 0">Moved from ${esc(fmtShort(r.from.date))} ${r.from.allDay?'(whole day)':esc(r.from.time)}${r.from.place&&r.from.place!==m.place?' at '+esc(r.from.place):''} on ${esc(fmtAbs(r.at))}${r.reason?' — '+esc(r.reason):''}</div>`; });
     h += `<div class="badges"><span class="b">Reminders:</span>${offs.length?offs.map(o=>`<span class="b ${m.sent&&m.sent['pre'+o]?'asg':''}">${offShort(o)}${m.sent&&m.sent['pre'+o]?' · sent':''}</span>`).join(''):'<span class="b">none left before the meeting</span>'}</div>`;
   } else h += `<div class="badges">${geoLine(m, mgmt)}</div>`;
@@ -1523,6 +1528,12 @@ function meetingCard(m, na, mode, reviewer, mgmt){
   if (!mgmt && diaryOpen(m,na)) h += diaryBox(m);
   else if (!mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
   if (mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
+  if (m.status==='cancelled'){
+    const nb = m.rebookedTo && db.meetings.find(x=>x.id===m.rebookedTo);
+    h += `<div class="review"><div class="meta">Cancelled ${m.cancelledAt?'on '+fmtAbs(m.cancelledAt):''}</div><p>${esc(m.cancelReason||'')}</p>
+      <div class="meta">${nb?`New meeting booked: ${fmtAbs(mStart(nb))}`:`Follow up with ${esc(m.withWhom)} to set a new meeting${m.followUpAt?` · reminder on ${fmtShort(fromAbs(m.followUpAt).date)} if not rebooked`:''}`}</div></div>`;
+    if (!mgmt && m.owner===ui.user && !nb) h += `<div class="row" style="margin-top:6px"><button type="button" class="btn sm" data-act="cx-rebook" data-id="${m.id}">Schedule again</button></div>`;
+  }
   if (m.notes || m.postponeReason){
     const nm = m.postponedTo && db.meetings.find(x=>x.id===m.postponedTo);
     h += `<div class="review"><div class="meta">${m.outcome==='postponed'?'Postponed':'Minutes of meeting'}${m.notesAt?' · submitted '+fmtAbs(m.notesAt):''}</div><p>${esc(m.outcome==='postponed'?m.postponeReason:m.notes)}</p>${nm?`<div class="meta">New date: ${fmtAbs(mStart(nm))}</div>`:''}</div>`;
@@ -1554,13 +1565,15 @@ function meetingsView(n){
   const need = all.filter(m=>needsInput(m,na)).sort((a,b)=>mStart(a)-mStart(b));
   const up = all.filter(m=>mState(m,na)==='upcoming').sort((a,b)=>mStart(a)-mStart(b));
   const done = all.filter(m=>['review','approved'].includes(m.status)).sort((a,b)=>mStart(b)-mStart(a));
-  let h = `<section class="card"><div class="sec-h"><h2>Schedule a meeting</h2></div>
+  const cx = all.filter(m=>m.status==='cancelled' && (!m.rebookedTo || na - (m.cancelledAt||0) < 3*1440)).sort((a,b)=>(b.cancelledAt||0)-(a.cancelledAt||0)).slice(0,15);
+  const rb = ui.rebook && db.meetings.find(x=>x.id===ui.rebook);
+  let h = `<section class="card"><div class="sec-h"><h2>${rb?'Schedule again: '+esc(rb.withWhom):'Schedule a meeting'}</h2>${rb?'<button type="button" class="btn sm ghost" data-act="cx-rebook-x">Clear</button>':''}</div>
     <form id="meetForm" class="tform" novalidate>
-      <label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company"></label>
-      <div class="row"><fieldset class="f"><legend>Type</legend><div class="seg"><label><input type="radio" name="mMode" value="person" checked><span>In person</span></label><label><input type="radio" name="mMode" value="online"><span>Online</span></label></div></fieldset>
-        <label class="f grow">Place${placeField('mPlace','', 'Start typing, e.g. Al Quoz — or a Teams / Zoom link')}</label>
+      <label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company" value="${rb?esc(rb.withWhom):''}"></label>
+      <div class="row"><fieldset class="f"><legend>Type</legend><div class="seg"><label><input type="radio" name="mMode" value="person" ${rb&&rb.mode==='online'?'':'checked'}><span>In person</span></label><label><input type="radio" name="mMode" value="online" ${rb&&rb.mode==='online'?'checked':''}><span>Online</span></label></div></fieldset>
+        <label class="f grow">Place${placeField('mPlace', rb?rb.place:'', 'Start typing, e.g. Al Quoz — or a Teams / Zoom link')}</label>
         <label class="f days">Duration<select id="mDur" class="sel">${MEET_DURS.map(x=>`<option value="${x}" ${x===60?'selected':''}>${durLabel(x)}</option>`).join('')}<option value="day">Whole day</option></select></label></div>
-      <label class="f">What the meeting is for<textarea id="mPurpose" rows="2"></textarea></label>
+      <label class="f">What the meeting is for<textarea id="mPurpose" rows="2">${rb?esc(rb.purpose):''}</textarea></label>
       <div class="clk-row"><label class="f" style="flex:1;min-width:180px">Date<input type="date" id="mDate" min="${n.date}" value="${n.date}"></label>
         <div class="f" id="mTimeBox" style="flex:1;min-width:240px"><span>Time</span>${clockPicker('mTime', nextSlot())}</div>
         <p class="hint" id="mDayNote" hidden style="flex:1;min-width:240px;align-self:center">Whole day: ${CONFIG.planOpen}–${CONFIG.closureOpen} (from now if it is today).</p></div>
@@ -1572,6 +1585,7 @@ function meetingsView(n){
   if (need.length) h += `<p class="hint" style="margin-top:0">Your closure report can't be submitted until these are done. From the next morning, reminders are sent every ${NAG_EVERY} minutes until you write them.</p>` + need.map(m=>meetingCard(m,na,'input')).join('');
   else h += note('Once a meeting starts, write here what was discussed, or record that it was postponed.');
   h += `</section><section class="card"><div class="sec-h"><h2>Upcoming</h2></div>${up.length?up.map(m=>meetingCard(m,na,'up')).join(''):'<div class="empty">No upcoming meetings.</div>'}</section>`;
+  if (cx.length) h += `<section class="card"><div class="sec-h"><h2>Cancelled — follow up</h2>${pill('miss', cx.filter(m=>!m.rebookedTo).length+' to rebook')}</div><p class="hint" style="margin-top:0">Contact the person to set a new meeting. If none is booked within 7 days, you get a reminder.</p>${cx.map(m=>meetingCard(m,na,'done')).join('')}</section>`;
   h += `<section class="card"><div class="sec-h"><h2>Submitted</h2></div>${done.length?done.map(m=>meetingCard(m,na,'done')).join(''):'<div class="empty">No meeting reports submitted yet.</div>'}</section>`;
   return h;
 }
@@ -1590,7 +1604,9 @@ async function scheduleMeeting(instant){
   const na = nowAbs();
   if (absOf(d,t) < na) return fail('That date and time has already passed. Choose a time from now onwards.');
   const c = { id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, ...(pg&&mode==='person'?{placeGeo:pg}:{}), mode, dur, ...(allDay?{allDay:true}:{}), date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] };
-  const add = () => { db.meetings.push(c); save(); render(); tip('Meeting scheduled', `${w} · ${fmtShort(c.date)} ${allDay?'whole day':c.time}${mode==='online'?' (online)':' · '+pl}`); };
+  const rbm = ui.rebook && db.meetings.find(x=>x.id===ui.rebook && x.status==='cancelled');
+  if (rbm){ c.rebookOf = rbm.id; if (!c.placeGeo && rbm.placeGeo && pl===rbm.place) c.placeGeo = rbm.placeGeo; }
+  const add = () => { if (rbm){ const o = db.meetings.find(x=>x.id===rbm.id); if (o) o.rebookedTo = c.id; } ui.rebook = null; db.meetings.push(c); save(); render(); tip('Meeting scheduled', `${w} · ${fmtShort(c.date)} ${allDay?'whole day':c.time}${mode==='online'?' (online)':' · '+pl}`); };
   if (instant) return add();
   const btn = document.querySelector('#meetForm .row.end .btn:not(.ghost)'), old = btn ? btn.textContent : '';
   if (btn){ btn.disabled = true; btn.textContent = mode==='person' ? 'Checking travel time…' : 'Checking…'; }
@@ -1627,7 +1643,7 @@ function submitOutcome(f){
   m.status = 'review'; m.notesAt = na; (m.history = m.history||[]).push({ by:m.owner, action:'submitted', at:na });
   emailPeople(reviewersOf(m.owner).map(r=>r.id), `MoM for approval: ${userName(m.owner)} — meeting with ${m.withWhom}`, (m.outcome==='postponed'?'Postponed: '+m.postponeReason:m.notes) + '\n\nApprove or send back in the portal (Meetings review / Team meetings).');
   reviewersOf(m.owner).forEach(r=>notify(r.id, `${userName(m.owner)} submitted a meeting report (${m.outcome==='postponed'?'postponed':'held'}) for the meeting with ${m.withWhom}. Waiting for approval.`, na, m.id));
-  save(); render();
+  save(); render(); ensureMomBrief(m.id);
 }
 function decideMeeting(id, action){
   const m = db.meetings.find(x=>x.id===id), ta = document.querySelector(`.mrc[data-id="${id}"]`), txt = ta.value.trim();
@@ -3380,6 +3396,87 @@ const geoQ = m => m.placeGeo && m.placeGeo.lat!=null ? `${m.placeGeo.lat},${m.pl
 const gmapsPlace = m => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geoQ(m))}`;
 const gmapsRoute = (a, b) => `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(geoQ(a))}&destination=${encodeURIComponent(geoQ(b))}&travelmode=driving`;
 
+/* ===== Cancel a meeting (before it starts): reason required; follow-up reminder now and again after 7 days if not rebooked ===== */
+function cancelForm(m){
+  return `<form class="tform cxform" data-id="${m.id}" novalidate style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+    <h3 class="sub" style="margin-top:0">Cancel this meeting</h3>
+    <label class="f">Why is it cancelled? <span class="req">(required)</span><textarea name="cr" rows="2" placeholder="e.g. Client travelling this week, asked to meet later"></textarea></label>
+    <p class="hint" style="margin-top:0">You'll be reminded to follow up with ${esc(m.withWhom)}, and again after 7 days if no new meeting is booked.</p>
+    <div class="err" hidden></div>
+    <div class="row end"><button type="button" class="btn ghost" data-act="cx-close">Keep meeting</button><button type="button" class="btn" style="background:#b42318;border-color:#b42318" data-act="cx-save" data-id="${m.id}">Cancel meeting</button></div></form>`;
+}
+function cancelMeeting(btn){
+  const f = btn.closest('form'), err = f.querySelector('.err'), reason = f.cr.value.trim();
+  const m = db.meetings.find(x=>x.id===btn.dataset.id);
+  if (!m || m.status!=='scheduled' || m.owner!==ui.user){ ui.cx = null; render(); return; }
+  if (words(reason) < 3){ err.hidden = false; err.textContent = 'Please write the reason (a few words).'; return; }
+  const na = nowAbs();
+  m.status = 'cancelled'; m.cancelReason = reason; m.cancelledAt = na; m.followUpAt = na + 7*1440;
+  notify(m.owner, `Follow up with ${m.withWhom} to set a new meeting (cancelled: ${reason}).`, na, m.id);
+  reviewersOf(m.owner).forEach(r=>notify(r.id, `${userName(m.owner)} cancelled the meeting with ${m.withWhom} on ${fmtShort(m.date)} ${m.allDay?'(whole day)':m.time}. Reason: ${reason}`, na, m.id));
+  ui.cx = null; save(); render(); tip('Meeting cancelled', `Remember to follow up with ${m.withWhom}.`);
+}
+
+/* ===== Meeting chart: owner, their manager(s), GM and CEO. Short AI brief here; the full register is an Excel file built on the server. ===== */
+const canSeeMeeting = (m, me) => m.owner===me || isMgmt(me) || (getUser(m.owner).managers||[]).includes(me) || reviewersOf(m.owner).some(r=>r.id===me);
+const chartTabFor = id => hasOwnReport(id) || isMgmt(id) || USERS.some(u=>u.id!==id && (u.managers||[]).includes(id));
+const momText = m => m.outcome==='postponed' ? (m.postponeReason||'') : (m.notes||'');
+const momSig = m => String(momText(m).length) + ':' + momText(m).slice(-40);
+const MOM_BUSY = new Set();
+async function ensureMomBrief(id){
+  const m0 = db.meetings.find(x=>x.id===id); if (!m0 || !momText(m0) || MOM_BUSY.has(id)) return;
+  if (m0.momBrief && m0.momBriefFor===momSig(m0)) return;
+  if (m0.momBriefTry && Date.now() - m0.momBriefTry < 30*60000) return;
+  MOM_BUSY.add(id);
+  try{
+    const t = await aiAsk(`Summarise these minutes of a business meeting in 2 or 3 short lines of plain text (no bullet symbols, no Markdown). Cover the main outcome, any agreed numbers or dates, and the next step with who does it. Use only what is written.
+Meeting with: ${m0.withWhom}. Purpose: ${m0.purpose}. ${m0.outcome==='postponed'?'The meeting was postponed. Reason given:':'Minutes:'}
+---
+${momText(m0).slice(0,6000)}
+---`);
+    const m = db.meetings.find(x=>x.id===id); if (!m) return;   // re-read after await (realtime may have replaced it)
+    m.momBrief = String(t||'').replace(/[*#_`]/g,'').trim().slice(0,500); m.momBriefFor = momSig(m); delete m.momBriefTry; save(); scheduleRender();
+  }catch(_){ const m = db.meetings.find(x=>x.id===id); if (m){ m.momBriefTry = Date.now(); save(); } }
+  finally{ MOM_BUSY.delete(id); }
+}
+const chartStatus = (m, na) => m.status==='cancelled' ? 'Cancelled' : m.status==='approved' ? (m.outcome==='postponed'?'Postponed · approved':'Held · approved') : m.status==='review' ? (m.outcome==='postponed'?'Postponed · awaiting approval':'Held · awaiting approval') : m.status==='returned' ? 'Sent back' : mState(m,na)==='upcoming' ? 'Upcoming' : 'Notes needed';
+function meetingChartView(){
+  const me = ui.user, na = nowAbs(), n = now(), st = ui.mch = ui.mch || { month:n.date.slice(0,7), who:'' };
+  const all = (db.meetings||[]).filter(m=>canSeeMeeting(m, me));
+  const people = [...new Set(all.map(m=>m.owner))].map(getUser).sort((a,b)=>a.name.localeCompare(b.name));
+  const months = [...new Set(all.map(m=>m.date.slice(0,7)).concat([n.date.slice(0,7)]))].sort().reverse();
+  const rows = all.filter(m=>(st.month==='all' || m.date.slice(0,7)===st.month) && (!st.who || m.owner===st.who)).sort((a,b)=>mStart(b)-mStart(a));
+  rows.filter(m=>momText(m) && (!m.momBrief || m.momBriefFor!==momSig(m))).slice(0,3).forEach(m=>ensureMomBrief(m.id));
+  const mlabel = mo => new Date(mo+'-01T12:00:00Z').toLocaleDateString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'});
+  let h = `<section class="card"><div class="sec-h"><h2>Meeting chart</h2><button type="button" class="btn sm" data-act="mreg-dl">Download full register (Excel)</button></div>
+    <p class="hint" style="margin-top:0">Each meeting with a short AI summary of its minutes. The full register from the server has the complete minutes, diary notes, reschedules, cancellations and approvals${isMgmt(me)?'':' for the meetings you can see'}.</p>
+    <div class="row" style="margin-bottom:8px"><label class="f" style="min-width:170px">Month<select id="mchMonth" class="sel"><option value="all" ${st.month==='all'?'selected':''}>All months</option>${months.map(mo=>`<option value="${mo}" ${mo===st.month?'selected':''}>${mlabel(mo)}</option>`).join('')}</select></label>
+      ${people.length>1?`<label class="f" style="min-width:200px">Person<select id="mchWho" class="sel"><option value="">Everyone</option>${people.map(u=>`<option value="${u.id}" ${u.id===st.who?'selected':''}>${esc(u.name)}</option>`).join('')}</select></label>`:''}</div>`;
+  if (!rows.length) return h + note('No meetings for this selection.') + '</section>';
+  h += `<div class="mch-wrap"><table class="mch"><thead><tr><th>Date</th>${people.length>1?'<th>Employee</th>':''}<th>Meeting with</th><th>Place</th><th>Status</th><th>MoM in brief (AI)</th></tr></thead><tbody>`;
+  rows.forEach(m=>{
+    const brief = m.status==='cancelled' ? 'Cancelled: '+(m.cancelReason||'') : m.momBrief && m.momBriefFor===momSig(m) ? m.momBrief : momText(m) ? (MOM_BUSY.has(m.id)?'Summarising…':'Summary will appear shortly.') : '—';
+    h += `<tr><td class="nw">${esc(fmtShort(m.date))}<br><small>${m.allDay?'Whole day':esc(m.time)+' · '+durLabel(mDur(m))}</small></td>${people.length>1?`<td>${esc(userName(m.owner))}</td>`:''}
+      <td><b>${esc(m.withWhom)}</b><br><small>${esc(m.purpose)}</small></td>
+      <td>${(m.mode||'person')==='online'?'Online':m.place?`<a href="${gmapsPlace(m)}" target="_blank" rel="noopener">${esc(m.place)}</a>`:'—'}</td>
+      <td class="nw">${esc(chartStatus(m,na))}${(m.resched||[]).length?'<br><small>Rescheduled</small>':''}</td><td>${esc(brief)}</td></tr>`; });
+  return h + `</tbody></table></div><p class="hint">${rows.length} meeting${rows.length===1?'':'s'}. Summaries are written by AI from the minutes; the full register has the exact text.</p></section>`;
+}
+document.addEventListener('change', e=>{ if (e.target.id==='mchMonth' || e.target.id==='mchWho'){ ui.mch = ui.mch || {}; ui.mch[e.target.id==='mchMonth'?'month':'who'] = e.target.value; render(); } });
+async function downloadRegister(btn){
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Preparing…';
+  try{
+    const st = ui.mch || {};
+    const { data, error } = await sb.functions.invoke('meeting-register', { body:{ action:'download', month:st.month||'all', who:st.who||'' } });
+    if (error && !data) throw new Error('The server could not be reached.');
+    if (!data || data.error) throw new Error((data&&data.error)||'Could not build the register.');
+    const bin = atob(data.b64), u8 = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = document.createElement('a'); a.href = url; a.download = data.name || 'meeting-register.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }catch(e){ tip('Register', e.message); }
+  finally{ btn.disabled = false; btn.textContent = old; }
+}
+
 /* ===== Reschedule a meeting (before it starts): new date/time/duration/place, with the same clash and travel checks ===== */
 function reschedForm(m){
   const r = ui.rs, durSel = r.dur || (m.allDay ? 'day' : String(mDur(m)));
@@ -3531,7 +3628,7 @@ function paintWakeDot(){ const f = document.getElementById('aiFab'); if (f) f.cl
 document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') wakeStart(); else wakeStop(); });
 
 /* Admin portal (CEO and GM only) and employee portal. */
-const ADMIN_TABS = ['dash','logins','activity','files','mrev','appr'];
+const ADMIN_TABS = ['dash','logins','activity','files','mrev','mchart','appr'];
 const isAdminUser = id => DASH_ROLES.includes(getUser(id).role);
 function tabsFor(id){
   const all = allTabs(id); if (!isAdminUser(id)) return all;
@@ -3547,6 +3644,7 @@ function allTabs(id){
   if (hasOwnReport(id) || subtree(id).length) t.push(['mydash', hasOwnReport(id)?'My dashboard':'Dashboards']);
   if (hasOwnReport(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
   if (!DASH_ROLES.includes(getUser(id).role) && USERS.some(u=>u.id!==id && !isField(u.id) && reviewersOf(u.id).some(r=>r.id===id))){ const p = (db.meetings||[]).filter(m=>m.status==='review' && canReviewMeeting(m, id)).length; t.push(['mrev', p?`Team meetings (${p})`:'Team meetings']); }
+  if (chartTabFor(id)) t.push(['mchart','Meeting chart']);
   t.push(['proj','Projects']); t.push(['photos','Photo library']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
   if (reportsOf(id).length || indirectOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
@@ -3564,7 +3662,7 @@ function render(){
   if (ui.authed && isAdminUser(ui.user) && allTabs(ui.user).some(t=>t[0]===ui.view)) { const pt = ADMIN_TABS.includes(ui.view) ? 'admin' : 'work'; if (pt!==ui.portal){ ui.portal = pt; store(UI_KEY, { view:ui.view, reviewDate:ui.reviewDate, portal:ui.portal }); } }
   const tabs = tabsFor(ui.user);
   document.body.classList.toggle('adm', !!(ui.authed && isAdminUser(ui.user) && ui.portal!=='work'));
-  const ttl = document.getElementById('appTitle'); if (ttl) ttl.textContent = !ui.authed ? 'Daily Work Portal' : (isAdminUser(ui.user) && ui.portal!=='work') ? 'Admin Portal' : 'Employee Portal';
+  const ttl = document.getElementById('appTitle'); if (ttl) ttl.textContent = !ui.authed ? 'Daily Work Portal' : (isAdminUser(ui.user) && ui.portal!=='work') ? 'Admin Portal' : `${getUser(ui.user).name} · Task Portal`;
   if (ui.authed && !['alerts','account'].includes(ui.view) && !tabs.some(t=>t[0]===ui.view)) ui.view = tabs[0][0];
   document.getElementById('clock').textContent = `${fmtDate(n.date)} · ${n.label} (UAE time)`;
   if (document.getElementById('userSel')) document.getElementById('userSel').innerHTML = USERS.map(u=>`<option value="${u.id}" ${u.id===ui.user?'selected':''}>${esc(u.name)} — ${esc(u.title)}</option>`).join('');
@@ -3576,7 +3674,7 @@ function render(){
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
-    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
+    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='mchart' ? meetingChartView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
   const lgT = isField(ui.user) && loginOf(ui.user, n.date);
@@ -3706,11 +3804,11 @@ function accountView(){
     <div class="row end"><button class="btn">Change password</button></div></form></section>`;
 }
 function setupView(){
-  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Almost ready</h2>
+  return `<section class="card login"><span class="mark" aria-hidden="true">AYDI</span><h2>Almost ready</h2>
     <p>This portal is not connected to its database yet. Open <b>config.js</b> in the repository and fill in the Supabase project URL and public key, as described in SETUP.md.</p></section>`;
 }
 function noAccessView(){
-  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Not in the staff list</h2>
+  return `<section class="card login"><span class="mark" aria-hidden="true">AYDI</span><h2>Not in the staff list</h2>
     <p>You are signed in, but your email is not in the portal's staff list yet. Ask the portal administrator to add your email to the staff list.</p>
     <div class="row end"><button class="btn sm ghost" data-act="logout">Log out</button></div></section>`;
 }
@@ -3891,9 +3989,15 @@ document.addEventListener('click', e=>{
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
   else if (act==='trial-reset'){ resetModal(); return; }
   else if (act==='plc-pick'){ placePick(a); return; }
-  else if (act==='rs-open'){ ui.rs = { id:a.dataset.id }; render(); return; }
+  else if (act==='rs-open'){ ui.rs = { id:a.dataset.id }; ui.cx = null; render(); return; }
   else if (act==='rs-cancel'){ ui.rs = null; render(); return; }
   else if (act==='rs-save'){ rescheduleMeeting(a); return; }
+  else if (act==='cx-open'){ ui.cx = a.dataset.id; ui.rs = null; render(); return; }
+  else if (act==='cx-close'){ ui.cx = null; render(); return; }
+  else if (act==='cx-save'){ cancelMeeting(a); return; }
+  else if (act==='cx-rebook'){ ui.rebook = a.dataset.id; ui.view = 'meet'; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
+  else if (act==='cx-rebook-x'){ ui.rebook = null; render(); return; }
+  else if (act==='mreg-dl'){ downloadRegister(a); return; }
   else if (act==='trial-reset-x'){ document.getElementById('resetModal')?.remove(); return; }
   else if (act==='trial-reset-go'){ runReset(a); return; }
   else if (planClick(act)) return;

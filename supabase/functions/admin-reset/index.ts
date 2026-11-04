@@ -7,7 +7,7 @@
 import { admin, caller, cors, json } from "../_shared/common.ts";
 
 const LIMIT = 2;
-const BUCKETS = ["photos", "taskfiles"];
+const BUCKETS = ["photos", "taskfiles", "registers"];
 function monthStartUae(): string {
   const uae = new Date(Date.now() + 4 * 3600_000);
   return new Date(Date.UTC(uae.getUTCFullYear(), uae.getUTCMonth(), 1) - 4 * 3600_000).toISOString();
