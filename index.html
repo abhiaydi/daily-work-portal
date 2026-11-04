@@ -390,6 +390,12 @@ h3.sub::before,.team-h::before{content:"";flex:none;width:9px;height:9px;border-
 .tabs button{border-radius:999px;color:rgba(255,255,255,.82)}
 .tabs button.on{background:#fff;color:#1d1d1d;box-shadow:none}
 .tabs{flex-wrap:wrap;overflow:visible;border-radius:18px;row-gap:2px}
+.psw{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:rgba(255,255,255,.14);margin-right:4px;vertical-align:middle}
+.psw button{border:0;background:none;color:rgba(255,255,255,.85);font:600 13px var(--f-body);padding:6px 12px;border-radius:999px;cursor:pointer}
+.psw button.on{background:#fff;color:#1d1d1d}
+body.adm .top{background:linear-gradient(115deg,#141414 0%,#2b2f36 55%,#4a2a1c 100%)}
+body.adm .psw button.on{background:var(--brand);color:#fff}
+body.adm .tabs button.on{box-shadow:inset 0 -3px 0 var(--brand)}
 .tabs button{padding:8px 13px}
 @media (max-width:560px){ .tabs button{padding:7px 11px;font-size:14px} }
 #main{padding-bottom:84px}
@@ -506,7 +512,7 @@ h3.sub::before,.team-h::before{content:"";flex:none;width:9px;height:9px;border-
 
   <div class="top">
     <div class="brand"><span class="mark" aria-hidden="true">AY</span>
-      <div><h1>Daily Work Portal</h1><div class="clock" id="clock"></div></div>
+      <div><h1 id="appTitle">Daily Work Portal</h1><div class="clock" id="clock"></div></div>
     </div>
     <div class="row" style="align-items:center">
       <div class="who" id="whoBox"></div>
@@ -612,7 +618,7 @@ function applyRemote(c, id, data){
   if (c==='closures') db.closures[id] = data;
   else { const i = db[c].findIndex(x=>x.id===id); if (i>=0) db[c][i] = data; else db[c].push(data); }
 }
-const save = () => { store(UI_KEY, { view:ui.view, reviewDate:ui.reviewDate }); syncAll(); };
+const save = () => { store(UI_KEY, { view:ui.view, reviewDate:ui.reviewDate, portal:ui.portal }); syncAll(); };
 
 /* Current date/time from the system clock, read in UAE time. Not user-adjustable. */
 const DTF = new Intl.DateTimeFormat('en-GB',{ timeZone:CONFIG.timeZone, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23' });
@@ -2419,7 +2425,7 @@ async function aiDecide(i, yes){
 }
 
 const PAGE_NAMES = { alerts:'Notifications', account:'My account' };
-function pagesFor(id){ return tabsFor(id).map(t=>[t[0], t[1].replace(/\s*\(\d+\)$/,'')]).concat([['alerts','Notifications'],['account','My account']]); }
+function pagesFor(id){ return allTabs(id).map(t=>[t[0], t[1].replace(/\s*\(\d+\)$/,'')]).concat([['alerts','Notifications'],['account','My account']]); }
 function aiContext(){
   const me = ui.user, u = getUser(me), n = now(), d = n.date, ph = phaseFor(n.mins, me);
   const people = assignableBy(me).map(p=>`${p.id}: ${p.name}, ${p.title}${needsGm(me,p.id)?' [needs GM approval]':''}${closedToday(p.id,d)?' [finished their day]':''}`);
@@ -2645,7 +2651,16 @@ document.addEventListener('input', e=>{ if (!e.target.classList || !e.target.cla
   const row = e.target.closest('.crow'), w = words(e.target.value), wc = row.querySelector('.wc'); wc.querySelector('.wcn').textContent = w; wc.classList.toggle('ok', w>=MIN_WORK_WORDS); });
 
 /* ===== Render ===== */
+/* Admin portal (CEO and GM only) and employee portal. */
+const ADMIN_TABS = ['dash','logins','mrev','appr'];
+const isAdminUser = id => DASH_ROLES.includes(getUser(id).role);
 function tabsFor(id){
+  const all = allTabs(id); if (!isAdminUser(id)) return all;
+  const want = ui.portal==='work' ? 'work' : 'admin';
+  const t = all.filter(x=>(ADMIN_TABS.includes(x[0]) ? 'admin' : 'work')===want);
+  return t.length ? t : all;
+}
+function allTabs(id){
   const t = [];
   if (DASH_ROLES.includes(getUser(id).role)){ t.push(['dash','Dashboard']); t.push(['logins','Staff logins']);
     const fsIds = subtree(id).filter(u=>isField(u.id)).map(u=>u.id);
@@ -2666,7 +2681,10 @@ function render(){
   lastSig = sigNow();
   pendingRender = false;
   if (runReminders()) save();
+  if (ui.authed && isAdminUser(ui.user) && allTabs(ui.user).some(t=>t[0]===ui.view)) { const pt = ADMIN_TABS.includes(ui.view) ? 'admin' : 'work'; if (pt!==ui.portal){ ui.portal = pt; store(UI_KEY, { view:ui.view, reviewDate:ui.reviewDate, portal:ui.portal }); } }
   const tabs = tabsFor(ui.user);
+  document.body.classList.toggle('adm', !!(ui.authed && isAdminUser(ui.user) && ui.portal!=='work'));
+  const ttl = document.getElementById('appTitle'); if (ttl) ttl.textContent = !ui.authed ? 'Daily Work Portal' : (isAdminUser(ui.user) && ui.portal!=='work') ? 'Admin Portal' : 'Employee Portal';
   if (ui.authed && !['alerts','account'].includes(ui.view) && !tabs.some(t=>t[0]===ui.view)) ui.view = tabs[0][0];
   document.getElementById('clock').textContent = `${fmtDate(n.date)} · ${n.label} (UAE time)`;
   if (document.getElementById('userSel')) document.getElementById('userSel').innerHTML = USERS.map(u=>`<option value="${u.id}" ${u.id===ui.user?'selected':''}>${esc(u.name)} — ${esc(u.title)}</option>`).join('');
@@ -2682,7 +2700,8 @@ function render(){
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
   const lgT = isField(ui.user) && loginOf(ui.user, n.date);
-  who.innerHTML = `${lgT?`<span class="lgchip ${lgT.late?'late':''}">Logged in ${lgT.time}</span>`:''}<button class="whoname" data-act="account" title="My account" style="background:none;border:0;color:inherit;cursor:pointer;text-align:right;padding:0"><b>${esc(me.name)}</b><br><small>${esc(me.title)}</small></button>
+  const psw = isAdminUser(ui.user) ? `<div class="psw" role="group" aria-label="Portal"><button data-act="portal" data-p="admin" class="${ui.portal!=='work'?'on':''}">Admin</button><button data-act="portal" data-p="work" class="${ui.portal==='work'?'on':''}">Employee</button></div>` : '';
+  who.innerHTML = psw + `${lgT?`<span class="lgchip ${lgT.late?'late':''}">Logged in ${lgT.time}</span>`:''}<button class="whoname" data-act="account" title="My account" style="background:none;border:0;color:inherit;cursor:pointer;text-align:right;padding:0"><b>${esc(me.name)}</b><br><small>${esc(me.title)}</small></button>
     <button class="btn sm cam" data-act="cam" aria-label="Add a photo" title="Add a photo">${CAM_IC}</button>
     <button class="btn sm ghost bell" data-act="view" data-v="alerts" aria-label="Notifications">${BELL}${unread?`<span class="cnt">${unread}</span>`:''}</button>
     <button class="btn sm ghost" data-act="logout">Log out</button>`;
@@ -2788,6 +2807,7 @@ async function afterLogin(){
   ui.user = me.id; ui.authed = true; ui.noAccess = false;
   await loadAll(); subscribe();
   if (DASH_ROLES.includes(getUser(ui.user).role)) await loadLocations();
+  ui.portal = isAdminUser(ui.user) ? (load(UI_KEY, {}).portal || 'admin') : 'work';
   ui.view = tabsFor(ui.user)[0][0];   // everyone starts on their main tab after logging in
   render();
 }
@@ -2888,6 +2908,7 @@ document.addEventListener('click', e=>{
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act==='view'){ ui.view = a.dataset.v; ui.editing=null; }
+  else if (act==='portal'){ if (!isAdminUser(ui.user)) return; ui.portal = a.dataset.p; ui.view = tabsFor(ui.user)[0][0]; ui.editing = null; ui.proj = null; save(); render(); window.scrollTo(0,0); return; }
   else if (act==='edit'){ ui.editing = a.dataset.id; render(); document.querySelector('.tform input[name=title]')?.focus(); return; }
   else if (act==='cancel-edit'){ ui.editing = null; }
   else if (act==='del'){
