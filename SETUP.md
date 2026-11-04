@@ -40,7 +40,13 @@ Open the PORTAL URL: you can now log in. Sales staff get the location login; the
    Until the domain is verified, Resend only delivers to your own sign-up email, which is fine for testing.
 3. **API Keys → Create API key** → copy it.
 
-## Part 4 — AI (Claude API)
+## Part 4 — AI
+
+Free option to start: Google Gemini. At **aistudio.google.com** → **Get API key** → **Create API key**, then add it as the secret `GEMINI_API_KEY`. On Gemini's free tier Google may use what is sent to improve its products, so treat it as a testing option.
+
+When you add a Claude key (`ANTHROPIC_API_KEY`, below), the portal uses Claude instead automatically.
+
+### Claude API
 
 1. Sign up at **console.anthropic.com**, add a payment method (billed per use; see their pricing page).
 2. **API Keys → Create key** → copy it.
@@ -51,7 +57,8 @@ In Supabase: **Edge Functions → Secrets** (sometimes under Project Settings �
 
 | Name | Value |
 |---|---|
-| `ANTHROPIC_API_KEY` | the key from Part 4 |
+| `ANTHROPIC_API_KEY` | the Claude key from Part 4 (optional while using Gemini) |
+| `GEMINI_API_KEY` | the free Gemini key from Part 4 (used only when there is no Claude key) |
 | `RESEND_API_KEY` | the key from Part 3 |
 | `EMAIL_FROM` | e.g. `Daily Work Portal <portal@yourcompany.com>` (must use the verified domain) |
 | `PORTAL_URL` | your PORTAL URL |
