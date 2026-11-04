@@ -2,7 +2,8 @@
 //  list   -> who already has a login, who is ready (has a real email), who has no email yet
 //  create -> creates logins. First password = the person's phone number (digits only, e.g. 971501234567),
 //            or a random one if no phone is on file. Everyone must choose their own password at first login.
-//  reset  -> sets the first password again (same rule) and asks them to choose a new one
+//  reset  -> sets the first password again (same rule) and asks them to choose a new one.
+//            The GM may reset the CEO's password only while the CEO has never logged in.
 // Checks the caller's login itself (see common.ts), so the gateway JWT check is off.
 import { admin, caller, cors, json } from "../_shared/common.ts";
 
@@ -23,7 +24,8 @@ Deno.serve(async (req) => {
   const hasLogin = (e: string | null) => !!e && byEmail.has(e.toLowerCase());
 
   if (body.action === "list") {
-    return json({ people: (people || []).map((p) => ({ id: p.id, emailOk: validEmail(p.email), hasLogin: hasLogin(p.email) })) });
+    return json({ people: (people || []).map((p) => { const u = validEmail(p.email) ? byEmail.get(p.email.toLowerCase()) : undefined;
+      return { id: p.id, emailOk: validEmail(p.email), hasLogin: !!u, signedIn: !!(u && u.last_sign_in_at), mustChange: !!(u && u.user_metadata && u.user_metadata.must_change_password) }; }) });
   }
 
   if (body.action === "create" || body.action === "reset") {
@@ -42,7 +44,7 @@ Deno.serve(async (req) => {
         results.push(error ? { id, error: error.message } : { id, password, phone: digits.length >= 8 });
       } else {
         if (!existing) { results.push({ id, error: "No login yet" }); continue; }
-        if (p.role === "CEO" && me.role !== "CEO") { results.push({ id, error: "Only the CEO can reset the CEO's password" }); continue; }
+        if (p.role === "CEO" && me.role !== "CEO" && existing.last_sign_in_at) { results.push({ id, error: "Only the CEO can reset the CEO's password once he has logged in" }); continue; }
         const { error } = await a.auth.admin.updateUserById(existing.id, { password, ...meta });
         results.push(error ? { id, error: error.message } : { id, password, phone: digits.length >= 8 });
       }

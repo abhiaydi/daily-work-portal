@@ -2757,11 +2757,14 @@ function loginsView(){
       <textarea id="loginText" style="position:absolute;left:-9999px" aria-hidden="true">${esc(text)}</textarea>
       <div class="row end"><button class="btn sm ghost" data-act="clear-logins">Done, hide passwords</button></div></section>`;
   }
+  const fresh = people.filter(u=>u.id!==ui.user && LOGINS[u.id] && LOGINS[u.id].hasLogin && !LOGINS[u.id].signedIn && u.phone);
+  if (fresh.length) h += `<section class="card"><div class="sec-h"><h2>Before you send the login emails</h2><button class="btn" data-act="reset-fresh">Reset ${fresh.length} ${fresh.length===1?'person':'people'}</button></div>
+    <p class="hint" style="margin:0">${fresh.length} ${fresh.length===1?'person has':'people have'} a login but ${fresh.length===1?'has':'have'} never logged in. This sets each first password to their mobile number (digits only, e.g. 971501234567) and makes them choose their own at first login. Anyone who has already logged in is not touched.</p></section>`;
   h += `<section class="card"><div class="sec-h"><h2>Staff logins</h2>${ready.length?`<button class="btn" data-act="mk-all">Create ${ready.length} login${ready.length===1?'':'s'}</button>`:pill('open','Everyone with an email has a login')}</div>
     <p class="hint" style="margin-top:0">Listed in organisation chart order. Everyone with a work email can get a login; the first password is their phone number.</p>`;
   people.forEach(u=>{ const L = LOGINS[u.id] || {};
     const self = u.id===ui.user;
-    const st = L.hasLogin ? pill('open', self?'You':'Has login') : L.emailOk ? pill('soon','Ready') : pill('miss','No email yet');
+    const st = L.hasLogin ? (self ? pill('open','You') : L.signedIn ? pill('open','Logged in') : pill('soon','Not logged in yet')) : L.emailOk ? pill('soon','Ready') : pill('miss','No email yet');
     const act = self ? '' : L.hasLogin ? `<button class="btn sm ghost" data-act="reset-login" data-id="${u.id}">Reset password</button>` : L.emailOk ? `<button class="btn sm ghost" data-act="mk-login" data-id="${u.id}">Create login</button>` : '';
     const ph = u.phone ? `<a href="tel:${esc(u.phone)}">${esc(u.phone.replace(/^(\+\d{3})(\d{2})(\d{3})(\d+)$/,'$1 $2 $3 $4'))}</a>` : '<span class="hint" style="margin:0">No phone</span>';
     h += `<div class="ci" style="align-items:flex-start"><span style="min-width:200px;flex:1 1 200px"><b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span>
@@ -2770,7 +2773,8 @@ function loginsView(){
 }
 async function loginAction(action, ids, btn){
   if (!ids.length) return;
-  if (action==='reset' && !confirm(`Reset ${userName(ids[0])}'s password? It goes back to their phone number (or a random one), and they'll choose a new one at their next login.`)) return;
+  if (action==='reset-bulk') action = 'reset';
+  else if (action==='reset' && !confirm(`Reset ${userName(ids[0])}'s password? It goes back to their phone number (or a random one), and they'll choose a new one at their next login.`)) return;
   if (btn){ btn.disabled = true; btn.textContent = 'Working…'; }
   try { const d = await adminUsers({ action, ids }); LOGIN_RESULTS = (d.results||[]).concat(LOGIN_RESULTS.filter(r=>!ids.includes(r.id))); LOGINS = null; refreshLogins(); }
   catch(e){ tip('Not done', e.message); if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } }
@@ -2975,6 +2979,8 @@ document.addEventListener('click', e=>{
   else if (act==='va-cancel'){ setVA(null); try{ speechSynthesis.cancel(); }catch(_){} return; }
   else if (act==='mk-all'){ const ids = USERS.filter(u=>u.id!==ui.user && LOGINS && LOGINS[u.id] && LOGINS[u.id].emailOk && !LOGINS[u.id].hasLogin).map(u=>u.id); loginAction('create', ids, a); return; }
   else if (act==='mk-login'){ loginAction('create', [a.dataset.id], a); return; }
+  else if (act==='reset-fresh'){ const ids = USERS.filter(u=>u.id!==ui.user && LOGINS && LOGINS[u.id] && LOGINS[u.id].hasLogin && !LOGINS[u.id].signedIn && u.phone).map(u=>u.id);
+    if (!ids.length || !confirm(`Reset the first password of ${ids.length} people who have never logged in? Each becomes their mobile number (digits only).`)) return; loginAction('reset-bulk', ids, a); return; }
   else if (act==='reset-login'){ loginAction('reset', [a.dataset.id], a); return; }
   else if (act==='copy-logins'){ const t = document.getElementById('loginText').value; copyText(t).then(ok=>tip(ok?'Copied':'Copy failed', ok?'Paste it somewhere safe, then send each person their own password.':'Select the passwords and copy them by hand.')); return; }
   else if (act==='clear-logins'){ LOGIN_RESULTS = []; }
