@@ -772,7 +772,7 @@ function taskCard(t, n, showOwner){
       ${t.feas && t.feas.state==='pending' && t.owner!==ui.user ? feasHtml(t) : ''}${t.feas && t.feas.state==='not' && t.assignedBy!==ui.user ? feasHtml(t) : ''}
     </div>
     ${t.feas && ((t.feas.state==='pending' && t.owner===ui.user) || (t.feas.state==='not' && t.assignedBy===ui.user)) ? feasHtml(t) : ''}
-    ${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach a file<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}
+    ${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}
     ${carried?bar(prevProgress(t,d),'Progress so far'):''}
   </div>`;
 }
@@ -796,7 +796,10 @@ function taskForm(kind, mode){
     <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     ${projSelect(t)}
-    ${t?'':`<label class="f">Attachments (optional)<input type="file" name="files" multiple class="tf-in"><span class="hint" style="margin:2px 0 0">PDF, Word, Excel, PowerPoint, photos — up to 20 MB each. The AI reads them and writes a short brief for the manager.</span></label>`}
+    ${t?'':`<div class="f"><span>Attachments (optional)</span>
+      <div class="clf-list" data-id="tf-${kind}-${mode}">${clfChips('tf-'+kind+'-'+mode)}</div>
+      <label class="btn sm ghost clf-add">${CLIP_IC} ${(CL_FILES['tf-'+kind+'-'+mode]||[]).length?'Add more files':'Add files'}<input type="file" multiple class="cl-files" data-id="tf-${kind}-${mode}" hidden></label>
+      <span class="hint" style="margin:2px 0 0">Add as many files as you need, one at a time or many at once. PDF, Word, Excel, PowerPoint, photos — up to 20 MB each. The AI reads them and writes a short brief for the manager.</span></div>`}
     <div class="row">
       <fieldset class="f"><legend>Priority</legend><div class="seg">
         ${pri.map((p,i)=>`<label><input type="radio" name="priority" value="${p}" ${(t?t.priority===p:i===0)?'checked':''}><span>${p}</span></label>`).join('')}
@@ -4012,10 +4015,10 @@ async function addOrSaveTask(form){
   const who = owners.length>1 ? `${owners.length} people` : userName(owners[0]);
   if (kind==='assign' && !confirm(`Assign “${title}” to ${owners.map(userName).join(', ')}?${viaGm.length?`\n${viaGm.map(userName).join(', ')}: goes to the General Manager first.`:''}${mode==='extra'?'\nIt is added as additional work and locked.':''}`)) return;
   if (kind==='self' && mode==='extra' && !confirm('Add this as additional work? It will be locked and cannot be edited.')) return;
-  const fileIn = form.querySelector('.tf-in'), files = fileIn ? [...fileIn.files] : [];
+  const fkey = `tf-${kind}-${mode}`, files = [...(CL_FILES[fkey]||[])];
   let ups = [];
   if (files.length){ const btn = form.querySelector('.row.end .btn:not(.ghost)'); if (btn){ btn.disabled = true; btn.textContent = 'Uploading files…'; }
-    try{ ups = await uploadTaskFiles(files); }catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); } }
+    try{ ups = await uploadTaskFiles(files); delete CL_FILES[fkey]; }catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); } }
   const f = { title, details, priority, days, projectId }, taskIds = [], reqIds = [];
   if (kind==='assign'){
     const group = owners.length>1 ? uid() : '';
