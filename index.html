@@ -158,6 +158,12 @@ table.mst .pn{width:64px}
 .sum-h{cursor:pointer;list-style:revert}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .b.proj{background:var(--accent-soft);color:var(--accent)}
+.ai-sum{border:1px solid var(--accent);border-left-width:4px;border-radius:10px;padding:10px 12px;margin:0 0 12px;background:var(--accent-soft)}
+.ai-sum p{margin:4px 0 6px;white-space:pre-wrap}
+.ai-sum.sm{margin:0 0 10px;padding:8px 10px}.ai-sum.sm p{margin:2px 0 0;font-size:14px}
+.ai-sum.pend{border-color:var(--line);background:var(--card);display:flex;flex-direction:column;gap:2px}.ai-sum.pend span{color:var(--muted);font-size:13px}
+.ai-sum-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.ai-pct{font-weight:700;color:var(--accent);font-size:15px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:1000;padding:16px}
 .modal-box{background:var(--bg);color:var(--ink);border-radius:16px;padding:20px;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box}
 .modal-box h2{margin-top:0}
@@ -573,8 +579,8 @@ function load(key, fallback){ try{ const v = localStorage.getItem(key); return v
 function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
 
 /* ===== Shared data: Supabase database (table "records") ===== */
-const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles','photos'];
-let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[] };
+const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles','photos','aisum'];
+let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[] };
 let ui = load(UI_KEY, null) || { view:'staff', reviewDate:null };
 ui.user = null; ui.authed = false; ui.editing = null;
 let sb = null, LOCS = {}, booting = true, saveErrShown = false;
@@ -727,27 +733,6 @@ function taskForm(kind, mode){
   </form>`;
 }
 
-function closureForm(tasks, d){
-  const submit = `<div class="row end"><button class="btn" data-act="submit-closure">Submit closure report</button></div>`;
-  if (!tasks.length) return note('No tasks to report today.') + submit;
-  return tasks.map(t=>{
-    const p = prevProgress(t,d);
-    return `<div class="crow" data-id="${t.id}">
-      <div class="ctitle">${esc(t.title)} ${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span>
-        ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
-        <span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span></div>
-      <div class="prog">
-        <input type="range" min="0" max="100" step="5" value="${p}" class="pr" aria-label="Progress">
-        <input type="number" min="0" max="100" value="${p}" class="pn" aria-label="Progress percent"><span>%</span>
-      </div>
-      <div class="just" ${p>=100?'hidden':''}>
-        <label class="f">Why is this not complete? <span class="req">(minimum ${CONFIG.minWords} words)</span><textarea rows="2" class="jt"></textarea></label>
-        <div class="wc"><span class="wcn">0</span> / ${CONFIG.minWords} words</div>
-      </div>
-      <div class="err" hidden></div>
-    </div>`;
-  }).join('') + submit;
-}
 
 function reportBlock(owner, d, canReview){
   const k = owner+'|'+d, c = db.closures[k];
@@ -756,21 +741,22 @@ function reportBlock(owner, d, canReview){
   const avg = ts.length ? Math.round(ts.reduce((s,t)=>s+(t.log[d]?.progress||0),0)/ts.length) : 0;
   const emg = ts.filter(t=>t.priority==='Emergency').length;
   const extra = ts.filter(t=>t.category==='extra').length;
-  let h = `<div class="sum">
+  const pend = !c.ai || c.ai.status!=='done';
+  let h = aiResultBlock(owner, d) + `<div class="sum">
     <div><b>${ts.length}</b>tasks</div><div><b>${done}</b>completed</div>
-    <div><b>${ts.length-done}</b>carried to next day</div><div><b>${avg}%</b>avg. progress</div>
+    <div><b>${ts.length-done}</b>carried to next day</div><div><b>${pend?'…':avg+'%'}</b>AI progress</div>
     <div><b>${extra}</b>additional work</div>${emg?`<div><b>${emg}</b>emergency</div>`:''}
   </div>`;
   if (ts.length){
-    h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>Progress</th><th>Reason if incomplete</th></tr></thead><tbody>
+    h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>AI rating</th><th>What the employee wrote</th><th>AI note</th></tr></thead><tbody>
     ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
       <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}</td>
       <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span></td>
-      <td class="pct ${l.progress>=100?'full':'part'}">${l.progress}%</td>
-      <td>${l.justification?esc(l.justification):'—'}</td></tr>`; }).join('')}
+      <td class="pct ${l.pending?'':l.progress>=100?'full':'part'}">${l.pending?'<span class="hint" style="margin:0">pending</span>':l.progress+'%'}</td>
+      <td>${l.justification?esc(l.justification):'—'}</td><td>${l.aiNote?esc(l.aiNote):'—'}</td></tr>`; }).join('')}
     </tbody></table></div>`;
   }
-  h += `<div class="hint">Submitted ${fmtStamp(c.submittedAt)} · goes to ${esc(mgrNames(owner))}</div>`;
+  h += `<div class="hint">Submitted ${fmtStamp(c.submittedAt)}${c.editedAt?' · last edited '+fmtStamp(c.editedAt):''} · goes to ${esc(mgrNames(owner))}</div>`;
   if (c.review){
     h += `<div class="review"><div class="meta">Review by ${esc(userName(c.review.by))} · ${fmtStamp(c.review.at)}</div><p>${esc(c.review.text)}</p></div>`;
   } else if (canReview){
@@ -823,8 +809,10 @@ function staffView(n){
   const dl = deadlineOf(u);
   h += `<section class="card" id="closureCard"><div class="sec-h"><h2>3 · Closure report</h2>${
     ck?pill('locked','Submitted'):ph==='over'?pill('miss','Deadline missed'):ui.closing&&ph==='extra'?pill('open',`Submit by ${dl}`):ph==='extra'?pill('soon','When you finish'):pill('soon',`From ${CONFIG.planClose}`)}</div>`;
-  if (ck) h += `<div class="ok-msg">Closure report submitted to ${esc(mgrNames(u))}. Incomplete tasks will appear automatically tomorrow morning.</div>` + reportBlock(u,d,false);
-  else if (ph==='extra' && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">Update progress on every task, including additional work. Anything below 100% needs a reason of at least ${CONFIG.minWords} words. Deadline: ${dl}.</p>` + closureForm(act,d)
+  if (ck && ui.editClosure && closureEditable(u,d)) h += `<p class="hint" style="margin-top:0">Change what you wrote, then save. The AI will rate your work again. You can edit until your manager reviews the report.</p>` + closureForm((ck.tasks||[]).map(id=>db.tasks.find(t=>t.id===id)).filter(Boolean), d, ck);
+  else if (ck) h += `<div class="ok-msg">Closure report submitted to ${esc(mgrNames(u))}. Incomplete tasks will appear automatically tomorrow morning.</div>` + reportBlock(u,d,false)
+      + (closureEditable(u,d) ? `<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="close-edit">Edit my report</button><span class="hint" style="margin:0">Possible until ${esc(mgrNames(u))} reviews it.</span></div>` : '');
+  else if (ph==='extra' && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">For every task, including additional work, write what you did — and if it isn't finished, what is left and why. The AI then rates how much of each task is complete against its objective; you don't enter percentages. Deadline: ${dl}.</p>` + closureForm(act,d)
       + `<div class="row" style="margin-top:6px"><button class="btn sm ghost" data-act="close-cancel">Not yet, keep working</button></div>`;
   else if (ph==='extra') h += `<div class="va-row"><button class="btn" data-act="close-start">Finish my day</button>
       <p class="hint" style="margin:0">When your work is done, press this to write your closure report. Until then, you and your manager can keep adding additional work. Deadline: ${dl}.</p></div>`;
@@ -875,6 +863,11 @@ function reviewView(n){
       h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span>${x.c.review?pill('open','GM reviewed'):pill('soon','GM review pending')}</div>${reportBlock(x.owner,x.date,false)}</div>`; });
     h += `</section>`;
   }
+
+  /* 1c. AI summaries of each person's day */
+  SUM_REQ = { ids:reps.map(r=>r.id), d };
+  h += `<section class="card"><div class="sec-h"><h2>Team work — AI summary</h2><span class="hint" style="margin:0">${fmtDate(d)}</span></div>
+    ${reps.filter(r=>hasOwnReport(r.id)).map(r=>{ const x = daySumHtml(r.id, d); return `<div class="crow"><div class="ctitle" style="margin-bottom:4px">${esc(r.name)} <span class="b">${esc(r.title)}</span></div>${x || '<div class="hint" style="margin:0">No work entered for this date.</div>'}</div>`; }).join('') || note('No team members.')}</section>`;
 
   /* 2. History by date */
   h += `<section class="card"><div class="sec-h"><h2>Team reports by date</h2>
@@ -1293,7 +1286,7 @@ function safeRender(){
   const a = document.activeElement;
   const main = document.getElementById('main');
   const dirty = clkDrag || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('#main') && (a.value||'').length)
-    || [...main.querySelectorAll('form textarea, form input[type=text], form input:not([type]), form input[type=password]')].some(x=>x.value.trim() !== (x.defaultValue||'').trim());
+    || [...main.querySelectorAll('form textarea, form input[type=text], form input:not([type]), form input[type=password], textarea.wt')].some(x=>x.value.trim() !== (x.defaultValue||'').trim());
   if (dirty){ pendingRender = true; updateClock(); return; }
   render();
 }
@@ -1674,6 +1667,7 @@ function dashView(n){
   /* people by team */
   const show = i => (!selP || i.u.id===selP.id) && (dv.team==='all' || (i.head&&i.head.id===dv.team)) &&
     (dv.status==='all' || (dv.status==='flag'&&i.flag) || (dv.status==='closed'&&i.c) || (dv.status==='working'&&!i.c&&!i.flag));
+  SUM_REQ = { ids:people.map(p=>p.id), d };
   h += `<section class="card"><div class="sec-h"><h2>What everyone is doing</h2><span class="hint" style="margin:0">Click a person to see their tasks</span></div>
     <div class="phead"><span>Person</span><span style="text-align:left">Status</span><span>Planned</span><span>Additional</span><span>Carried</span><span>Avg. progress</span><span></span></div>`;
   const groups = heads.map(hd=>({ hd, list: infos.filter(i=>i.head&&i.head.id===hd.id && show(i)) })).filter(g=>g.list.length);
@@ -1690,7 +1684,7 @@ function dashView(n){
         <div class="num">${i.carried}${i.overdue.length?`<small style="color:var(--emg)">${i.overdue.length} overdue</small>`:''}</div>
         <div class="num">${i.avg===null?'—':i.avg+'%'}</div>
         <div class="chev">›</div></summary>
-        <div class="body">${i.act.length ? `<div class="tscroll"><table class="mini"><thead><tr><th>Task</th><th>Priority</th><th>Type</th><th>Day</th><th>Progress</th><th>Reason if incomplete</th></tr></thead><tbody>
+        <div class="body">${daySumHtml(i.u.id, d)}${i.act.length ? `<div class="tscroll"><table class="mini"><thead><tr><th>Task</th><th>Priority</th><th>Type</th><th>Day</th><th>AI progress</th><th>Employee update</th></tr></thead><tbody>
           ${i.act.map(t=>{ const p=progOn(t,d), j=t.log[d]?.justification; return `<tr>
             <td><b>${esc(t.title)}</b>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${d>t.dueDate?' <span class="b emg">Overdue</span>':''}</td>
             <td>${priBadge(t.priority)}</td><td>${t.category==='extra'?'Additional':'Planned'}${t.startDate<d?' · carried':''}</td>
@@ -2449,6 +2443,144 @@ function aiClick(act, a){
   return false;
 }
 
+/* ===== AI-rated closure reports and AI day summaries ===== */
+const MIN_WORK_WORDS = 5;
+let SUM_REQ = null, SUM_BUSY = false, SCORE_BUSY = {};
+const SUM_TRY = {};
+function closureEditable(owner, d){ const c = db.closures[owner+'|'+d]; return !!c && !c.review && owner===ui.user && d===now().date; }
+function scorePrompt(owner, d, items){
+  const u = getUser(owner);
+  return `You assess a staff member's end-of-day work report for a UAE manufacturing company. For each task, judge how much of the task's objective is complete now, as a CUMULATIVE percentage of the whole task (not just today's share), using ONLY what the employee wrote.
+Guidance: if they clearly say it is finished and describe the result, give 100. Partial work gets a proportional score. Vague or unsupported claims ("worked on it") get a cautious score. Never go below the progress already recorded before today unless the employee says work was undone. Use multiples of 5.
+Reply with ONLY JSON: {"tasks":[{"id":"<task id>","pct":0,"note":"one short sentence explaining the score"}],"summary":"3 to 5 sentences summarising the day for the manager: what was achieved, what is pending and why, anything needing attention"}
+Employee: ${u.name}, ${u.title}. Date: ${fmtDate(d)}.
+Tasks:
+${items.map(({t,work})=>`[${t.id}] ${t.title}${t.details?' — '+t.details:''} | ${t.priority}, ${t.category==='extra'?'additional work':'planned'} | day ${diffDays(t.startDate,d)+1} of ${t.days} | progress before today: ${prevProgress(t,d)}%${t.assignedBy?' | assigned by '+userName(t.assignedBy):''}
+Employee wrote: "${String(work||'').replace(/"/g,"'").slice(0,1500)}"`).join('\n')}`;
+}
+async function aiScoreClosure(k){
+  const c = db.closures[k]; if (!c || SCORE_BUSY[k]) return false;
+  const [owner, d] = k.split('|');
+  const items = (c.tasks||[]).map(id=>({ t:db.tasks.find(x=>x.id===id), work:(c.work||{})[id] })).filter(x=>x.t);
+  if (!items.length){ c.ai = { status:'done', summary:'No tasks were reported.', overall:null, at:new Date().toISOString() }; save(); return true; }
+  SCORE_BUSY[k] = true; c.ai = Object.assign({}, c.ai, { tryAt:new Date().toISOString() }); save();
+  try{
+    const j = parseJSONLoose(await aiAsk(scorePrompt(owner, d, items)));
+    // Re-read: live updates may have replaced these objects while the AI was working.
+    const c = db.closures[k]; if (!c) return false;
+    items.forEach(x=>{ x.t = db.tasks.find(t=>t.id===x.t.id) || x.t; });
+    const res = Object.fromEntries((Array.isArray(j.tasks)?j.tasks:[]).map(x=>[x.id, x]));
+    if (!items.every(({t})=>res[t.id] && isFinite(+res[t.id].pct))) throw new Error('The AI did not rate every task.');
+    let sum = 0;
+    items.forEach(({t,work})=>{
+      const pct = Math.max(0, Math.min(100, Math.round((+res[t.id].pct)/5)*5)); sum += pct;
+      t.log[d] = { progress:pct, justification:work||'', aiNote:String(res[t.id].note||'').slice(0,300) };
+      if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
+    });
+    const overall = Math.round(sum/items.length), was = c.ai && c.ai.status;
+    c.ai = { status:'done', summary:String(j.summary||'').slice(0,1500), overall, at:new Date().toISOString() };
+    save();
+    emailPeople(getUser(owner).managers.concat(needsCeoReview(owner) ? ceoIds() : []),
+      `${c.edits?'Updated closure':'Closure'} report from ${userName(owner)} — ${fmtDate(d)} (AI rating ${overall}%)`,
+      `${c.ai.summary}\n\n` + items.map(({t})=>`• ${t.title}: ${t.log[d].progress}% — ${t.log[d].aiNote}`).join('\n') + '\n\nPlease review it in the portal (Team reports).');
+    if (owner===ui.user && was!=='done') tip('AI rating ready', `Your work today was rated ${overall}% overall. See the details in your closure report.`);
+    return true;
+  }catch(e){
+    const c2 = db.closures[k]; if (c2) c2.ai = { status:'pending', error:String(e.message||e).slice(0,200), tryAt:new Date().toISOString() }; save();
+    return false;
+  }finally{ delete SCORE_BUSY[k]; }
+}
+/* Reports saved while the AI was unavailable are rated automatically later by the employee's or a manager's open portal. */
+let RETRY_BUSY = false;
+async function retryPendingScores(){
+  if (!ui.authed || RETRY_BUSY) return; const me = ui.user, mine = new Set([me, ...subtree(me).map(u=>u.id)]), t = Date.now();
+  const ks = Object.keys(db.closures).filter(k=>{ const c = db.closures[k]; return c.ai && c.ai.status==='pending' && mine.has(k.split('|')[0]) && (!c.ai.tryAt || t - Date.parse(c.ai.tryAt) > 3*60000); }).slice(0,3);
+  if (!ks.length) return; RETRY_BUSY = true;
+  for (const k of ks){ await aiScoreClosure(k); } RETRY_BUSY = false; safeRender();
+}
+function submitClosure(){
+  const n = now(), u = ui.user, d = n.date, k = u+'|'+d, prev = db.closures[k], editing = !!prev;
+  if (editing ? !closureEditable(u, d) : (phaseFor(n.mins,u)!=='extra')){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
+  if (!editing && isField(u)){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
+  const rows = [...document.querySelectorAll('#closureCard .crow[data-id]')], work = {}; let ok = true;
+  rows.forEach(row=>{
+    const txt = row.querySelector('.wt').value.trim(), w = words(txt), err = row.querySelector('.err');
+    if (w < MIN_WORK_WORDS){ ok = false; row.classList.add('bad'); err.hidden = false; err.textContent = `Write what you did on this task (and, if it is not finished, what is left and why) — at least ${MIN_WORK_WORDS} words. Currently ${w}.`; }
+    else { row.classList.remove('bad'); err.hidden = true; }
+    work[row.dataset.id] = txt.slice(0,2000);
+  });
+  if (!ok){ document.querySelector('#closureCard .crow.bad')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  if (!confirm(editing ? 'Save your changes? The AI will rate your work again.' : `Submit your closure report to ${mgrNames(u)}? The AI will then rate how much of each task is done. You can still edit it until your manager reviews it.`)) return;
+  const ids = rows.map(r=>r.dataset.id);
+  ids.forEach(id=>{ const t = db.tasks.find(x=>x.id===id); if (!t) return;
+    t.log[d] = Object.assign({}, t.log[d]||{ progress:prevProgress(t,d) }, { justification:work[id], pending:true }); });
+  db.closures[k] = Object.assign({}, prev||{}, { submittedAt: prev ? prev.submittedAt : new Date().toISOString(), tasks:ids, work, ai:{ status:'pending' },
+    ...(editing ? { edits:(prev.edits||0)+1, editedAt:new Date().toISOString() } : {}) });
+  ui.closing = false; ui.editClosure = false; save(); render();
+  aiScoreClosure(k).then(done=>{
+    if (!done){ emailPeople(getUser(u).managers.concat(needsCeoReview(u) ? ceoIds() : []), `${editing?'Updated closure':'Closure'} report from ${userName(u)} — ${fmtDate(d)} (AI rating pending)`,
+      ids.map(id=>{ const t = db.tasks.find(x=>x.id===id); return `• ${t?t.title:''}: ${work[id]}`; }).join('\n') + '\n\nThe AI rating will be added automatically. Please review it in the portal (Team reports).');
+      tip('Report saved', 'The AI could not rate it just now. It will be rated automatically in a few minutes.'); }
+    safeRender();
+  });
+}
+function closureForm(tasks, d, prev){
+  const editing = !!prev;
+  const submit = `<div class="row end">${editing?'<button type="button" class="btn ghost" data-act="close-edit-cancel">Cancel</button>':''}<button class="btn" data-act="submit-closure">${editing?'Save changes':'Submit closure report'}</button></div>`;
+  if (!tasks.length) return note('No tasks to report today.') + submit;
+  return tasks.map(t=>{
+    const val = editing ? ((prev.work||{})[t.id] || '') : '', w = words(val);
+    return `<div class="crow" data-id="${t.id}">
+      <div class="ctitle">${esc(t.title)} ${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span>
+        ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
+        <span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.startDate<d?` <span class="b">${prevProgress(t,d)}% before today</span>`:''}</div>
+      ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
+      <label class="f" style="margin-top:8px">What did you do? If it isn't finished, what is left and why?<textarea rows="3" class="wt" placeholder="e.g. Sent the revised quotation to the client and confirmed delivery date. Waiting for their PO.">${esc(val)}</textarea></label>
+      <div class="wc ${w>=MIN_WORK_WORDS?'ok':''}"><span class="wcn">${w}</span> / ${MIN_WORK_WORDS} words minimum</div>
+      <div class="err" hidden></div>
+    </div>`;
+  }).join('') + submit;
+}
+function aiResultBlock(owner, d){
+  const c = db.closures[owner+'|'+d]; if (!c) return '';
+  if (!c.ai || c.ai.status!=='done') return `<div class="ai-sum pend"><b>AI rating pending</b><span>The AI is rating this report. If the AI service is busy, it is rated automatically within a few minutes.</span></div>`;
+  return `<div class="ai-sum"><div class="ai-sum-h"><b>AI summary</b>${c.ai.overall!==null&&c.ai.overall!==undefined?`<span class="ai-pct">${c.ai.overall}% overall</span>`:''}</div><p>${esc(c.ai.summary)}</p>
+    <div class="hint" style="margin:0">Rated by AI ${fmtStamp(c.ai.at)}${c.edits?` · edited ${c.edits} time${c.edits===1?'':'s'}`:''}. Percentages are set by the AI only.</div></div>`;
+}
+/* Day / morning-plan summaries (collection "aisum", id "<person>|<date>") */
+const planHash = (id, d) => activeTasks(id, d).map(t=>t.id+':'+t.title+':'+t.priority).join('|');
+function daySumHtml(id, d){
+  const c = db.closures[id+'|'+d];
+  if (c && c.ai && c.ai.status==='done') return `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div><p>${esc(c.ai.summary)}</p></div>`;
+  const s = db.aisum.find(x=>x.id===id+'|'+d);
+  if (s && s.text) return `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI plan summary</b>${s.hash!==planHash(id,d)?'<span class="hint" style="margin:0">updating…</span>':''}</div><p>${esc(s.text)}</p></div>`;
+  if (!activeTasks(id, d).length) return '';
+  return d===now().date && assignMode(now().mins)==='plan' ? `<div class="hint">Plans are summarised by AI after ${CONFIG.planClose}.</div>` : `<div class="hint">AI summary on its way…</div>`;
+}
+async function ensureDaySummaries(ids, d){
+  if (SUM_BUSY || !sb || !ui.authed) return;
+  const n = now(); if (d===n.date && assignMode(n.mins)==='plan') return;
+  const t = Date.now();
+  const stale = ids.filter(id=>{ if (!hasOwnReport(id)) return false; const c = db.closures[id+'|'+d]; if (c && c.ai && c.ai.status==='done') return false;
+    const h = planHash(id, d); if (!h) return false; const s = db.aisum.find(x=>x.id===id+'|'+d);
+    return (!s || s.hash!==h) && !(SUM_TRY[id+'|'+d] && t - SUM_TRY[id+'|'+d] < 120000); }).slice(0, 15);
+  if (!stale.length) return;
+  SUM_BUSY = true; stale.forEach(id=>SUM_TRY[id+'|'+d] = t);
+  try{
+    const txt = await aiAsk(`Summarise each person's work plan for ${fmtDate(d)} for their manager, in 2 to 3 plain sentences each: main focus, anything urgent or emergency, carried-over or overdue work. Do not invent anything.
+Reply with ONLY JSON: {"people":[{"id":"...","summary":"..."}]}
+${stale.map(id=>{ const u = getUser(id); return `[${id}] ${u.name}, ${u.title}:\n` + activeTasks(id, d).map(x=>`- ${x.title}${x.details?' ('+x.details.slice(0,150)+')':''} | ${x.priority} | ${x.category==='extra'?'additional':'planned'}${x.startDate<d?' | carried from '+x.startDate+', '+prevProgress(x,d)+'% done':''}${d>x.dueDate?' | OVERDUE':''}${x.assignedBy?' | from '+userName(x.assignedBy):''}`).join('\n'); }).join('\n\n')}`);
+    const j = parseJSONLoose(txt);
+    (Array.isArray(j.people)?j.people:[]).forEach(p=>{ if (!stale.includes(p.id) || !p.summary) return;
+      const id = p.id+'|'+d, rec = { id, owner:p.id, date:d, text:String(p.summary).slice(0,800), hash:planHash(p.id, d), at:new Date().toISOString() };
+      const i = db.aisum.findIndex(x=>x.id===id); if (i>=0) db.aisum[i] = rec; else db.aisum.push(rec); });
+    save(); safeRender();
+  }catch(_){ /* try again later */ }
+  finally{ SUM_BUSY = false; }
+}
+document.addEventListener('input', e=>{ if (!e.target.classList || !e.target.classList.contains('wt')) return;
+  const row = e.target.closest('.crow'), w = words(e.target.value), wc = row.querySelector('.wc'); wc.querySelector('.wcn').textContent = w; wc.classList.toggle('ok', w>=MIN_WORK_WORDS); });
+
 /* ===== Render ===== */
 function tabsFor(id){
   const t = [];
@@ -2480,6 +2612,7 @@ function render(){
   tabsEl.hidden = !ui.authed || gate;
   ensureFab(ui.authed && !gate);
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
+  SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
@@ -2491,7 +2624,7 @@ function render(){
     <button class="btn sm ghost bell" data-act="view" data-v="alerts" aria-label="Notifications">${BELL}${unread?`<span class="cnt">${unread}</span>`:''}</button>
     <button class="btn sm ghost" data-act="logout">Log out</button>`;
   flushFresh();
-  decorateSTT(); fillImgs(); document.querySelectorAll(".pchat").forEach(c=>{ c.scrollTop = c.scrollHeight; });
+  decorateSTT(); fillImgs(); if (SUM_REQ) setTimeout(()=>ensureDaySummaries(SUM_REQ.ids, SUM_REQ.d), 0); document.querySelectorAll(".pchat").forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
 
 /* ===== Actions ===== */
@@ -2596,7 +2729,7 @@ async function afterLogin(){
   render();
 }
 async function loadAll(){
-  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[] }; COLS.forEach(c=>shadow[c].clear());
+  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[] }; COLS.forEach(c=>shadow[c].clear());
   for (let from = 0; ; from += 1000){
     const { data, error } = await sb.from('records').select('collection,id,data').range(from, from+999);
     if (error){ tip('Could not load', error.message); break; }
@@ -2670,30 +2803,6 @@ function addOrSaveTask(form){
   save(); render();
 }
 
-function submitClosure(){
-  const n = now(), u = ui.user, d = n.date, k = u+'|'+d;
-  if (phaseFor(n.mins,u)!=='extra' || db.closures[k]){ alert('The closure report cannot be submitted now.'); render(); return; }
-  if (isField(u)){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
-  const rows = [...document.querySelectorAll('.crow')], out = []; let ok = true;
-  rows.forEach(row=>{
-    const v = Math.max(0, Math.min(100, Math.round(+row.querySelector('.pn').value||0)));
-    const j = row.querySelector('.jt').value.trim(), w = words(j), err = row.querySelector('.err');
-    if (v<100 && w<CONFIG.minWords){ ok=false; row.classList.add('bad'); err.hidden=false; err.textContent=`A justification of at least ${CONFIG.minWords} words is required (currently ${w}).`; }
-    else { row.classList.remove('bad'); err.hidden=true; }
-    out.push({ id:row.dataset.id, v, j });
-  });
-  if (!ok){ document.querySelector('.crow.bad')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
-  if (!confirm(`Submit your closure report to ${mgrNames(u)}? It cannot be changed afterwards.`)) return;
-  out.forEach(o=>{
-    const t = db.tasks.find(x=>x.id===o.id);
-    t.log[d] = { progress:o.v, justification:o.v<100?o.j:'' };
-    if (o.v>=100) t.completedOn = d;
-  });
-  db.closures[k] = { submittedAt:new Date().toISOString(), tasks:out.map(o=>o.id) };
-  ui.closing = false;
-  emailPeople(getUser(u).managers.concat(needsCeoReview(u) ? ceoIds() : []), `Closure report from ${userName(u)} — ${fmtDate(d)}`, out.map(o=>{ const t = db.tasks.find(x=>x.id===o.id); return `• ${t?t.title:''}: ${o.v}%${o.v<100?' — '+o.j:''}`; }).join('\n') + '\n\nPlease review it in the portal (Team reports).');
-  save(); render();
-}
 
 
 document.addEventListener('submit', e=>{
@@ -2725,6 +2834,8 @@ document.addEventListener('click', e=>{
     db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
   }
   else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (act==='close-edit'){ ui.editClosure = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
+  else if (act==='close-edit-cancel'){ ui.editClosure = false; }
   else if (aiClick(act, a)) return;
   else if (camClick(act, a)) return;
   else if (projClick(act, a)) return;
@@ -2827,7 +2938,7 @@ document.addEventListener('change', e=>{
 setInterval(()=>{
   const changed = runReminders();
   if (changed) save();
-  if (ui.authed) autoMeetingGeo();
+  if (ui.authed){ autoMeetingGeo(); retryPendingScores(); }
   if (sigNow() !== lastSig || changed || pendingRender) safeRender();
   else updateClock();
   flushFresh();
