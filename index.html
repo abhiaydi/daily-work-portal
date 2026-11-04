@@ -175,7 +175,8 @@ table.mst .pn{width:64px}
 .dgrp{border-top:1px solid var(--line);padding:8px 0}
 .tfiles{margin:6px 0}.tfile{margin:4px 0;font-size:13px}
 .linkbtn{border:0;background:none;color:var(--accent);cursor:pointer;padding:0;font:inherit;display:inline-flex;align-items:center;gap:4px;text-align:left}
-.linkbtn:hover{text-decoration:underline}.tf-add{font-size:13px;margin-top:6px}
+.linkbtn:hover{text-decoration:underline}
+.linkbtn.tf-del{color:var(--emg);font-size:12px;margin-left:8px}.tf-add{font-size:13px;margin-top:6px}
 .tbrief{margin:3px 0 0 18px;padding:6px 9px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--ink)}
 .feas{margin-top:8px;padding:9px 11px;border:1px solid var(--accent);border-radius:10px;background:var(--accent-soft);font-size:14px}
 .feas.bad{border-color:var(--emg);background:var(--emg-bg)}
@@ -3112,7 +3113,7 @@ function attachFiles(ups, taskIds, reqIds){
 }
 function filesHtml(t, compact){
   const fs = t.files || []; if (!fs.length) return '';
-  return `<div class="tfiles">${fs.map(f=>`<div class="tfile"><button type="button" class="linkbtn" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button>
+  return `<div class="tfiles">${fs.map(f=>`<div class="tfile"><button type="button" class="linkbtn" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button>${(f.by===ui.user || isMgmt(ui.user))?` <button type="button" class="linkbtn tf-del" data-act="tf-del" data-id="${esc(f.id)}" data-path="${esc(f.path)}" data-name="${esc(f.name)}" title="Remove this file">Remove</button>`:''}
     ${f.briefState==='pending'?'<span class="hint" style="margin:0"> · AI is reading it…</span>':f.brief?`<div class="tbrief"><b>AI brief:</b> ${esc(f.brief)}</div>`:''}</div>`).join('')}</div>`;
 }
 async function getTaskFile(path, name, btn){
@@ -3121,6 +3122,19 @@ async function getTaskFile(path, name, btn){
     const r = await fetch(data.signedUrl), url = URL.createObjectURL(await r.blob()), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); }
   catch(e){ tip('Could not open the file', e.message || 'Check the internet connection.'); }
   btn.disabled = false;
+}
+/* The person who attached a file (or the CEO/GM) can remove it: from storage and from every task/request that carries it. */
+async function removeTaskFile(fid, path, name, btn){
+  const holders = db.tasks.concat(db.requests).filter(x=>(x.files||[]).some(f=>f.id===fid));
+  const f = holders.length ? holders[0].files.find(x=>x.id===fid) : null;
+  if (!f || !(f.by===ui.user || isMgmt(ui.user))) return;
+  const n = db.tasks.filter(x=>(x.files||[]).some(y=>y.id===fid)).length;
+  if (!confirm(`Remove “${name}”?${n>1?` It is attached to ${n} people's copies of this task and will be removed from all of them.`:''} This cannot be undone.`)) return;
+  btn.disabled = true;
+  const r = await sb.storage.from('taskfiles').remove([path]);
+  if (r.error){ btn.disabled = false; tip('Could not remove', r.error.message); return; }
+  db.tasks.concat(db.requests).forEach(x=>{ if ((x.files||[]).some(y=>y.id===fid)) x.files = x.files.filter(y=>y.id!==fid); });
+  save(); render(); tip('Removed', `“${name}” was removed.`);
 }
 async function addFilesToTask(id, files){
   const t = db.tasks.find(x=>x.id===id); if (!t || !files.length) return;
@@ -3500,6 +3514,7 @@ document.addEventListener('click', e=>{
   else if (act==='close-edit-cancel'){ ui.editClosure = false; }
   else if (act.startsWith('feas-') && feasClick(act, a)) return;
   else if (act==='tf-get'){ getTaskFile(a.dataset.path, a.dataset.name, a); return; }
+  else if (act==='tf-del'){ removeTaskFile(a.dataset.id, a.dataset.path, a.dataset.name, a); return; }
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
   else if (chatClick(act, a)) return;
   else if (mydClick(act, a)) return;
