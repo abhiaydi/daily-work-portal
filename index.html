@@ -2667,15 +2667,21 @@ const MIN_WORK_WORDS = 5;
 let SUM_REQ = null, SUM_BUSY = false, SCORE_BUSY = {};
 const SUM_TRY = {};
 function closureEditable(owner, d){ const c = db.closures[owner+'|'+d]; return !!c && !c.review && owner===ui.user && d===now().date; }
+function filesForScore(t, d){
+  const fs = (t.files||[]).filter(f=>String(f.at||'').slice(0,10) <= d);
+  if (!fs.length) return '';
+  return '\nAttached files:\n' + fs.slice(-5).map(f=>`- ${f.name}: ${f.briefState==='done' && f.brief ? String(f.brief).replace(/"/g,"'").slice(0,600) : 'attached, but the AI could not read it yet'}`).join('\n');
+}
 function scorePrompt(owner, d, items){
   const u = getUser(owner);
   return `You assess a staff member's end-of-day work report for a UAE manufacturing company. For each task, judge how much of the task's objective is complete now, as a CUMULATIVE percentage of the whole task (not just today's share), using ONLY what the employee wrote.
-Guidance: if they clearly say it is finished and describe the result, give 100. Partial work gets a proportional score. Vague or unsupported claims ("worked on it") get a cautious score. Never go below the progress already recorded before today unless the employee says work was undone. Use multiples of 5.
-Reply with ONLY JSON: {"tasks":[{"id":"<task id>","pct":0,"note":"one short sentence explaining the score"}],"summary":"3 to 5 sentences summarising the day for the manager: what was achieved, what is pending and why, anything needing attention"}
+Guidance: if they clearly say it is finished and describe the result, give 100.
+Attached files: where a task has files, the AI brief of each file is given. Use them as evidence: a file that shows the claimed result (e.g. the sent quotation, a completed sheet, a signed document) supports the score; if the file contradicts the report or does not show the work, score cautiously and say so. Mention the file in the note when it affected the score. Partial work gets a proportional score. Vague or unsupported claims ("worked on it") get a cautious score. Never go below the progress already recorded before today unless the employee says work was undone. Use multiples of 5.
+Reply with ONLY JSON: {"tasks":[{"id":"<task id>","pct":0,"note":"one or two short sentences explaining the score, including what the attached files show if any"}],"summary":"3 to 5 sentences summarising the day for the manager: what was achieved (and what the attached files confirm), what is pending and why, anything needing attention"}
 Employee: ${u.name}, ${u.title}. Date: ${fmtDate(d)}.
 Tasks:
 ${items.map(({t,work})=>`[${t.id}] ${t.title}${t.details?' — '+t.details:''} | ${t.priority}, ${t.category==='extra'?'additional work':'planned'} | day ${diffDays(t.startDate,d)+1} of ${t.days} | progress before today: ${prevProgress(t,d)}%${t.assignedBy?' | assigned by '+userName(t.assignedBy):''}
-Employee wrote: "${String(work||'').replace(/"/g,"'").slice(0,1500)}"`).join('\n')}`;
+Employee wrote: "${String(work||'').replace(/"/g,"'").slice(0,1500)}"${filesForScore(t, d)}`).join('\n')}`;
 }
 async function aiScoreClosure(k){
   const c = db.closures[k]; if (!c || SCORE_BUSY[k]) return false;
@@ -2693,7 +2699,7 @@ async function aiScoreClosure(k){
     let sum = 0;
     items.forEach(({t,work})=>{
       const pct = Math.max(0, Math.min(100, Math.round((+res[t.id].pct)/5)*5)); sum += pct;
-      t.log[d] = { progress:pct, justification:work||'', aiNote:String(res[t.id].note||'').slice(0,300) };
+      t.log[d] = { progress:pct, justification:work||'', aiNote:String(res[t.id].note||'').slice(0,400), ...((t.files||[]).length?{ filesSeen:(t.files||[]).filter(f=>f.briefState==='done').length }:{}) };
       if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
     });
     const overall = Math.round(sum/items.length), was = c.ai && c.ai.status;
@@ -2717,6 +2723,7 @@ async function retryPendingScores(){
   if (!ks.length) return; RETRY_BUSY = true;
   for (const k of ks){ await aiScoreClosure(k); } RETRY_BUSY = false; safeRender();
 }
+const BRIEF_WAIT = [];
 async function submitClosure(){
   const n = now(), u = ui.user, d = n.date, k = u+'|'+d, prev = db.closures[k], editing = !!prev;
   if (editing ? !closureEditable(u, d) : (phaseFor(n.mins,u)!=='extra')){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
@@ -2737,7 +2744,7 @@ async function submitClosure(){
     const btn = document.querySelector('#closureCard [data-act="submit-closure"]'), old = btn ? btn.textContent : '';
     if (btn){ btn.disabled = true; btn.textContent = `Uploading ${nFiles} file${nFiles===1?'':'s'}…`; }
     try{
-      for (const x of picked){ const ups = await uploadTaskFiles(x.files); attachFiles(ups, [x.id]);
+      for (const x of picked){ const ups = await uploadTaskFiles(x.files); BRIEF_WAIT.push(attachFiles(ups, [x.id]));
         const t = db.tasks.find(y=>y.id===x.id); if (t && t.assignedBy && t.assignedBy!==u) notify(t.assignedBy, `${userName(u)} attached ${ups.length} file(s) to “${t.title}” with the closure report.`, nowAbs(), null); }
     }catch(e){ if (btn){ btn.disabled = false; btn.textContent = old; } alert('Upload failed: ' + e.message + '\n\nThe report was not submitted. Please try again.'); return; }
   }
@@ -2747,7 +2754,9 @@ async function submitClosure(){
   db.closures[k] = Object.assign({}, prev||{}, { submittedAt: prev ? prev.submittedAt : new Date().toISOString(), tasks:ids, work, ai:{ status:'pending' },
     ...(editing ? { edits:(prev.edits||0)+1, editedAt:new Date().toISOString() } : {}) });
   ui.closing = false; ui.editClosure = false; save(); render();
-  aiScoreClosure(k).then(done=>{
+  const waits = BRIEF_WAIT.splice(0);
+  if (waits.length) tip('Reading your files', 'The AI is reading the attached files before rating your report.');
+  Promise.race([Promise.all(waits), new Promise(r=>setTimeout(r, 90000))]).then(()=>aiScoreClosure(k)).then(done=>{
     if (!done){ emailPeople(getUser(u).managers.concat(needsCeoReview(u) ? ceoIds() : []), `${editing?'Updated closure':'Closure'} report from ${userName(u)} — ${fmtDate(d)} (AI rating pending)`,
       ids.map(id=>{ const t = db.tasks.find(x=>x.id===id); return `• ${t?t.title:''}: ${work[id]}`; }).join('\n') + '\n\nThe AI rating will be added automatically. Please review it in the portal (Team reports).');
       tip('Report saved', 'The AI could not rate it just now. It will be rated automatically in a few minutes.'); }
@@ -3207,12 +3216,12 @@ function attachFiles(ups, taskIds, reqIds){
   (reqIds||[]).forEach(id=>{ const r = db.requests.find(x=>x.id===id); if (r) r.files = (r.files||[]).concat(recs.map(x=>({ ...x }))); });
   save();
   const task = db.tasks.find(x=>x.id===taskIds[0]) || db.requests.find(x=>x.id===(reqIds||[])[0]) || { title:'' };
-  ups.forEach(async u=>{
+  return Promise.all(ups.map(async u=>{
     let brief = '', st = 'done';
     try{ brief = await briefFor(u.file, task); }catch(e){ brief = ''; st = 'failed'; }
     const set = list => list.forEach(x=>(x.files||[]).forEach(f=>{ if (f.id===u.rec.id){ f.brief = brief; f.briefState = st; } }));
     set(db.tasks); set(db.requests); save(); safeRender();
-  });
+  }));
 }
 function filesHtml(t, compact){
   const fs = t.files || []; if (!fs.length) return '';
@@ -3254,6 +3263,8 @@ async function retryFailedBriefs(){
       const brief = await briefFor(file, task);
       db.tasks.concat(db.requests).forEach(x=>(x.files||[]).forEach(y=>{ if (y.id===f.id){ y.brief = brief; y.briefState = 'done'; } }));
       save(); safeRender();
+      const ck = Object.keys(db.closures).find(k=>{ const c = db.closures[k]; return k.startsWith(ui.user+'|') && (c.tasks||[]).includes(task.id) && !c.review && closureEditable(ui.user, k.split('|')[1]); });
+      if (ck) aiScoreClosure(ck).then(()=>safeRender());
     }catch(_){ /* try again later */ }
   }
   BRIEF_BUSY = false;
