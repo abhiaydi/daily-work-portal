@@ -127,3 +127,14 @@ do $$ begin
   begin alter publication supabase_realtime add table public.records;   exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.locations; exception when duplicate_object then null; end;
 end $$;
+
+-- Projects: Google Drive folder ids and the text read from uploaded files.
+-- Server only: row-level security is on with no policies, so the browser cannot read these.
+create table if not exists public.drive_folders (
+  key text primary key, folder_id text not null, url text, name text, created_at timestamptz not null default now());
+create table if not exists public.project_file_text (
+  file_id text primary key, project_id text not null, text text not null, created_at timestamptz not null default now());
+create index if not exists project_file_text_project on public.project_file_text(project_id);
+alter table public.drive_folders enable row level security;
+alter table public.project_file_text enable row level security;
+revoke all on public.drive_folders, public.project_file_text from anon, authenticated;

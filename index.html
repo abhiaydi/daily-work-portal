@@ -123,6 +123,41 @@ a{color:var(--accent)}
 .note svg{flex:none}
 .note.bad{background:var(--emg-bg);color:var(--emg);border-color:transparent}
 .empty{color:var(--muted);font-size:14px;padding:6px 0}
+.gantt{margin:8px 0 12px;font-size:12px}
+.g-row{display:grid;grid-template-columns:minmax(90px,30%) 1fr;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line)}
+.g-lab{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-trk{position:relative;height:18px;background:var(--lock-bg);border-radius:6px}
+.g-bar{position:absolute;top:0;bottom:0;border-radius:6px;background:var(--accent-soft);border:1px solid var(--accent);overflow:hidden;box-sizing:border-box}
+.g-bar i{display:block;height:100%;background:var(--accent)}
+.g-bar.late{border-color:var(--emg)}.g-bar.late i{background:var(--emg)}.g-bar.done{border-color:var(--ok)}.g-bar.done i{background:var(--ok)}
+.g-today{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--brand)}
+.g-axis{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin:4px 0 0 calc(30% + 8px)}.g-tl{color:var(--brand)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;background:var(--accent-soft);color:var(--ink);font-size:13px}
+.chip button{border:0;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:0 0 0 4px}
+.chip small{color:var(--muted)}
+.pchat{max-height:440px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px;margin-bottom:10px}
+.msg{max-width:85%;padding:8px 12px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--accent-soft);border-color:transparent}
+.msg.ai{border-color:var(--accent);border-left-width:3px}
+.msg small{display:block;color:var(--muted);font-size:11px;margin-bottom:2px;white-space:normal}
+.msg.sys{align-self:center;background:none;border:0;color:var(--muted);font-size:12px;padding:2px}
+.fchip{margin:6px 6px 0 0;display:inline-flex;gap:4px;align-items:center;white-space:normal;text-align:left}
+.ffold{margin:14px 0 4px;font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.frow{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 0 8px 24px;border-top:1px solid var(--line);flex-wrap:wrap}
+.frow .fn{min-width:0;flex:1 1 220px;overflow-wrap:anywhere}
+.upl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;cursor:pointer}
+.upl input{position:absolute;width:1px;height:1px;opacity:0}
+.upl input:focus-visible + .btn{outline:2px solid var(--brand);outline-offset:2px}
+.tblwrap{overflow-x:auto;max-width:100%}
+table.mst{width:100%;border-collapse:collapse;font-size:13px}
+table.mst th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.mst td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.mst tr.late td:first-child{color:var(--emg)}
+table.mst .pn{width:64px}
+.sum-h{cursor:pointer;list-style:revert}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.b.proj{background:var(--accent-soft);color:var(--accent)}
 .ok-msg{background:var(--ok-bg);color:var(--ok);border-radius:var(--r-s);padding:10px 12px;font-size:14px;margin-bottom:12px;font-weight:600}
 .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
 
@@ -500,8 +535,8 @@ function load(key, fallback){ try{ const v = localStorage.getItem(key); return v
 function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
 
 /* ===== Shared data: Supabase database (table "records") ===== */
-const COLS = ['tasks','closures','meetings','notifications','checkins','requests'];
-let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[] };
+const COLS = ['tasks','closures','meetings','notifications','checkins','requests','projects','pchat','pfiles'];
+let db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[] };
 let ui = load(UI_KEY, null) || { view:'staff', reviewDate:null };
 ui.user = null; ui.authed = false; ui.editing = null;
 let sb = null, LOCS = {}, booting = true, saveErrShown = false;
@@ -609,6 +644,7 @@ function taskCard(t, n, showOwner){
       ${priBadge(t.priority)}
       <span class="b">${t.category==='extra'?'Additional work':'Planned'}</span>
       ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
+      ${t.projectId && projById(t.projectId)?`<span class="b proj">Project: ${esc(projById(t.projectId).name)}</span>`:''}
       ${t.approvedBy?`<span class="b">${t.delegatedFrom?'Passed on':'Approved'} by ${esc(userName(t.approvedBy))}</span>`:''}
       ${t.check?`<span class="b ${t.check.ok?'':'emg'}">${t.check.ok?'Marked done':'Marked not done'} by ${esc(userName(t.check.by))}</span>`:''}
       <span class="b">Day ${dayN} of ${t.days}</span>
@@ -619,6 +655,10 @@ function taskCard(t, n, showOwner){
   </div>`;
 }
 
+function projSelect(t){
+  const ps = myProjects(ui.user).filter(p=>p.status!=='completed' || (t && t.projectId===p.id)); if (!ps.length) return '';
+  return `<label class="f">Project (optional)<select name="project" class="sel"><option value="">— not part of a project —</option>${ps.map(p=>`<option value="${p.id}" ${t&&t.projectId===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>`;
+}
 /* kind: 'self' or 'assign'; mode: 'plan' or 'extra' */
 function taskForm(kind, mode){
   const pri = mode==='plan' ? PLAN_PRI : EXTRA_PRI;
@@ -633,6 +673,7 @@ function taskForm(kind, mode){
       : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to', 'Type a name or a letter, e.g. G')}</div>`) : ''}
     <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
+    ${projSelect(t)}
     <div class="row">
       <fieldset class="f"><legend>Priority</legend><div class="seg">
         ${pri.map((p,i)=>`<label><input type="radio" name="priority" value="${p}" ${(t?t.priority===p:i===0)?'checked':''}><span>${p}</span></label>`).join('')}
@@ -1546,6 +1587,7 @@ function dashView(n){
   let h = `<section class="card finder-card"><div class="sec-h" style="border-bottom:0;padding-bottom:0;margin-bottom:10px"><h2>Find a person</h2><span class="hint" style="margin:0">Type any letter. Names starting with it come first, then names containing it.</span></div>
     ${picker('dPerson', people, selP?selP.id:'', '', 'Type a name or a letter, e.g. G')}
     ${selP?`<div class="selp"><span class="b asg">Showing ${esc(selP.name)} · ${esc(selP.title)}</span><button class="btn sm ghost" data-act="dperson-clear">Show everyone</button></div>`:''}</section>`;
+  h += projectsDashCard(n);
   h += `<section class="card"><div class="sec-h"><h2>AI summary</h2><button class="btn sm ghost" data-act="ai-summary">Summarise with AI</button></div><div class="ai-out" id="aiSum" hidden></div><p class="hint" style="margin:0">A short written summary of today: who needs attention, emergencies, overdue work and sales meetings.</p></section>`;
   h += `<section class="card"><div class="sec-h"><h2>${getUser(me).role==='CEO'?'Company':'Team'} dashboard</h2>
       <span class="hint" style="margin:0">${people.length} people · ${fmtDate(d)}${isToday?' · '+n.label:''}</span></div>
@@ -1630,15 +1672,16 @@ function dashView(n){
 function makeTask(owner, by, f, mode, extra){
   const n = now(), cat = mode==='plan' ? 'planned' : 'extra';
   const t = Object.assign({ id:uid(), owner, assignedBy:by, category:cat, priority:f.priority, title:f.title, details:f.details||'', days:f.days,
-    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, extra||{});
+    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, f.projectId?{projectId:f.projectId}:{}, extra||{});
   db.tasks.push(t);
+  const pj = f.projectId && projById(f.projectId); if (pj && !isMgmt(owner)) addMembers(pj, [owner]);
   emailPeople([owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(by)}`, `${userName(by)} assigned you: ${f.title}\nPriority: ${f.priority}\nDuration: ${f.days} day(s)${f.details?'\nDetails: '+f.details:''}${extra&&extra.approvedBy?`\n${extra.delegatedFrom?'Passed on':'Approved'} by ${userName(extra.approvedBy)}`:''}`);
   return t;
 }
 function sendRequest(me, owner, f){
   const up = isGm(owner), at = nowAbs();
   db.requests.push({ id:uid(), from:me, to:owner, kind: up?'up':'approval', title:f.title, details:f.details||'', priority:f.priority, days:f.days,
-    byVoice:!!f.byVoice, status:'pending', createdAt:new Date().toISOString(), date:now().date });
+    byVoice:!!f.byVoice, projectId:f.projectId||'', status:'pending', createdAt:new Date().toISOString(), date:now().date });
   const gms = up ? [owner] : gmIds();
   const txt = up ? `${userName(me)} has sent you a task: ${f.title}. Accept it, pass it to their team, or decline it.`
                  : `${userName(me)} wants to assign a task to ${userName(owner)}: ${f.title}. Approve or decline it.`;
@@ -1711,7 +1754,7 @@ function decideRequest(kind, form){
   const err = form.querySelector('.err'), fail = m => { err.hidden=false; err.textContent=m; };
   if (!r || r.status!=='pending' || !isGm(me)) { render(); return; }
   const pri = form.querySelector('.rq-pri').value, reason = form.querySelector('.rq-reason').value.trim(), at = nowAbs();
-  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice };
+  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice, projectId:r.projectId||'' };
   const done = (status, extra) => { Object.assign(r, { status, decidedBy:me, decidedAt:new Date().toISOString() }, extra||{}); save(); render(); };
   if (kind==='reject'){
     if (reason.split(/\s+/).filter(Boolean).length < 2) return fail('Write a short reason (a few words) before declining.');
@@ -1747,6 +1790,291 @@ function handleNotDone(form){
   save(); render();
 }
 
+/* ===== Projects ===== */
+const isMgmt = id => DASH_ROLES.includes(getUser(id).role);
+const projById = id => db.projects.find(p=>p.id===id);
+const canSeeProject = (p, id) => !!p && p.status!=='deleted' && (p.owner===id || (p.members||[]).includes(id) || isMgmt(id));
+const canManageProject = (p, id) => !!p && (p.owner===id || isMgmt(id));
+const myProjects = id => db.projects.filter(p=>canSeeProject(p, id));
+const projPeople = p => [p.owner].concat((p.members||[]).filter(x=>x!==p.owner));
+const projTasks = p => db.tasks.filter(t=>t.projectId===p.id);
+const taskProg = (t, d) => t.completedOn ? 100 : progOn(t, d);
+let DRIVE = null, UPL = {}, AIBUSY = {};
+function projProgress(p, d){
+  const ms = p.milestones||[];
+  if (ms.length) return Math.round(ms.reduce((s,m)=>s+(m.progress||0),0)/ms.length);
+  const ts = projTasks(p); return ts.length ? Math.round(ts.reduce((s,t)=>s+taskProg(t,d),0)/ts.length) : 0;
+}
+function projHealth(p, d){
+  if (p.status==='completed') return pill('open','Completed');
+  if (p.status==='on hold') return pill('soon','On hold');
+  const late = (p.milestones||[]).filter(m=>m.due && m.due<d && (m.progress||0)<100).length;
+  if (late) return pill('miss', `${late} milestone${late>1?'s':''} late`);
+  if (p.end && p.end<d && projProgress(p,d)<100) return pill('miss','Past end date');
+  return pill('open','On track');
+}
+function gantt(p, today){
+  const ms = (p.milestones||[]).filter(m=>m.start||m.due); if (!ms.length) return '';
+  const ds = [p.start, p.end, ...ms.flatMap(m=>[m.start, m.due])].filter(Boolean).sort();
+  let a = ds[0], b = ds[ds.length-1]; if (a===b) b = addDays(a,1);
+  const span = diffDays(a,b)+1, pos = d => Math.max(0, Math.min(100, diffDays(a,d)/span*100));
+  const tp = today>=a && today<=b ? pos(today) : null;
+  return `<div class="gantt">${ms.slice().sort((x,y)=>(x.start||x.due).localeCompare(y.start||y.due)).map(m=>{
+    const s = m.start||m.due, e = m.due||m.start, l = pos(s), w = Math.max(1.5, (diffDays(s,e)+1)/span*100), pr = m.progress||0;
+    return `<div class="g-row"><div class="g-lab" title="${esc(m.title)}">${esc(m.title)}</div><div class="g-trk"><div class="g-bar ${e<today&&pr<100?'late':''} ${pr>=100?'done':''}" style="left:${l}%;width:${Math.min(w,100-l)}%"><i style="width:${pr}%"></i></div>${tp!==null?`<span class="g-today" style="left:${tp}%"></span>`:''}</div></div>`; }).join('')}
+    <div class="g-axis"><span>${fmtShort(a)}</span>${tp!==null?'<span class="g-tl">Today</span>':''}<span>${fmtShort(b)}</span></div></div>`;
+}
+function projLine(p, n){
+  const pr = projProgress(p, n.date), next = (p.milestones||[]).filter(m=>(m.progress||0)<100).sort((x,y)=>(x.due||'9').localeCompare(y.due||'9'))[0];
+  return `<div class="crow"><div class="sec-h"><div class="ctitle">${esc(p.name)} <span class="b">by ${esc(userName(p.owner))}</span> <span class="b">${projPeople(p).length} people</span>${p.end?` <span class="b">ends ${fmtShort(p.end)}</span>`:''}</div>${projHealth(p, n.date)}</div>
+    ${bar(pr,'Progress')}${next?`<div class="hint" style="margin:6px 0 0">Next: ${esc(next.title)}${next.due?' · due '+fmtShort(next.due):''}${next.owner?' · '+esc(userName(next.owner)):''}</div>`:''}
+    <div class="row end" style="margin-top:8px"><button class="btn sm" data-act="proj-open" data-id="${p.id}">Open</button></div></div>`;
+}
+function projectsDashCard(n){
+  const ps = db.projects.filter(p=>p.status!=='deleted').sort((a,b)=>(a.status==='completed')-(b.status==='completed') || (a.end||'9').localeCompare(b.end||'9'));
+  return `<section class="card"><div class="sec-h"><h2>Projects</h2>${pill('open', `${ps.filter(p=>p.status!=='completed').length} active`)}</div>
+    ${ps.length ? ps.map(p=>projLine(p,n)).join('') : note('No projects yet. Anyone can start one from the Projects tab.')}</section>`;
+}
+const chipsHtml = (ids, pid) => ids.map(id=>`<span class="chip">${esc(userName(id))}<button type="button" data-act="pm-del" data-id="${id}"${pid?` data-pid="${pid}"`:''} aria-label="Remove ${esc(userName(id))}">×</button></span>`).join('');
+function projectsView(n){
+  const me = ui.user, p = ui.proj && projById(ui.proj);
+  if (p && canSeeProject(p, me)) return projectDetail(p, n);
+  ui.proj = null;
+  const ps = myProjects(me).sort((a,b)=>(a.status==='completed')-(b.status==='completed') || (a.end||'9').localeCompare(b.end||'9'));
+  ui.newMembers = ui.newMembers || [];
+  let h = `<section class="card"><div class="sec-h"><h2>Projects</h2>${pill('open', `${ps.length} project${ps.length===1?'':'s'}`)}</div>
+    <p class="hint" style="margin-top:0">${isMgmt(me)?'You can see every project in the company.':'Projects you started or are part of.'} Link your daily or additional tasks to a project when you add them, and the project shows that work.</p>
+    ${ps.length ? ps.map(p=>projLine(p,n)).join('') : note('No projects yet. Start one below.')}</section>`;
+  h += `<section class="card"><details ${ps.length?'':'open'}><summary class="sum-h"><h2 style="display:inline">Start a new project</h2></summary>
+    <form class="projf" novalidate style="margin-top:12px">
+      <label class="f grow">Project name<input name="name" maxlength="100" placeholder="e.g. New coating line — Jebel Ali"></label>
+      <label class="f">What is it about?<textarea name="desc" rows="3" placeholder="Goal, scope, client, budget…"></textarea></label>
+      <div class="row"><label class="f">Start date<input type="date" name="start" value="${n.date}"></label><label class="f">Target end date<input type="date" name="end"></label></div>
+      <div class="f">People involved<div class="chips" id="newChips">${chipsHtml(ui.newMembers)}</div>
+        <div class="row" style="align-items:flex-end"><div style="flex:1;min-width:200px">${picker('pmAdd', USERS.filter(u=>u.id!==me), '', 'Add a person', 'Type a name or a letter')}</div><button type="button" class="btn ghost" data-act="pm-add">Add</button></div></div>
+      <div class="err" hidden></div>
+      <div class="row end"><button class="btn">Create project</button></div>
+      <p class="hint">After creating it you can build the schedule (or let AI suggest one), upload files and chat with the team.</p>
+    </form></details></section>`;
+  return h;
+}
+function projectDetail(p, n){
+  const me = ui.user, mg = canManageProject(p, me), d = n.date, pr = projProgress(p, d), ppl = projPeople(p);
+  if (DRIVE===null){ DRIVE = 'loading'; sb.functions.invoke('drive', { body:{ action:'status' } }).then(r=>{ DRIVE = (r.data && !r.error) ? r.data : { drive:false, ai:false }; render(); }).catch(()=>{ DRIVE = { drive:false, ai:false }; render(); }); }
+  let h = `<div class="row" style="margin-bottom:10px"><button class="btn sm ghost" data-act="proj-back">← All projects</button></div>`;
+  /* header */
+  h += `<section class="card"><div class="sec-h"><h2>${esc(p.name)}</h2>${projHealth(p, d)}</div>
+    ${p.description?`<p style="margin-top:0;white-space:pre-wrap">${esc(p.description)}</p>`:''}
+    <div class="badges"><span class="b asg">Owner: ${esc(userName(p.owner))}</span>${p.start?`<span class="b">Start ${fmtShort(p.start)}</span>`:''}${p.end?`<span class="b">Target ${fmtShort(p.end)}</span>`:''}<span class="b">Status: ${esc(p.status||'active')}</span></div>
+    ${bar(pr, 'Overall progress')}
+    <div class="f" style="margin-top:12px">People involved<div class="chips">${ppl.map(id=>`<span class="chip">${esc(userName(id))}${id===p.owner?' <small>(owner)</small>':''}${mg&&id!==p.owner?`<button type="button" data-act="pm-del" data-id="${id}" data-pid="${p.id}" aria-label="Remove">×</button>`:''}</span>`).join('')}</div></div>
+    ${mg?`<div class="row" style="align-items:flex-end"><div style="flex:1;min-width:200px">${picker('pmAdd', USERS.filter(u=>!ppl.includes(u.id)), '', 'Add a person', 'Type a name or a letter')}</div><button type="button" class="btn ghost" data-act="pm-add" data-pid="${p.id}">Add to project</button></div>
+    <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Edit project details</summary>
+      <form class="projedit" data-id="${p.id}" novalidate style="margin-top:8px">
+        <label class="f grow">Project name<input name="name" maxlength="100" value="${esc(p.name)}"></label>
+        <label class="f">What is it about?<textarea name="desc" rows="3">${esc(p.description)}</textarea></label>
+        <div class="row"><label class="f">Start date<input type="date" name="start" value="${p.start||''}"></label><label class="f">Target end date<input type="date" name="end" value="${p.end||''}"></label>
+          <label class="f">Status<select name="status" class="sel">${['active','on hold','completed'].map(s=>`<option ${s===(p.status||'active')?'selected':''}>${s}</option>`).join('')}</select></label></div>
+        <div class="row end" style="justify-content:space-between"><button type="button" class="btn sm ghost danger" data-act="proj-del" data-id="${p.id}">Delete project</button><button class="btn">Save</button></div>
+      </form></details>`:''}</section>`;
+
+  /* schedule */
+  const ms = (p.milestones||[]).slice().sort((x,y)=>(x.due||'9').localeCompare(y.due||'9'));
+  h += `<section class="card"><div class="sec-h"><h2>Schedule</h2>${mg?`<button class="btn sm ghost" data-act="ms-ai" data-id="${p.id}">Suggest a schedule with AI</button>`:''}</div>
+    ${gantt(p, d) || note(mg?'No milestones yet. Add the main steps below, or let AI suggest a schedule from the project description.':'No schedule yet.')}`;
+  const sug = (ui.msSug||{})[p.id];
+  if (sug && sug.length) h += `<div class="crow"><b>AI suggestion</b> <span class="hint">(check it before adding)</span>
+    <ul style="margin:6px 0 8px;padding-left:20px">${sug.map(m=>`<li>${esc(m.title)} — ${m.start?fmtShort(m.start):'?'} to ${m.due?fmtShort(m.due):'?'}${m.owner?' · '+esc(userName(m.owner)):''}</li>`).join('')}</ul>
+    <div class="row end"><button class="btn sm ghost" data-act="ms-sug-clear" data-id="${p.id}">Discard</button><button class="btn sm" data-act="ms-sug-add" data-id="${p.id}">Add all to schedule</button></div></div>`;
+  if (ms.length) h += `<div class="tblwrap"><table class="mst"><thead><tr><th>Milestone</th><th>Owner</th><th>Dates</th><th>Done</th><th></th></tr></thead><tbody>${ms.map(m=>{
+    const can = mg || m.owner===me, late = m.due && m.due<d && (m.progress||0)<100;
+    return `<tr class="${late?'late':''}"><td>${esc(m.title)}${late?' <span class="b emg">Late</span>':''}</td><td>${esc(m.owner?userName(m.owner):'—')}</td><td>${m.start?fmtShort(m.start):'?'} → ${m.due?fmtShort(m.due):'?'}</td>
+      <td>${can?`<input type="number" class="pn ms-pn" min="0" max="100" step="5" value="${m.progress||0}" data-id="${m.id}" aria-label="Percent done">%`:`${m.progress||0}%`}</td>
+      <td class="acts">${can?`<button class="btn sm ghost" data-act="ms-save" data-pid="${p.id}" data-id="${m.id}">Save</button>`:''}${mg?`<button class="btn sm ghost danger" data-act="ms-del" data-pid="${p.id}" data-id="${m.id}" aria-label="Delete milestone">×</button>`:''}</td></tr>`; }).join('')}</tbody></table></div>`;
+  if (mg) h += `<form class="msf" data-id="${p.id}" novalidate style="margin-top:12px"><h3 class="sub" style="margin-top:0">Add a milestone</h3>
+    <label class="f grow">Milestone<input name="title" maxlength="120" placeholder="e.g. Machine delivered to site"></label>
+    <div class="row"><label class="f">Owner<select name="owner" class="sel"><option value="">—</option>${ppl.map(id=>`<option value="${id}">${esc(userName(id))}</option>`).join('')}</select></label>
+      <label class="f">Start<input type="date" name="start" value="${d}"></label><label class="f">Due<input type="date" name="due"></label></div>
+    <div class="err" hidden></div><div class="row end"><button class="btn">Add milestone</button></div></form>`;
+  h += `</section>`;
+
+  /* linked tasks */
+  const ts = projTasks(p).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+  h += `<section class="card"><div class="sec-h"><h2>Daily work on this project</h2>${pill('open', `${ts.length} task${ts.length===1?'':'s'}`)}</div>
+    ${ts.length ? `<div class="tblwrap"><table class="mst"><thead><tr><th>Task</th><th>Person</th><th>Type</th><th>Started</th><th>Progress</th></tr></thead><tbody>${ts.slice(0,60).map(t=>{ const pv = taskProg(t,d);
+      return `<tr><td>${esc(t.title)}</td><td>${esc(userName(t.owner))}</td><td>${t.category==='extra'?'Additional':'Planned'} · ${esc(t.priority)}</td><td>${fmtShort(t.startDate)}</td><td class="pct ${pv>=100?'full':'part'}">${pv}%</td></tr>`; }).join('')}</tbody></table></div>`
+      : note('No tasks linked yet. When anyone adds a task in My day, or a manager assigns one, they can choose this project.')}</section>`;
+
+  /* files */
+  const fs = db.pfiles.filter(f=>f.projectId===p.id), folders = [...new Set(fs.map(f=>f.folder))].sort();
+  const dr = DRIVE && DRIVE!=='loading' ? DRIVE : null;
+  h += `<section class="card"><div class="sec-h"><h2>Files</h2>${fs[0]&&fs[0].projectFolderUrl?`<a class="btn sm ghost" href="${esc(fs[0].projectFolderUrl)}" target="_blank" rel="noopener">Open in Google Drive</a>`:''}</div>`;
+  if (dr && !dr.drive) h += note('Google Drive is not connected yet, so files cannot be uploaded. The administrator needs to add the Google keys (see the setup guide).', false, true);
+  else h += `<label class="upl"><input type="file" class="pf-in" data-id="${p.id}" multiple ${!dr?'disabled':''}><span class="btn ghost">Upload files</span><span class="hint" style="margin:0">PDF, Word, Excel, PowerPoint, photos… up to 25 MB each. AI gives each file a clear name and puts it in the right folder in Google Drive.</span></label>
+    <div id="upl" class="hint" ${UPL[p.id]?'':'hidden'}>${esc(UPL[p.id]||'')}</div>`;
+  if (!fs.length) h += `<div class="empty">No files yet.</div>`;
+  folders.forEach(fo=>{ const inF = fs.filter(f=>f.folder===fo).sort((a,b)=>b.at.localeCompare(a.at));
+    h += `<div class="ffold">${FOLDER_IC}<span>${esc(fo)}</span><span class="b">${inF.length}</span>${inF[0].folderUrl?`<a class="hint" href="${esc(inF[0].folderUrl)}" target="_blank" rel="noopener" style="margin:0">open folder</a>`:''}</div>`
+      + inF.map(f=>`<div class="frow"><div class="fn"><b>${esc(f.name)}</b>${f.summary?`<div class="hint" style="margin:2px 0 0">${esc(f.summary)}</div>`:''}<div class="hint" style="margin:2px 0 0">${esc(userName(f.by))} · ${fmtShort(f.at.slice(0,10))}${f.original&&f.original!==f.name?` · was “${esc(f.original)}”`:''}${f.readable===false?' · AI could not read the contents':''}</div></div>
+        <div class="acts"><button class="btn sm ghost" data-act="pf-get" data-id="${f.id}">Download</button>${f.url?`<a class="btn sm ghost" href="${esc(f.url)}" target="_blank" rel="noopener">Drive</a>`:''}${(f.by===me||mg)?`<button class="btn sm ghost danger" data-act="pf-del" data-id="${f.id}">Remove</button>`:''}</div></div>`).join(''); });
+  h += `</section>`;
+
+  /* chat + AI */
+  const msgs = db.pchat.filter(m=>m.projectId===p.id).sort((a,b)=>a.at.localeCompare(b.at)).slice(-150);
+  h += `<section class="card"><div class="sec-h"><h2>Project chat</h2><span class="hint" style="margin:0">Everyone in the project, the GM and the CEO can read this</span></div>
+    <div class="pchat">${msgs.length ? msgs.map(m=>{
+      if (m.sys) return `<div class="msg sys">${esc(userName(m.by))} ${esc(m.text)} · ${fmtTime(m.at)}</div>`;
+      const fl = (m.files||[]).map(id=>db.pfiles.find(f=>f.id===id)).filter(Boolean);
+      return `<div class="msg ${m.ai?'ai':m.by===me?'me':''}"><small>${m.ai?`AI assistant · asked by ${esc(userName(m.by))}`:esc(userName(m.by))}${m.toAi?' → AI':''} · ${fmtTime(m.at)}</small>${esc(m.text)}${fl.length?`<div>${fl.map(f=>`<button class="btn sm ghost fchip" data-act="pf-get" data-id="${f.id}">${FILE_IC}${esc(f.name)}</button>`).join('')}</div>`:''}</div>`; }).join('') : '<div class="empty">No messages yet. Say hello, or ask the AI about this project.</div>'}
+      ${AIBUSY[p.id]?'<div class="msg ai"><small>AI assistant</small>Thinking…</div>':''}</div>
+    <form class="pchatf" data-id="${p.id}" novalidate><label class="f grow"><span class="sr">Message</span><textarea name="txt" rows="2" placeholder="Write a message… or ask the AI, e.g. “Find the latest quotation” or “What did the contract say about payment?”"></textarea></label>
+      <div class="row end"><button type="button" class="btn ghost" data-act="pc-ai" ${AIBUSY[p.id]?'disabled':''}>Ask AI</button><button class="btn">Send</button></div></form></section>`;
+  return h;
+}
+const FOLDER_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const FILE_IC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
+const fmtTime = iso => { try{ const dt = new Date(iso); return dt.toLocaleString('en-GB', { timeZone:'Asia/Dubai', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }); }catch(_){ return ''; } };
+
+function addMembers(p, ids){
+  const add = ids.filter(id=>id && id!==p.owner && !(p.members||[]).includes(id)); if (!add.length) return;
+  p.members = (p.members||[]).concat(add);
+  add.forEach(id=>notify(id, `${userName(ui.user)} added you to the project “${p.name}”.`, nowAbs(), null));
+  emailPeople(add, `You were added to the project “${p.name}”`, `${userName(ui.user)} added you to the project “${p.name}”.${p.description?'\n\n'+p.description:''}`);
+}
+function createProject(form){
+  const err = form.querySelector('.err'), fail = m => { err.hidden=false; err.textContent=m; };
+  const name = form.name.value.trim(), start = form.start.value, end = form.end.value;
+  if (!name) return fail('Please give the project a name.');
+  if (start && end && end<start) return fail('The end date is before the start date.');
+  const p = { id:uid(), name, description:form.desc.value.trim(), owner:ui.user, members:[], start, end, status:'active', milestones:[], createdAt:new Date().toISOString() };
+  db.projects.push(p); addMembers(p, ui.newMembers||[]); ui.newMembers = []; ui.proj = p.id; save(); render();
+}
+function saveProjectEdit(form){
+  const p = projById(form.dataset.id); if (!canManageProject(p, ui.user)) return;
+  const name = form.name.value.trim(); if (!name) return;
+  Object.assign(p, { name, description:form.desc.value.trim(), start:form.start.value, end:form.end.value, status:form.status.value }); save(); render(); tip('Saved', 'Project details updated.');
+}
+function addMilestone(form){
+  const p = projById(form.dataset.id), err = form.querySelector('.err'); if (!canManageProject(p, ui.user)) return;
+  const title = form.title.value.trim(), owner = form.owner.value, start = form.start.value, due = form.due.value;
+  if (!title){ err.hidden=false; err.textContent='Write the milestone.'; return; }
+  if (start && due && due<start){ err.hidden=false; err.textContent='The due date is before the start date.'; return; }
+  (p.milestones = p.milestones||[]).push({ id:uid(), title, owner, start, due, progress:0 });
+  if (owner && owner!==ui.user){ notify(owner, `You own the milestone “${title}” in the project “${p.name}”${due?' (due '+fmtShort(due)+')':''}.`, nowAbs(), null);
+    emailPeople([owner], `New milestone for you: ${title}`, `Project: ${p.name}\nMilestone: ${title}${due?'\nDue: '+due:''}`); }
+  save(); render();
+}
+async function suggestSchedule(p, btn){
+  const ppl = projPeople(p).map(id=>getUser(id));
+  btn.disabled = true; btn.textContent = 'Thinking…';
+  try{
+    const txt = await aiAsk(`Plan a practical project schedule for a UAE manufacturing/trading company.\nProject: ${p.name}\nDescription: ${p.description||'-'}\nStart: ${p.start||now().date}\nTarget end: ${p.end||'(not set)'}\nTeam: ${ppl.map(u=>`${u.name} (${u.title})`).join('; ')}\n\nReply with JSON only, an array of 4 to 10 milestones in order: [{"title":"...","start":"YYYY-MM-DD","due":"YYYY-MM-DD","owner":"exact team member name or empty"}]. Keep all dates within the project dates.`);
+    const m = txt.match(/\[[\s\S]*\]/); const arr = m ? JSON.parse(m[0]) : [];
+    const byName = s => { const k = String(s||'').toLowerCase().trim(); const u = ppl.find(x=>x.name.toLowerCase()===k) || ppl.find(x=>k && x.name.toLowerCase().includes(k)); return u ? u.id : ''; };
+    const ok = d => /^\d{4}-\d{2}-\d{2}$/.test(d||'') ? d : '';
+    const list = arr.filter(x=>x && x.title).slice(0,12).map(x=>({ title:String(x.title).slice(0,120), start:ok(x.start), due:ok(x.due), owner:byName(x.owner) }));
+    if (!list.length) throw new Error('The AI did not return a schedule. Try again, or add a longer description.');
+    (ui.msSug = ui.msSug||{})[p.id] = list; render();
+  }catch(e){ tip('AI could not help', e.message); btn.disabled = false; btn.textContent = 'Suggest a schedule with AI'; }
+}
+async function driveFetch(body){
+  const { data:{ session } } = await sb.auth.getSession(); const cfg = window.PORTAL_CONFIG || {};
+  const form = body instanceof FormData;
+  return fetch(String(cfg.SUPABASE_URL).replace(/\/$/,'') + '/functions/v1/drive', { method:'POST',
+    headers: Object.assign({ Authorization:'Bearer '+(session && session.access_token), apikey:cfg.SUPABASE_ANON_KEY }, form ? {} : { 'Content-Type':'application/json' }),
+    body: form ? body : JSON.stringify(body) });
+}
+async function uploadFiles(pid, files){
+  const list = [...files];
+  for (let i=0; i<list.length; i++){
+    const f = list[i];
+    if (f.size > 25*1024*1024){ tip('File too large', `${f.name} is larger than 25 MB.`); continue; }
+    UPL[pid] = `Uploading ${f.name}${list.length>1?` (${i+1} of ${list.length})`:''}… AI is reading it, naming it and choosing a folder.`;
+    const el = document.getElementById('upl'); if (el){ el.hidden = false; el.textContent = UPL[pid]; }
+    const fd = new FormData(); fd.append('action','upload'); fd.append('project', pid); fd.append('file', f, f.name);
+    try{
+      const r = await driveFetch(fd), d = await r.json().catch(()=>({}));
+      if (!r.ok || d.error || !d.file) throw new Error(d.error || `Upload failed (${r.status}).`);
+      applyRemote('pfiles', d.file.id, d.file);
+      db.pchat.push({ id:uid(), projectId:pid, by:ui.user, sys:true, text:`uploaded “${d.file.name}” to ${d.file.folder}`, at:new Date().toISOString() }); save();
+    }catch(e){ tip('Upload failed', `${f.name}: ${e.message}`); }
+  }
+  delete UPL[pid]; render();
+}
+async function downloadFile(id, btn){
+  const f = db.pfiles.find(x=>x.id===id); if (!f) return;
+  const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Downloading…';
+  try{
+    const r = await driveFetch({ action:'download', file:id });
+    if (!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || `Download failed (${r.status}).`); }
+    const url = URL.createObjectURL(await r.blob()), a = document.createElement('a');
+    a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  }catch(e){ tip('Could not download', e.message); }
+  finally{ btn.disabled = false; btn.innerHTML = old; }
+}
+async function removeFile(id, btn){
+  const f = db.pfiles.find(x=>x.id===id); if (!f || !confirm(`Remove “${f.name}”? It goes to the Google Drive bin, where it can be restored for 30 days.`)) return;
+  btn.disabled = true;
+  try{ const r = await driveFetch({ action:'remove', file:id }), d = await r.json().catch(()=>({})); if (!r.ok || d.error) throw new Error(d.error || 'Failed');
+    applyRemote('pfiles', id, null); db.pchat.push({ id:uid(), projectId:f.projectId, by:ui.user, sys:true, text:`removed “${f.name}”`, at:new Date().toISOString() }); save(); render(); }
+  catch(e){ btn.disabled = false; tip('Could not remove', e.message); }
+}
+async function askProjectAI(pid, q){
+  if (!q){ tip('Ask the AI', 'Type your question in the message box first.'); return; }
+  db.pchat.push({ id:uid(), projectId:pid, by:ui.user, text:q, toAi:true, at:new Date().toISOString() });
+  AIBUSY[pid] = true; save(); render();
+  try{
+    const { data, error } = await sb.functions.invoke('drive', { body:{ action:'ask', project:pid, question:q } });
+    if (error || !data || data.error) throw new Error((data && data.error) || 'The AI service could not be reached.');
+    db.pchat.push({ id:uid(), projectId:pid, by:ui.user, ai:true, text:data.answer, files:data.file_ids||[], at:new Date().toISOString() });
+  }catch(e){ db.pchat.push({ id:uid(), projectId:pid, by:ui.user, sys:true, text:`asked the AI, but it failed: ${e.message}`, at:new Date().toISOString() }); }
+  delete AIBUSY[pid]; save(); render();
+}
+function sendChat(form, toAi){
+  const ta = form.querySelector('textarea[name=txt]'), txt = ta.value.trim(), pid = form.dataset.id;
+  if (!canSeeProject(projById(pid), ui.user)) return;
+  const ai = toAi || /^@ai\b/i.test(txt), q = txt.replace(/^@ai\b[:,]?\s*/i, '');
+  if (ai){ ta.value = ''; ta.defaultValue = ''; askProjectAI(pid, q); return; }
+  if (!txt) return;
+  db.pchat.push({ id:uid(), projectId:pid, by:ui.user, text:txt.slice(0,4000), at:new Date().toISOString() });
+  ta.value = ''; save(); render();
+}
+function projClick(act, a){
+  if (act==='proj-open'){ ui.proj = a.dataset.id; ui.view = 'proj'; render(); window.scrollTo(0,0); return true; }
+  if (act==='proj-back'){ ui.proj = null; render(); return true; }
+  if (act==='pm-add'){
+    const wrap = a.closest('.row'), hid = wrap.querySelector('.pick input[type=hidden]'), id = hid && hid.value;
+    if (!id){ tip('Choose a person', 'Type a name, pick the person from the list, then press Add.'); return true; }
+    if (a.dataset.pid){ const p = projById(a.dataset.pid); if (!canManageProject(p, ui.user)) return true; addMembers(p, [id]); save(); render(); }
+    else { ui.newMembers = ui.newMembers||[]; if (!ui.newMembers.includes(id)) ui.newMembers.push(id);
+      document.getElementById('newChips').innerHTML = chipsHtml(ui.newMembers); hid.value = ''; wrap.querySelector('.pick-in').value = ''; }
+    return true;
+  }
+  if (act==='pm-del'){
+    if (a.dataset.pid){ const p = projById(a.dataset.pid); if (!canManageProject(p, ui.user) || !confirm(`Remove ${userName(a.dataset.id)} from this project?`)) return true;
+      p.members = (p.members||[]).filter(x=>x!==a.dataset.id); save(); render(); }
+    else { ui.newMembers = (ui.newMembers||[]).filter(x=>x!==a.dataset.id); document.getElementById('newChips').innerHTML = chipsHtml(ui.newMembers); }
+    return true;
+  }
+  if (act==='proj-del'){ const p = projById(a.dataset.id); if (!canManageProject(p, ui.user) || !confirm(`Delete the project “${p.name}”? Its files stay in Google Drive.`)) return true;
+    p.status = 'deleted'; ui.proj = null; save(); render(); return true; }
+  if (act==='ms-ai'){ suggestSchedule(projById(a.dataset.id), a); return true; }
+  if (act==='ms-sug-clear'){ delete (ui.msSug||{})[a.dataset.id]; render(); return true; }
+  if (act==='ms-sug-add'){ const p = projById(a.dataset.id), list = (ui.msSug||{})[p.id]||[]; if (!canManageProject(p, ui.user)) return true;
+    p.milestones = (p.milestones||[]).concat(list.map(m=>({ id:uid(), ...m, progress:0 })));
+    [...new Set(list.map(m=>m.owner).filter(x=>x && x!==ui.user))].forEach(o=>notify(o, `You own milestones in the project “${p.name}”.`, nowAbs(), null));
+    delete ui.msSug[p.id]; save(); render(); return true; }
+  if (act==='ms-save'){ const p = projById(a.dataset.pid), m = p && (p.milestones||[]).find(x=>x.id===a.dataset.id); if (!m || !(canManageProject(p, ui.user) || m.owner===ui.user)) return true;
+    const inp = a.closest('tr').querySelector('.ms-pn'), v = Math.max(0, Math.min(100, parseInt(inp.value,10)||0));
+    m.progress = v; m.updatedBy = ui.user; m.updatedAt = new Date().toISOString(); save(); render(); return true; }
+  if (act==='ms-del'){ const p = projById(a.dataset.pid); if (!canManageProject(p, ui.user) || !confirm('Delete this milestone?')) return true;
+    p.milestones = (p.milestones||[]).filter(x=>x.id!==a.dataset.id); save(); render(); return true; }
+  if (act==='pf-get'){ downloadFile(a.dataset.id, a); return true; }
+  if (act==='pf-del'){ removeFile(a.dataset.id, a); return true; }
+  if (act==='pc-ai'){ sendChat(a.closest('form'), true); return true; }
+  return false;
+}
+
 /* ===== Render ===== */
 function tabsFor(id){
   const t = [];
@@ -1755,6 +2083,7 @@ function tabsFor(id){
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
   if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
+  t.push(['proj','Projects']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
   if (reportsOf(id).length || indirectOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
       + (getUser(id).role==='CEO' ? Object.keys(db.closures).filter(k=>needsCeoReview(k.split('|')[0]) && !db.closures[k].ceoReview).length : 0);
@@ -1777,7 +2106,7 @@ function render(){
   tabsEl.hidden = !ui.authed || gate;
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   main.innerHTML = gate ? gateView(n)
-    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
@@ -1786,7 +2115,7 @@ function render(){
     <button class="btn sm ghost bell" data-act="view" data-v="alerts" aria-label="Notifications">${BELL}${unread?`<span class="cnt">${unread}</span>`:''}</button>
     <button class="btn sm ghost" data-act="logout">Log out</button>`;
   flushFresh();
-  decorateSTT();
+  decorateSTT(); document.querySelectorAll(".pchat").forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
 
 /* ===== Actions ===== */
@@ -1891,7 +2220,7 @@ async function afterLogin(){
   render();
 }
 async function loadAll(){
-  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[] }; COLS.forEach(c=>shadow[c].clear());
+  db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[] }; COLS.forEach(c=>shadow[c].clear());
   for (let from = 0; ; from += 1000){
     const { data, error } = await sb.from('records').select('collection,id,data').range(from, from+999);
     if (error){ tip('Could not load', error.message); break; }
@@ -1941,9 +2270,10 @@ function addOrSaveTask(form){
   const priority = (form.querySelector('input[name=priority]:checked')||{}).value;
   const days = Math.max(1, Math.min(60, parseInt(form.days.value,10)||1));
   if (!title){ err.hidden=false; err.textContent='Please enter the task.'; return; }
+  const projectId = form.project ? form.project.value : '';
   const edit = ui.editing ? db.tasks.find(x=>x.id===ui.editing) : null;
   if (edit && canEdit(edit, me, n)){
-    Object.assign(edit,{ title, details:form.details.value.trim(), priority, days, dueDate:addDays(edit.startDate,days-1) });
+    Object.assign(edit,{ title, details:form.details.value.trim(), priority, days, dueDate:addDays(edit.startDate,days-1), projectId });
     ui.editing = null;
   } else {
     const owner = kind==='assign' ? form.target.value : me;
@@ -1952,13 +2282,13 @@ function addOrSaveTask(form){
     if (kind==='assign' && closedToday(owner, n.date)){ err.hidden=false; err.textContent=`${userName(owner)} has already finished their day and submitted the closure report. Assign it tomorrow morning, or speak to them directly.`; return; }
     if (kind==='assign' && needsGm(me, owner)){
       if (!confirm(`${isGm(owner)?'Send this task to '+userName(owner):'This goes to the General Manager for approval first. Send it'}?`)) return;
-      sendRequest(me, owner, { title, details:form.details.value.trim(), priority, days });
+      sendRequest(me, owner, { title, details:form.details.value.trim(), priority, days, projectId });
       save(); render(); tip('Sent for approval', isGm(owner) ? `${userName(owner)} can accept it, pass it to someone in your team, or decline it with a reason.` : `It will reach ${userName(owner)} once the General Manager approves it.`); return;
     }
     if (mode==='extra' && !confirm(`Add this as additional work${kind==='assign'?' for '+userName(owner):''}? It will be locked and cannot be edited.`)) return;
-    if (kind==='assign') makeTask(owner, me, { title, details:form.details.value.trim(), priority, days }, mode);
+    if (kind==='assign') makeTask(owner, me, { title, details:form.details.value.trim(), priority, days, projectId }, mode);
     else db.tasks.push({ id:uid(), owner, assignedBy:null, category:mode==='plan'?'planned':'extra', priority, title,
-      details:form.details.value.trim(), days, startDate:n.date, dueDate:addDays(n.date,days-1),
+      details:form.details.value.trim(), days, startDate:n.date, dueDate:addDays(n.date,days-1), projectId,
       log:{}, completedOn:null, createdAt:new Date().toISOString() });
   }
   save(); render();
@@ -1995,6 +2325,10 @@ document.addEventListener('submit', e=>{
   if (e.target.id==='loginForm') return doLogin();
   if (e.target.id==='newPwForm' || e.target.id==='chPwForm') return setNewPassword();
   if (e.target.id==='meetForm') return scheduleMeeting(false);
+  if (e.target.classList.contains('projf')) return createProject(e.target);
+  if (e.target.classList.contains('projedit')) return saveProjectEdit(e.target);
+  if (e.target.classList.contains('msf')) return addMilestone(e.target);
+  if (e.target.classList.contains('pchatf')) return sendChat(e.target, false);
   if (e.target.classList.contains('mout')) return submitOutcome(e.target);
   if (e.target.classList.contains('chatf')) return addDiary(e.target);
   const f = e.target.closest('.tform'); if (f) addOrSaveTask(f);
@@ -2013,6 +2347,7 @@ document.addEventListener('click', e=>{
     db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
   }
   else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (projClick(act, a)) return;
   else if (act && act.startsWith('rq-')){ decideRequest(act.slice(3), a.closest('.rq')); return; }
   else if (act==='chk-done' || act==='chk-not'){ checkTask(a.dataset.id, act==='chk-done'); return; }
   else if (act==='nd-handled'){ handleNotDone(a.closest('.rq')); return; }
@@ -2095,6 +2430,7 @@ document.addEventListener('input', e=>{
   document.querySelectorAll('.team-h').forEach(hd=>{ let el=hd.nextElementSibling, any=false; while(el && el.classList.contains('prow')){ if(!el.hidden) any=true; el=el.nextElementSibling; } hd.hidden=!any; });
 });
 
+document.addEventListener('change', e=>{ if (e.target.classList && e.target.classList.contains('pf-in')){ if (e.target.files.length) uploadFiles(e.target.dataset.id, e.target.files); e.target.value=''; return; } });
 document.addEventListener('change', e=>{
   if (e.target.name==='oc'){ const pp = e.target.closest('form').querySelector('.pp'); if (pp) pp.hidden = e.target.value!=='postponed'; return; }
   const id = e.target.id;
