@@ -207,6 +207,9 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:99px;
   background:linear-gradient(135deg,var(--accent),#6b3fd4);color:#fff;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 8px 24px rgba(26,94,212,.35)}
 #aiFab[hidden]{display:none}
+.plc{position:relative;display:block}.plc-list{position:absolute;left:0;right:0;top:100%;z-index:60;background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:4px;max-height:280px;overflow:auto}
+.plc-i{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;cursor:pointer;font:inherit;color:inherit}.plc-i:hover,.plc-i:focus{background:var(--soft,#f3f4f6);outline:none}.plc-i small{display:block;color:var(--muted);font-size:12px}
+.plc-st{display:block;padding:6px 12px;font-size:11px;color:var(--muted)}
 .bot-av{width:40px;height:40px;image-rendering:auto;background:#fff;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);vertical-align:middle}
 .ai-h .bot-av{width:44px;height:44px}.ai-h b{display:inline-flex;align-items:center;gap:8px;font-size:17px}.bot-av.sm{width:22px;height:22px;border-width:1px;margin-right:5px;vertical-align:-6px}
 #aiFab{padding:6px 18px 6px 6px}
@@ -1505,12 +1508,14 @@ function addDiary(f){
 }
 function meetingCard(m, na, mode, reviewer, mgmt){
   const st = mStart(m);
-  let h = `<div class="crow mtg"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${fmtAbs(st)} · ${esc(m.withWhom)}${m.postponedFrom?' <span class="b">Rescheduled</span>':''}</div>${stPill(m,na)}</div>
-    <div class="task-det">${esc(m.purpose)}${m.place?' · '+esc(m.place):''}</div>
+  let h = `<div class="crow mtg"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${fmtAbs(st)} · ${esc(m.withWhom)}${m.postponedFrom||(m.resched||[]).length?' <span class="b">Rescheduled</span>':''}</div>${stPill(m,na)}</div>
+    <div class="task-det">${esc(m.purpose)}${m.place?' · '+esc(m.place):''}${m.place&&(m.mode||'person')==='person'?` · <a href="${gmapsPlace(m)}" target="_blank" rel="noopener">Map</a>`:''}</div>
     <div class="badges"><span class="b">${m.mode==='online'?'Online':'In person'}</span><span class="b">${m.allDay?'Whole day':durLabel(mDur(m))} · until ${hhmm(mEnd(m))}</span></div>`;
   if (mode==='up'){
     const offs = REMIND_BEFORE.filter(o=>st-o>=m.createdAt);
     if (!mgmt) h += prepBox(m);
+    if (!mgmt && m.owner===ui.user) h += ui.rs && ui.rs.id===m.id ? reschedForm(m) : `<div class="row" style="margin-top:6px"><button type="button" class="btn sm ghost" data-act="rs-open" data-id="${m.id}">Reschedule</button></div>`;
+    (m.resched||[]).slice(-2).forEach(r=>{ h += `<div class="hint" style="margin:4px 0 0">Moved from ${esc(fmtShort(r.from.date))} ${r.from.allDay?'(whole day)':esc(r.from.time)}${r.from.place&&r.from.place!==m.place?' at '+esc(r.from.place):''} on ${esc(fmtAbs(r.at))}${r.reason?' — '+esc(r.reason):''}</div>`; });
     h += `<div class="badges"><span class="b">Reminders:</span>${offs.length?offs.map(o=>`<span class="b ${m.sent&&m.sent['pre'+o]?'asg':''}">${offShort(o)}${m.sent&&m.sent['pre'+o]?' · sent':''}</span>`).join(''):'<span class="b">none left before the meeting</span>'}</div>`;
   } else h += `<div class="badges">${geoLine(m, mgmt)}</div>`;
   if (m.geoErr && !m.geo && mode!=='up' && !mgmt) h += `<div class="err">${esc(m.geoErr)}</div>`;
@@ -1553,7 +1558,7 @@ function meetingsView(n){
     <form id="meetForm" class="tform" novalidate>
       <label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company"></label>
       <div class="row"><fieldset class="f"><legend>Type</legend><div class="seg"><label><input type="radio" name="mMode" value="person" checked><span>In person</span></label><label><input type="radio" name="mMode" value="online"><span>Online</span></label></div></fieldset>
-        <label class="f grow">Place<input id="mPlace" maxlength="120" placeholder="Area and city, e.g. Al Quoz, Dubai — or Teams / Zoom link"></label>
+        <label class="f grow">Place${placeField('mPlace','', 'Start typing, e.g. Al Quoz — or a Teams / Zoom link')}</label>
         <label class="f days">Duration<select id="mDur" class="sel">${MEET_DURS.map(x=>`<option value="${x}" ${x===60?'selected':''}>${durLabel(x)}</option>`).join('')}<option value="day">Whole day</option></select></label></div>
       <label class="f">What the meeting is for<textarea id="mPurpose" rows="2"></textarea></label>
       <div class="clk-row"><label class="f" style="flex:1;min-width:180px">Date<input type="date" id="mDate" min="${n.date}" value="${n.date}"></label>
@@ -1572,23 +1577,19 @@ function meetingsView(n){
 }
 async function scheduleMeeting(instant){
   const n = now(), err = document.getElementById('mErr'), fail = m => { err.hidden=false; err.textContent=m; };
-  const w = document.getElementById('mWith').value.trim(), p = document.getElementById('mPurpose').value.trim(), pl = document.getElementById('mPlace').value.trim();
+  const w = document.getElementById('mWith').value.trim(), p = document.getElementById('mPurpose').value.trim(), pl = document.getElementById('mPlace').value.trim(), pg = placeGeoOf('mPlace', pl);
   const mode = (document.querySelector('input[name=mMode]:checked')||{}).value || 'person', durV = (document.getElementById('mDur')||{}).value, allDay = durV==='day';
   let dur = parseInt(durV,10) || 60;
   let d = document.getElementById('mDate').value, t = document.getElementById('mTime').value;
   if (instant){ d = n.date; t = n.label; }
-  if (allDay && d){   // whole working day; if it is today and the day has started, from now until the end of the day
-    const st = Math.max(toMins(CONFIG.planOpen), d===n.date ? toMins(n.label) : 0), en = toMins(CONFIG.closureOpen);
-    if (d===n.date && en - st < 30) return fail(`It is too late today for a whole-day meeting (the working day ends at ${CONFIG.closureOpen}). Choose another date.`);
-    t = d===n.date && st > toMins(CONFIG.planOpen) ? n.label : CONFIG.planOpen; dur = Math.max(30, en - toMins(t));
-  }
+  if (allDay && d){ const wd = wholeDay(d); if (wd.error) return fail(wd.error); t = wd.time; dur = wd.dur; }
   if (!w) return fail('Enter who the meeting is with.');
   if (!p) return fail('Enter what the meeting is for.');
   if (mode==='person' && !pl) return fail('Enter where the meeting is (area and city), so travel time can be checked.');
   if (!d || !t) return fail('Choose a date and time, or press "Start meeting now".');
   const na = nowAbs();
   if (absOf(d,t) < na) return fail('That date and time has already passed. Choose a time from now onwards.');
-  const c = { id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, mode, dur, ...(allDay?{allDay:true}:{}), date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] };
+  const c = { id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, ...(pg&&mode==='person'?{placeGeo:pg}:{}), mode, dur, ...(allDay?{allDay:true}:{}), date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] };
   const add = () => { db.meetings.push(c); save(); render(); tip('Meeting scheduled', `${w} · ${fmtShort(c.date)} ${allDay?'whole day':c.time}${mode==='online'?' (online)':' · '+pl}`); };
   if (instant) return add();
   const btn = document.querySelector('#meetForm .row.end .btn:not(.ghost)'), old = btn ? btn.textContent : '';
@@ -1612,7 +1613,13 @@ function submitOutcome(f){
       const nd = f.nd.value, nt = f.querySelector('input[name=nt]').value;
       if (!nd || !nt) return fail('Choose the new date and time for the meeting.');
       if (absOf(nd,nt) < na) return fail('The new date and time must be in the future.');
-      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, mode:m.mode, dur:m.dur, ...(m.allDay?{allDay:true}:{}), date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
+      const nm0 = { ...m, id:'__new', date:nd, time:nt, status:'scheduled' };
+      if (!f._checked){ const b = f.querySelector('.row.end .btn'), ob = b.textContent; b.disabled = true; b.textContent = 'Checking the new time…';
+        checkMeetingPlan(nm0).catch(()=>null).then(res=>{ b.disabled = false; b.textContent = ob;
+          if (!res){ f._checked = true; return submitOutcome(f); }
+          planModal(res, ()=>{ const x = fromAbs(res.suggest); f.nd.value = x.date; const ti = f.querySelector('input[name=nt]'); ti.value = x.time; f._checked = true; submitOutcome(f); }, ()=>{ f._checked = true; submitOutcome(f); }); });
+        return; }
+      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, ...(m.placeGeo?{placeGeo:m.placeGeo}:{}), mode:m.mode, dur:m.dur, ...(m.allDay?{allDay:true}:{}), date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
       db.meetings.push(nm); m.postponedTo = nm.id; m.postponeReason = txt;
     } else m.notes = txt;
     m.outcome = oc;
@@ -3327,11 +3334,118 @@ document.addEventListener('change', e=>{ if (e.target.id==='arcDate'){ ui.arcDat
 /* ===== Meeting planner: overlap check and, for in-person meetings, an AI travel-time check between places ===== */
 const mDur = m => m.dur || 60;
 const MEET_DURS = [30,45,60,90,120,150,180,210,240,300,360,420,480,540,600];   // 30 min to 10 hours
+/* Whole working day on date d: from the start of the day (or from now, if it is today and the day has started) to its end. */
+function wholeDay(d){
+  const n = now(), st = Math.max(toMins(CONFIG.planOpen), d===n.date ? toMins(n.label) : 0), en = toMins(CONFIG.closureOpen);
+  if (d===n.date && en - st < 30) return { error:`It is too late today for a whole-day meeting (the working day ends at ${CONFIG.closureOpen}). Choose another date.` };
+  const time = d===n.date && st > toMins(CONFIG.planOpen) ? n.label : CONFIG.planOpen;
+  return { time, dur:Math.max(30, en - toMins(time)) };
+}
+const durSelect = (id, sel) => `<select id="${id}" class="sel">${MEET_DURS.map(x=>`<option value="${x}" ${String(x)===String(sel)?'selected':''}>${durLabel(x)}</option>`).join('')}<option value="day" ${sel==='day'?'selected':''}>Whole day</option></select>`;
+
+/* ===== Places: suggestions while typing (server function "maps": Google Maps if its key is set, otherwise OpenStreetMap) ===== */
+const PLACE_GEO = {};   // input id -> { text, label, lat, lng, placeId } for the suggestion the person picked
+function placeField(id, value, ph){
+  return `<span class="plc"><input id="${id}" class="plc-in" maxlength="160" autocomplete="off" placeholder="${esc(ph||'Start typing a place')}" value="${esc(value||'')}"><span class="plc-list" hidden></span></span>`;
+}
+function placeGeoOf(id, text){ const g = PLACE_GEO[id]; return g && g.text===text ? { label:g.label, ...(g.lat!=null?{lat:g.lat,lng:g.lng}:{}), ...(g.placeId?{placeId:g.placeId}:{}) } : null; }
+let plcTimer = null, plcSeq = 0;
+async function placeSuggest(inp){
+  const list = inp.closest('.plc').querySelector('.plc-list'), q = inp.value.trim(), seq = ++plcSeq;
+  const online = inp.id==='mPlace' && (document.querySelector('input[name=mMode]:checked')||{}).value==='online';
+  if (online || q.length < 3 || /^https?:|teams|zoom|meet\.google/i.test(q)){ list.hidden = true; return; }
+  list.hidden = false; list.innerHTML = '<span class="plc-st">Searching…</span>';
+  try{
+    const { data } = await sb.functions.invoke('maps', { body:{ action:'suggest', q } });
+    if (seq!==plcSeq) return;
+    const items = (data && data.items) || [];
+    if (!items.length){ list.innerHTML = '<span class="plc-st">No match on the map. You can still type the place yourself.</span>'; return; }
+    PLC_ITEMS[inp.id] = items;
+    list.innerHTML = items.map((x,i)=>`<button type="button" class="plc-i" data-act="plc-pick" data-for="${inp.id}" data-i="${i}"><b>${esc(x.label)}</b>${x.sub?`<small>${esc(x.sub)}</small>`:''}</button>`).join('')
+      + `<span class="plc-st">${data.provider==='google'?'Google Maps':'Map data © OpenStreetMap'}</span>`;
+  }catch(_){ if (seq===plcSeq) list.hidden = true; }
+}
+const PLC_ITEMS = {};
+function placePick(a){
+  const inp = document.getElementById(a.dataset.for), x = (PLC_ITEMS[a.dataset.for]||[])[+a.dataset.i]; if (!inp || !x) return;
+  const subShort = (x.sub||'').split(',').map(s=>s.trim()).filter(s=>s && s!=='United Arab Emirates' && s!==x.label).slice(0,2).join(', ');
+  const text = subShort ? `${x.label}, ${subShort}` : x.label;
+  inp.value = text; PLACE_GEO[inp.id] = { text, label:text, lat:x.lat, lng:x.lng, placeId:x.placeId };
+  inp.closest('.plc').querySelector('.plc-list').hidden = true;
+  if (inp.form && inp.form.classList.contains('rsform')) rsKeep(inp.form);
+}
+document.addEventListener('input', e=>{ if (!e.target.classList || !e.target.classList.contains('plc-in')) return; clearTimeout(plcTimer); const inp = e.target; plcTimer = setTimeout(()=>placeSuggest(inp), 350); });
+document.addEventListener('focusout', e=>{ if (e.target.classList && e.target.classList.contains('plc-in')){ const l = e.target.closest('.plc') && e.target.closest('.plc').querySelector('.plc-list'); setTimeout(()=>{ if (l && !l.contains(document.activeElement)) l.hidden = true; }, 200); } });
+const geoQ = m => m.placeGeo && m.placeGeo.lat!=null ? `${m.placeGeo.lat},${m.placeGeo.lng}` : m.place;
+const gmapsPlace = m => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geoQ(m))}`;
+const gmapsRoute = (a, b) => `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(geoQ(a))}&destination=${encodeURIComponent(geoQ(b))}&travelmode=driving`;
+
+/* ===== Reschedule a meeting (before it starts): new date/time/duration/place, with the same clash and travel checks ===== */
+function reschedForm(m){
+  const r = ui.rs, durSel = r.dur || (m.allDay ? 'day' : String(mDur(m)));
+  return `<form class="tform rsform" data-id="${m.id}" novalidate style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+    <h3 class="sub" style="margin-top:0">Reschedule this meeting</h3>
+    <div class="clk-row"><label class="f" style="flex:1;min-width:160px">New date<input type="date" name="rd" min="${now().date}" value="${esc(r.date||m.date)}"></label>
+      <label class="f days">Duration${durSelect('rsDur', durSel)}</label>
+      <div class="f rs-time" style="flex:1;min-width:240px" ${durSel==='day'?'hidden':''}><span>New time</span>${clockPicker('rsT', r.time||m.time)}</div></div>
+    ${(m.mode||'person')==='person'?`<label class="f">Place${placeField('rsPlace', r.place!=null?r.place:m.place)}</label>`:''}
+    <label class="f">Reason (optional)<input name="rr" maxlength="200" value="${esc(r.reason||'')}" placeholder="e.g. Client asked to move it"></label>
+    <div class="err" hidden></div>
+    <div class="row end"><button type="button" class="btn ghost" data-act="rs-cancel">Cancel</button><button type="button" class="btn" data-act="rs-save" data-id="${m.id}">Check and reschedule</button></div></form>`;
+}
+function rsKeep(f){ if (!f || !ui.rs) return;
+  ui.rs.date = f.rd.value; ui.rs.dur = f.querySelector('#rsDur').value; ui.rs.reason = f.rr.value;
+  const t = f.querySelector('input[name=rsT]'); if (t) ui.rs.time = t.value;
+  const pl = f.querySelector('#rsPlace'); if (pl) ui.rs.place = pl.value;
+  const rt = f.querySelector('.rs-time'); if (rt) rt.hidden = ui.rs.dur==='day'; }
+document.addEventListener('change', e=>{ const f = e.target.closest && e.target.closest('.rsform'); if (f) rsKeep(f); });
+document.addEventListener('input', e=>{ const f = e.target.closest && e.target.closest('.rsform'); if (f) rsKeep(f); });
+async function rescheduleMeeting(btn){
+  const f = btn.closest('form'), m = db.meetings.find(x=>x.id===btn.dataset.id), err = f.querySelector('.err');
+  const fail = t => { err.hidden = false; err.textContent = t; };
+  if (!m || m.status!=='scheduled' || m.owner!==ui.user){ ui.rs = null; render(); return; }
+  rsKeep(f);
+  const d = f.rd.value, durV = f.querySelector('#rsDur').value, allDay = durV==='day';
+  let t = (f.querySelector('input[name=rsT]')||{}).value || m.time, dur = parseInt(durV,10) || mDur(m);
+  const plIn = f.querySelector('#rsPlace'), pl = plIn ? plIn.value.trim() : m.place;
+  if (!d) return fail('Choose the new date.');
+  if (plIn && !pl) return fail('Enter where the meeting is, so travel time can be checked.');
+  if (allDay){ const wd = wholeDay(d); if (wd.error) return fail(wd.error); t = wd.time; dur = wd.dur; }
+  if (absOf(d,t) < nowAbs()) return fail('That date and time has already passed. Choose a time from now onwards.');
+  const geo = plIn ? (pl===m.place ? (placeGeoOf('rsPlace', pl) || m.placeGeo || null) : placeGeoOf('rsPlace', pl)) : m.placeGeo || null;
+  if (d===m.date && t===m.time && dur===mDur(m) && pl===m.place) return fail('Nothing has changed yet. Choose a new date, time, duration or place.');
+  const c = { ...m, date:d, time:t, dur, place:pl, placeGeo:geo||undefined, allDay:allDay||undefined };
+  const reason = f.rr.value.trim(), old = btn.textContent;
+  btn.disabled = true; btn.textContent = (m.mode||'person')==='person' ? 'Checking travel time…' : 'Checking…';
+  let res = null; try{ res = await checkMeetingPlan(c); }catch(_){ res = null; }
+  btn.disabled = false; btn.textContent = old;
+  const apply = (x) => {
+    const mm = db.meetings.find(y=>y.id===m.id); if (!mm || mm.status!=='scheduled') return;   // re-read: realtime may have replaced it
+    const na = nowAbs();
+    (mm.resched = mm.resched||[]).push({ at:na, from:{ date:mm.date, time:mm.time, dur:mDur(mm), place:mm.place, ...(mm.allDay?{allDay:true}:{}) }, ...(reason?{reason}:{}) });
+    mm.date = x.date; mm.time = x.time; mm.dur = c.dur; mm.place = c.place;
+    if (c.placeGeo) mm.placeGeo = c.placeGeo; else delete mm.placeGeo;
+    if (c.allDay) mm.allDay = true; else delete mm.allDay;
+    mm.createdAt = na; mm.sent = {};   // reminders start again for the new time
+    reviewersOf(mm.owner).forEach(r=>notify(r.id, `${userName(mm.owner)} rescheduled the meeting with ${mm.withWhom} to ${fmtShort(mm.date)} ${mm.allDay?'(whole day)':mm.time}${reason?' — '+reason:''}.`, na, mm.id));
+    ui.rs = null; save(); render(); tip('Meeting rescheduled', `${mm.withWhom} · ${fmtShort(mm.date)} ${mm.allDay?'whole day':mm.time}`);
+  };
+  if (!res) return apply({ date:d, time:t });
+  planModal(res, ()=>apply(fromAbs(res.suggest)), ()=>apply({ date:d, time:t }));
+}
 function durLabel(x){ return x<60 ? x+' min' : (x%60 ? (x/60).toFixed(1).replace('.0','') : x/60)+(x===60?' hour':' hours'); }
 const mEnd = m => mStart(m) + mDur(m);
 const hhmm = abs => fromAbs(abs).time;
 const round15 = a => Math.ceil(a/15)*15;
-async function travelMinutes(from, to, departAbs){
+async function travelMinutes(fromM, toM, departAbs){
+  const x0 = fromAbs(departAbs), place = m => ({ label:m.place, ...(m.placeGeo||{}) });
+  try{
+    const { data } = await sb.functions.invoke('maps', { body:{ action:'route', from:place(fromM), to:place(toM), depart:new Date(`${x0.date}T${x0.time}:00+04:00`).toISOString() } });
+    if (data && isFinite(data.minutes)) return { min:Math.round(data.minutes), note:String(data.note||'').slice(0,240), maps:true };
+  }catch(_){ }
+  return travelMinutesAI(fromM.place, toM.place, departAbs);
+}
+async function travelMinutesAI(from, to, departAbs){
   const x = fromAbs(departAbs), wd = new Date(x.date+'T12:00:00Z').toLocaleDateString('en-GB',{ weekday:'long', timeZone:'UTC' });
   const j = parseJSONLoose(await aiAsk(`Estimate realistic driving time by car in the UAE between two places, leaving on ${wd} ${x.date} at ${x.time} (UAE time). Allow for typical traffic at that hour (rush hours roughly 07:00-09:30 and 17:00-20:00 on weekdays), and for parking and walking in at the destination.
 From: ${from}
@@ -3344,25 +3458,26 @@ If both places are the same building or area, minutes can be 5-15. If a place is
 /* Returns null when the plan is fine, or { msg, suggest } with a suggested start (abs minutes). */
 async function checkMeetingPlan(c){
   const same = meetingsOf(ui.user).filter(m=>m.status==='scheduled' && m.date===c.date && m.id!==c.id);
-  const s = mStart(c), e = s + mDur(c), lines = []; let suggest = null;
+  const s = mStart(c), e = s + mDur(c), lines = [], links = []; let suggest = null;
   const clash = same.find(m=>mStart(m) < e && mEnd(m) > s);
   if (clash) lines.push(`It overlaps your meeting with ${clash.withWhom} (${clash.time}–${hhmm(mEnd(clash))}).`);
   if (c.mode==='person' && c.place){
     const ip = same.filter(m=>(m.mode||'person')==='person' && m.place);
     const prev = ip.filter(m=>mEnd(m) <= s + 1).sort((a,b)=>mEnd(b)-mEnd(a))[0], next = ip.filter(m=>mStart(m) >= s).sort((a,b)=>mStart(a)-mStart(b))[0];
-    if (prev){ try{ const t = await travelMinutes(prev.place, c.place, mEnd(prev)), need = mEnd(prev) + t.min + 15;
-        if (s < need){ suggest = round15(need); lines.push(`Your meeting with ${prev.withWhom} in ${prev.place} ends at ${hhmm(mEnd(prev))}. Driving to ${c.place} takes about ${t.min} minutes at that time (${t.note}). With 15 minutes to spare, the earliest realistic start is ${hhmm(suggest)}.`); }
+    if (prev){ links.push({ label:`Route from ${prev.withWhom}`, url:gmapsRoute(prev, c) }); try{ const t = await travelMinutes(prev, c, mEnd(prev)), need = mEnd(prev) + t.min + 15;
+        if (s < need){ suggest = round15(need); lines.push(`Your meeting with ${prev.withWhom} in ${prev.place} ends at ${hhmm(mEnd(prev))}. Driving to ${c.place} takes about ${t.min} minutes at that time. ${t.note} With 15 minutes to spare, the earliest realistic start is ${hhmm(suggest)}.`); }
       }catch(_){ if (s - mEnd(prev) < 60) lines.push(`Your meeting with ${prev.withWhom} in ${prev.place} ends at ${hhmm(mEnd(prev))}, and the travel time to ${c.place} could not be estimated. Leave enough time to get there.`); } }
-    if (next){ const st = suggest || s; try{ const t = await travelMinutes(c.place, next.place, st + mDur(c));
-        if (st + mDur(c) + t.min + 15 > mStart(next)) lines.push(`Afterwards you have ${next.withWhom} in ${next.place} at ${next.time}. Driving from ${c.place} takes about ${t.min} minutes (${t.note}), so you would be late. Consider moving that meeting or shortening this one.`);
+    if (next){ links.push({ label:`Route to ${next.withWhom}`, url:gmapsRoute(c, next) }); const st = suggest || s; try{ const t = await travelMinutes(c, next, st + mDur(c));
+        if (st + mDur(c) + t.min + 15 > mStart(next)) lines.push(`Afterwards you have ${next.withWhom} in ${next.place} at ${next.time}. Driving from ${c.place} takes about ${t.min} minutes, so you would be late (${t.note.replace(/\.$/,'')}). Consider moving that meeting or shortening this one.`);
       }catch(_){} }
   }
-  return lines.length ? { msg:lines.join('\n\n'), suggest } : null;
+  return lines.length ? { msg:lines.join('\n\n'), suggest, links } : null;
 }
 function planModal(res, onUse, onKeep){
   const el = modalEl('planModal');
   el.innerHTML = `<div class="modal-box"><h2>Check the timing</h2><p style="white-space:pre-wrap;margin-top:0">${esc(res.msg)}</p>
-    <p class="hint">Travel times are AI estimates, not live traffic. Use your judgement.</p>
+    ${(res.links||[]).length?`<p style="margin:0 0 6px">${res.links.map(l=>`<a href="${l.url}" target="_blank" rel="noopener">${esc(l.label)} in Google Maps</a>`).join(' · ')}</p>`:''}
+    <p class="hint">Driving times come from map routes with an allowance for usual traffic at that hour. Open the route in Google Maps for live traffic, and use your judgement.</p>
     <div class="row end"><button type="button" class="btn ghost" data-act="plan-x">Cancel</button><button type="button" class="btn ghost" data-act="plan-keep">Keep my time</button>${res.suggest?`<button type="button" class="btn" data-act="plan-use">Use ${hhmm(res.suggest)}</button>`:''}</div></div>`;
   PLAN_CB = { use:onUse, keep:onKeep };
 }
@@ -3775,6 +3890,10 @@ document.addEventListener('click', e=>{
   else if (act==='tf-del'){ removeTaskFile(a.dataset.id, a.dataset.path, a.dataset.name, a); return; }
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
   else if (act==='trial-reset'){ resetModal(); return; }
+  else if (act==='plc-pick'){ placePick(a); return; }
+  else if (act==='rs-open'){ ui.rs = { id:a.dataset.id }; render(); return; }
+  else if (act==='rs-cancel'){ ui.rs = null; render(); return; }
+  else if (act==='rs-save'){ rescheduleMeeting(a); return; }
   else if (act==='trial-reset-x'){ document.getElementById('resetModal')?.remove(); return; }
   else if (act==='trial-reset-go'){ runReset(a); return; }
   else if (planClick(act)) return;
