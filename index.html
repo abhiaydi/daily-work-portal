@@ -1401,7 +1401,7 @@ function safeRender(){
   const main = document.getElementById('main');
   const dirty = clkDrag || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('#main') && (a.value||'').length)
     || [...main.querySelectorAll('form textarea, form input[type=text], form input:not([type]), form input[type=password], textarea.wt')].some(x=>x.value.trim() !== (x.defaultValue||'').trim())
-    || [...main.querySelectorAll('.tform .tf-in')].some(x=>x.files && x.files.length);
+    || [...main.querySelectorAll('.tform .tf-in, .cl-files')].some(x=>x.files && x.files.length);
   if (dirty){ pendingRender = true; updateClock(); return; }
   render();
 }
@@ -2717,7 +2717,7 @@ async function retryPendingScores(){
   if (!ks.length) return; RETRY_BUSY = true;
   for (const k of ks){ await aiScoreClosure(k); } RETRY_BUSY = false; safeRender();
 }
-function submitClosure(){
+async function submitClosure(){
   const n = now(), u = ui.user, d = n.date, k = u+'|'+d, prev = db.closures[k], editing = !!prev;
   if (editing ? !closureEditable(u, d) : (phaseFor(n.mins,u)!=='extra')){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
   if (!editing){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
@@ -2729,7 +2729,18 @@ function submitClosure(){
     work[row.dataset.id] = txt.slice(0,2000);
   });
   if (!ok){ document.querySelector('#closureCard .crow.bad')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
-  if (!confirm(editing ? 'Save your changes? The AI will rate your work again.' : `Submit your closure report to ${mgrNames(u)}? The AI will then rate how much of each task is done. You can still edit it until your manager reviews it.`)) return;
+  const picked = rows.map(r=>({ id:r.dataset.id, files:[...((r.querySelector('.cl-files')||{}).files||[])] })).filter(x=>x.files.length);
+  const big = picked.flatMap(x=>x.files).find(f=>f.size > TF_MAX); if (big){ alert(`${big.name} is larger than 20 MB. Please attach a smaller file.`); return; }
+  const nFiles = picked.reduce((a,x)=>a+x.files.length,0);
+  if (!confirm((editing ? 'Save your changes? The AI will rate your work again.' : `Submit your closure report to ${mgrNames(u)}? The AI will then rate how much of each task is done. You can still edit it until your manager reviews it.`) + (nFiles?`\n\n${nFiles} file${nFiles===1?'':'s'} will be attached.`:''))) return;
+  if (nFiles){
+    const btn = document.querySelector('#closureCard [data-act="submit-closure"]'), old = btn ? btn.textContent : '';
+    if (btn){ btn.disabled = true; btn.textContent = `Uploading ${nFiles} file${nFiles===1?'':'s'}…`; }
+    try{
+      for (const x of picked){ const ups = await uploadTaskFiles(x.files); attachFiles(ups, [x.id]);
+        const t = db.tasks.find(y=>y.id===x.id); if (t && t.assignedBy && t.assignedBy!==u) notify(t.assignedBy, `${userName(u)} attached ${ups.length} file(s) to “${t.title}” with the closure report.`, nowAbs(), null); }
+    }catch(e){ if (btn){ btn.disabled = false; btn.textContent = old; } alert('Upload failed: ' + e.message + '\n\nThe report was not submitted. Please try again.'); return; }
+  }
   const ids = rows.map(r=>r.dataset.id);
   ids.forEach(id=>{ const t = db.tasks.find(x=>x.id===id); if (!t) return;
     t.log[d] = Object.assign({}, t.log[d]||{ progress:prevProgress(t,d) }, { justification:work[id], pending:true }); });
@@ -2756,6 +2767,8 @@ function closureForm(tasks, d, prev){
       ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
       <label class="f" style="margin-top:8px">What did you do? If it isn't finished, what is left and why?<textarea rows="3" class="wt" placeholder="e.g. Sent the revised quotation to the client and confirmed delivery date. Waiting for their PO.">${esc(val)}</textarea></label>
       <div class="wc ${w>=MIN_WORK_WORDS?'ok':''}"><span class="wcn">${w}</span> / ${MIN_WORK_WORDS} words minimum</div>
+      ${filesHtml(t)}
+      <label class="f" style="margin-top:6px">Attach files (optional)<input type="file" multiple class="cl-files"><span class="hint" style="margin:2px 0 0">PDF, Word, Excel, PowerPoint, photos — up to 20 MB each. Your manager sees them with this report, with a short AI brief.</span></label>
       <div class="err" hidden></div>
     </div>`;
   }).join('') + submit;
