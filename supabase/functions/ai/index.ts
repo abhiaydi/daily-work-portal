@@ -23,7 +23,11 @@ Deno.serve(async (req) => {
 
   if (!aiReady()) return json({ error: "AI is not set up yet. The administrator needs to add an AI key." });
   try {
-    return json({ text: await askAI(text, 1500, body.json === true) });
+    // Optional files (PDF or images, base64) for the AI to read: at most 3, about 7 MB in total.
+    const files = (Array.isArray(body.files) ? body.files : []).filter((f: { mime?: string; data?: string }) =>
+      f && typeof f.data === "string" && /^(application\/pdf|image\/(png|jpeg|webp|gif))$/.test(String(f.mime))).slice(0, 3);
+    if (files.reduce((s: number, f: { data: string }) => s + f.data.length, 0) > 10_000_000) return json({ error: "The file is too large for the AI to read." });
+    return json({ text: await askAI(text, 1500, body.json === true, files) });
   } catch (e) {
     console.error("ai error:", (e as Error).message);
     return json({ error: (e as Error).message });

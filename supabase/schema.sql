@@ -178,3 +178,12 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.session_times(text, timestamptz, timestamptz) from public, anon;
 grant execute on function public.session_times(text, timestamptz, timestamptz) to authenticated;
+
+-- Task attachments: private bucket. Any staff member can view and add; the uploader or the CEO/GM can delete.
+insert into storage.buckets (id, name, public, file_size_limit) values ('taskfiles', 'taskfiles', false, 20971520) on conflict (id) do nothing;
+drop policy if exists "staff read task files" on storage.objects;
+drop policy if exists "staff add task files" on storage.objects;
+drop policy if exists "remove own task files" on storage.objects;
+create policy "staff read task files" on storage.objects for select to authenticated using (bucket_id = 'taskfiles' and public.is_staff());
+create policy "staff add task files" on storage.objects for insert to authenticated with check (bucket_id = 'taskfiles' and public.is_staff());
+create policy "remove own task files" on storage.objects for delete to authenticated using (bucket_id = 'taskfiles' and (owner_id = auth.uid()::text or public.is_management()));

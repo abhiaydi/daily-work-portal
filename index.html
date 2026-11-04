@@ -173,6 +173,14 @@ table.mst .pn{width:64px}
 .ring b{font:700 34px var(--f-display);line-height:1}.ring span{font-size:12px;color:var(--muted)}
 .dash-parts{flex:1 1 260px;min-width:0}
 .dgrp{border-top:1px solid var(--line);padding:8px 0}
+.tfiles{margin:6px 0}.tfile{margin:4px 0;font-size:13px}
+.linkbtn{border:0;background:none;color:var(--accent);cursor:pointer;padding:0;font:inherit;display:inline-flex;align-items:center;gap:4px;text-align:left}
+.linkbtn:hover{text-decoration:underline}.tf-add{font-size:13px;margin-top:6px}
+.tbrief{margin:3px 0 0 18px;padding:6px 9px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--ink)}
+.feas{margin-top:8px;padding:9px 11px;border:1px solid var(--accent);border-radius:10px;background:var(--accent-soft);font-size:14px}
+.feas.bad{border-color:var(--emg);background:var(--emg-bg)}
+.b.ok-b{background:#dcfce7;color:#166534}
+.bad-card{border:1px solid var(--emg)}
 .ondot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.22);margin-right:7px;vertical-align:middle;animation:onp 2s infinite}
 @keyframes onp{0%,100%{box-shadow:0 0 0 3px rgba(22,163,74,.22)}50%{box-shadow:0 0 0 6px rgba(22,163,74,.08)}}
 .pill.online{background:#dcfce7;color:#166534;font-weight:600}.pill.online::before{background:#16a34a}
@@ -721,6 +729,7 @@ function taskCard(t, n, showOwner){
         : `<span class="lockic" title="Locked">${LOCK}</span>`}
     </div>
     ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
+    ${filesHtml(t)}
     <div class="badges">
       ${priBadge(t.priority)}
       <span class="b">${t.category==='extra'?'Additional work':'Planned'}</span>
@@ -731,7 +740,11 @@ function taskCard(t, n, showOwner){
       <span class="b">Day ${dayN} of ${t.days}</span>
       ${carried?`<span class="b">Carried forward from ${fmtShort(t.startDate)}</span>`:''}
       ${overdue?'<span class="b emg">Overdue</span>':''}
+      ${t.feas && !['pending','not'].includes(t.feas.state) || (t.feas && t.owner!==ui.user && t.assignedBy!==ui.user) ? feasHtml(t) : ''}
+      ${t.feas && t.feas.state==='pending' && t.owner!==ui.user ? feasHtml(t) : ''}${t.feas && t.feas.state==='not' && t.assignedBy!==ui.user ? feasHtml(t) : ''}
     </div>
+    ${t.feas && ((t.feas.state==='pending' && t.owner===ui.user) || (t.feas.state==='not' && t.assignedBy===ui.user)) ? feasHtml(t) : ''}
+    ${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach a file<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}
     ${carried?bar(prevProgress(t,d),'Progress so far'):''}
   </div>`;
 }
@@ -751,10 +764,11 @@ function taskForm(kind, mode){
     : (mode==='plan' ? 'Add to plan' : 'Add additional work');
   return `<form class="tform" data-kind="${kind}" data-mode="${mode}" novalidate>
     ${kind==='assign' ? (t ? `<div class="f">Assigned to<b style="color:var(--ink)">${esc(userName(t.owner))}</b><input type="hidden" name="target" value="${t.owner}"></div>`
-      : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to', 'Type a name or a letter, e.g. G')}</div>`) : ''}
+      : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to (you can add several people)', 'Type a name or a letter, e.g. G')}<div class="chips tchips"></div><input type="hidden" name="targets" value=""></div>`) : ''}
     <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     ${projSelect(t)}
+    ${t?'':`<label class="f">Attachments (optional)<input type="file" name="files" multiple class="tf-in"><span class="hint" style="margin:2px 0 0">PDF, Word, Excel, PowerPoint, photos — up to 20 MB each. The AI reads them and writes a short brief for the manager.</span></label>`}
     <div class="row">
       <fieldset class="f"><legend>Priority</legend><div class="seg">
         ${pri.map((p,i)=>`<label><input type="radio" name="priority" value="${p}" ${(t?t.priority===p:i===0)?'checked':''}><span>${p}</span></label>`).join('')}
@@ -787,7 +801,7 @@ function reportBlock(owner, d, canReview){
   if (ts.length){
     h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>AI rating</th><th>What the employee wrote</th><th>AI note</th></tr></thead><tbody>
     ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
-      <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}</td>
+      <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${filesHtml(t)}</td>
       <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span></td>
       <td class="pct ${l.pending?'':l.progress>=100?'full':'part'}">${l.pending?'<span class="hint" style="margin:0">pending</span>':l.progress+'%'}</td>
       <td>${l.justification?esc(l.justification):'—'}</td><td>${l.aiNote?esc(l.aiNote):'—'}</td></tr>`; }).join('')}
@@ -861,7 +875,7 @@ function staffView(n){
 
 function assignView(n){
   const me = ui.user, d = n.date, mode = assignMode(n.mins), reps = assignableBy(me);
-  let h = vaCard() + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
+  let h = feasRepliesView() + vaCard() + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
     mode==='plan'?pill('open','Goes to their morning plan'):pill('open','Goes to their additional work')}</div>`;
   h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). After ${CONFIG.planClose}, including after ${CONFIG.closureOpen}, it is added as additional work (Emergency or Important) until that person finishes their day. The person cannot edit or delete work you assign.</p>`;
   const viaGm = reps.filter(u=>needsGm(me, u.id));
@@ -1049,9 +1063,16 @@ function openPick(pk, text){
   const first = ul.querySelector('[data-id]'); if (first) first.classList.add('act');
 }
 function closePicks(except){ document.querySelectorAll('.pick').forEach(pk=>{ if (pk===except) return; const ul = pk.querySelector('.pick-list'); if (ul && !ul.hidden){ ul.hidden = true; pk.querySelector('.pick-in').setAttribute('aria-expanded','false'); } }); }
+function paintTargets(tf){
+  const tg = tf.querySelector('input[name=targets]'), ids = tg.value ? tg.value.split(',') : [];
+  tf.querySelector('.tchips').innerHTML = ids.map(id=>`<span class="chip">${esc(userName(id))}${needsGm(ui.user,id)?' <small>(GM approval)</small>':''}<button type="button" data-act="tg-del" data-id="${id}" aria-label="Remove">×</button></span>`).join('');
+  const btn = tf.querySelector('.row.end .btn:not(.ghost)'); if (btn && ids.length>1) btn.textContent = `Assign to ${ids.length} people`;
+}
 function choosePick(pk, id){
   const u = getUser(id);
   pk.querySelector('.pick-in').value = u.name; pk.querySelector('input[type=hidden]').value = id; closePicks();
+  const tf = pk.closest('.tform'), tg = tf && tf.querySelector('input[name=targets]');
+  if (tg){ const ids = tg.value ? tg.value.split(',') : []; if (!ids.includes(id)) ids.push(id); tg.value = ids.join(','); paintTargets(tf); pk.querySelector('.pick-in').value = ''; pk.querySelector('input[type=hidden]').value = ''; }
   if (pk.dataset.name==='dPerson'){ (ui.dash = ui.dash||{team:'all',status:'all'}).person = id; save(); render();
     setTimeout(()=>{ const r = document.querySelector('.prow[open]'); if (r) r.scrollIntoView({behavior:'smooth', block:'center'}); }, 50); }
 }
@@ -1738,23 +1759,27 @@ function dashView(n){
 }
 
 /* ===== GM approvals: indirect-team work and work sent up to the GM ===== */
-function makeTask(owner, by, f, mode, extra){
+function makeTask(owner, by, f, mode, extra, opts){
   const n = now(), cat = mode==='plan' ? 'planned' : 'extra';
   const t = Object.assign({ id:uid(), owner, assignedBy:by, category:cat, priority:f.priority, title:f.title, details:f.details||'', days:f.days,
-    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, f.projectId?{projectId:f.projectId}:{}, extra||{});
+    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, f.projectId?{projectId:f.projectId}:{}, (f.files&&f.files.length)?{files:f.files.map(x=>({ ...x }))}:{}, owner!==by?{ feas:{ state:'pending' } }:{}, extra||{});
   db.tasks.push(t);
   const pj = f.projectId && projById(f.projectId); if (pj && !isMgmt(owner)) addMembers(pj, [owner]);
-  emailPeople([owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(by)}`, `${userName(by)} assigned you: ${f.title}\nPriority: ${f.priority}\nDuration: ${f.days} day(s)${f.details?'\nDetails: '+f.details:''}${extra&&extra.approvedBy?`\n${extra.delegatedFrom?'Passed on':'Approved'} by ${userName(extra.approvedBy)}`:''}`);
+  const info = `Task: ${f.title}\nPriority: ${f.priority}\nDuration: ${f.days} day(s), due ${fmtShort(t.dueDate)}\nType: ${mode==='plan'?'Morning plan':'Additional work'}${f.details?'\nDetails: '+f.details:''}${extra&&extra.approvedBy?`\n${extra.delegatedFrom?'Passed on':'Approved'} by ${userName(extra.approvedBy)}`:''}${(f.files||[]).length?`\nAttachments: ${f.files.map(x=>x.name).join(', ')}`:''}`;
+  // Every assignment emails both people: the assignee and the assigner.
+  emailPeople([owner], `New ${mode==='plan'?'task':'additional work'} from ${userName(by)}: ${f.title}`, `${userName(by)} assigned you a task.\n${info}\n\nPlease open the portal and say whether it is feasible in this time.`, true);
+  if (!(opts && opts.noAssignerMail)) emailPeople([by], `You assigned “${f.title}” to ${userName(owner)}`, `Confirmation: you assigned a task to ${userName(owner)}.\n${info}`, true);
   return t;
 }
 function sendRequest(me, owner, f){
   const up = isGm(owner), at = nowAbs();
   db.requests.push({ id:uid(), from:me, to:owner, kind: up?'up':'approval', title:f.title, details:f.details||'', priority:f.priority, days:f.days,
-    byVoice:!!f.byVoice, projectId:f.projectId||'', status:'pending', createdAt:new Date().toISOString(), date:now().date });
+    byVoice:!!f.byVoice, projectId:f.projectId||'', files:f.files||[], status:'pending', createdAt:new Date().toISOString(), date:now().date });
   const gms = up ? [owner] : gmIds();
   const txt = up ? `${userName(me)} has sent you a task: ${f.title}. Accept it, pass it to their team, or decline it.`
                  : `${userName(me)} wants to assign a task to ${userName(owner)}: ${f.title}. Approve or decline it.`;
   gms.forEach(g=>notify(g, txt, at, null));
+  emailPeople([me], up ? `You sent “${f.title}” to ${userName(owner)}` : `“${f.title}” for ${userName(owner)} is waiting for GM approval`, `Confirmation: ${up ? 'your task was sent to '+userName(owner)+', who can accept, pass it on or decline' : 'your task for '+userName(owner)+' goes to the General Manager for approval first'}.\nTask: ${f.title}\nPriority: ${f.priority}\nDuration: ${f.days} day(s)`, true);
   emailPeople(gms, up ? `Task from ${userName(me)} — your decision` : `Approval needed: task for ${userName(owner)} from ${userName(me)}`,
     `${txt}\nPriority: ${f.priority}\nDuration: ${f.days} day(s)${f.details?'\nDetails: '+f.details:''}`);
 }
@@ -1823,7 +1848,7 @@ function decideRequest(kind, form){
   const err = form.querySelector('.err'), fail = m => { err.hidden=false; err.textContent=m; };
   if (!r || r.status!=='pending' || !isGm(me)) { render(); return; }
   const pri = form.querySelector('.rq-pri').value, reason = form.querySelector('.rq-reason').value.trim(), at = nowAbs();
-  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice, projectId:r.projectId||'' };
+  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice, projectId:r.projectId||'', files:r.files||[] };
   const done = (status, extra) => { Object.assign(r, { status, decidedBy:me, decidedAt:new Date().toISOString() }, extra||{}); save(); render(); };
   if (kind==='reject'){
     if (reason.split(/\s+/).filter(Boolean).length < 2) return fail('Write a short reason (a few words) before declining.');
@@ -3026,6 +3051,133 @@ document.addEventListener('keydown', e=>{
   if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); chatSend(); }
 });
 
+/* ===== Task attachments (storage bucket "taskfiles") with an AI brief for the manager ===== */
+const CLIP_IC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.4 7"/></svg>';
+const TF_MAX = 20*1024*1024;
+async function uploadTaskFiles(files){
+  const out = [];
+  for (const f of [...files]){
+    if (f.size > TF_MAX) throw new Error(`${f.name} is larger than 20 MB.`);
+    const id = uid(), safe = f.name.replace(/[^\w.\- ]+/g,'_').slice(-80), path = `${now().date}/${id}-${safe}`;
+    const r = await sb.storage.from('taskfiles').upload(path, f, { contentType:f.type || 'application/octet-stream', upsert:false });
+    if (r.error) throw new Error(`${f.name}: ${r.error.message}`);
+    out.push({ rec:{ id, name:f.name, path, mime:f.type||'', size:f.size, by:ui.user, at:new Date().toISOString(), brief:'', briefState:'pending' }, file:f });
+  }
+  return out;
+}
+function loadScript(src, globalName){
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  return new Promise((ok, bad)=>{ const s = document.createElement('script'); s.src = src; s.onload = ()=>ok(window[globalName]); s.onerror = ()=>bad(new Error('Could not load a helper. Check the internet connection.')); document.head.appendChild(s); });
+}
+const b64 = f => new Promise((ok, bad)=>{ const r = new FileReader(); r.onload = ()=>ok(String(r.result).split(',')[1]); r.onerror = bad; r.readAsDataURL(f); });
+async function fileText(f){
+  const n = f.name.toLowerCase();
+  if (/^text\//.test(f.type) || /\.(txt|csv|md|json)$/.test(n)) return (await f.text()).slice(0, 15000);
+  if (/\.(xlsx|xls|ods)$/.test(n)){ const X = await loadXLSX(), wb = X.read(await f.arrayBuffer(), { type:'array' });
+    return wb.SheetNames.slice(0,3).map(s=>`Sheet ${s}:\n`+X.utils.sheet_to_csv(wb.Sheets[s])).join('\n\n').slice(0, 15000); }
+  if (/\.(docx|pptx)$/.test(n)){ const JZ = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip'), z = await JZ.loadAsync(await f.arrayBuffer());
+    const parts = Object.keys(z.files).filter(k=>/^word\/document\.xml$|^ppt\/slides\/slide\d+\.xml$/.test(k)).sort((a,b)=>a.localeCompare(b, undefined, { numeric:true }));
+    let t = ''; for (const k of parts){ t += (await z.file(k).async('string')).replace(/<\/w:p>|<\/a:p>/g,'\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>') + '\n'; }
+    return t.replace(/\n{3,}/g,'\n\n').slice(0, 15000); }
+  return null;
+}
+async function briefFor(f, task){
+  const ask = `A staff member attached this file to the task “${task.title}”${task.details?' ('+task.details+')':''}. Write a brief for their manager in 2 to 4 short sentences: what the file is, the key facts or numbers in it, and how it relates to the task. Use only what is in the file; if it is unreadable, say so.`;
+  if (/^image\/(png|jpeg|webp|gif)$/.test(f.type) || f.type==='application/pdf' || /\.pdf$/i.test(f.name)){
+    if (f.size > 7*1024*1024) return 'Too large for the AI to read (over 7 MB).';
+    const { data, error } = await sb.functions.invoke('ai', { body:{ prompt:ask, files:[{ mime: f.type || 'application/pdf', data: await b64(f) }] } });
+    if (error || !data || !data.text) throw new Error((data && data.error) || 'AI not reachable');
+    return data.text.trim().slice(0, 800);
+  }
+  const t = await fileText(f); if (t===null) return 'The AI cannot read this type of file.';
+  if (!t.trim()) return 'The file appears to be empty.';
+  return (await aiAsk(`${ask}\n\nFile name: ${f.name}\nFile content:\n"""${t}"""`)).trim().slice(0, 800);
+}
+/* Attach uploaded file records to tasks (and requests), then write the AI briefs in the background. */
+function attachFiles(ups, taskIds, reqIds){
+  const recs = ups.map(u=>u.rec);
+  taskIds.forEach(id=>{ const t = db.tasks.find(x=>x.id===id); if (t) t.files = (t.files||[]).concat(recs.map(r=>({ ...r }))); });
+  (reqIds||[]).forEach(id=>{ const r = db.requests.find(x=>x.id===id); if (r) r.files = (r.files||[]).concat(recs.map(x=>({ ...x }))); });
+  save();
+  const task = db.tasks.find(x=>x.id===taskIds[0]) || db.requests.find(x=>x.id===(reqIds||[])[0]) || { title:'' };
+  ups.forEach(async u=>{
+    let brief = '', st = 'done';
+    try{ brief = await briefFor(u.file, task); }catch(e){ brief = 'AI brief not available right now.'; st = 'failed'; }
+    const set = list => list.forEach(x=>(x.files||[]).forEach(f=>{ if (f.id===u.rec.id){ f.brief = brief; f.briefState = st; } }));
+    set(db.tasks); set(db.requests); save(); safeRender();
+  });
+}
+function filesHtml(t, compact){
+  const fs = t.files || []; if (!fs.length) return '';
+  return `<div class="tfiles">${fs.map(f=>`<div class="tfile"><button type="button" class="linkbtn" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button>
+    ${f.briefState==='pending'?'<span class="hint" style="margin:0"> · AI is reading it…</span>':f.brief?`<div class="tbrief"><b>AI brief:</b> ${esc(f.brief)}</div>`:''}</div>`).join('')}</div>`;
+}
+async function getTaskFile(path, name, btn){
+  btn.disabled = true;
+  try{ const { data, error } = await sb.storage.from('taskfiles').createSignedUrl(path, 300); if (error) throw error;
+    const r = await fetch(data.signedUrl), url = URL.createObjectURL(await r.blob()), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); }
+  catch(e){ tip('Could not open the file', e.message || 'Check the internet connection.'); }
+  btn.disabled = false;
+}
+async function addFilesToTask(id, files){
+  const t = db.tasks.find(x=>x.id===id); if (!t || !files.length) return;
+  tip('Uploading', `${files.length} file${files.length===1?'':'s'}…`);
+  try{ const ups = await uploadTaskFiles(files); attachFiles(ups, [id]); render();
+    if (t.assignedBy && t.owner===ui.user) notify(t.assignedBy, `${userName(ui.user)} attached ${ups.length} file(s) to “${t.title}”.`, nowAbs(), null);
+    else if (t.assignedBy===ui.user) notify(t.owner, `${userName(ui.user)} attached ${ups.length} file(s) to your task “${t.title}”.`, nowAbs(), null); }
+  catch(e){ tip('Upload failed', e.message); }
+}
+const canAttach = t => !t.completedOn && (t.owner===ui.user || t.assignedBy===ui.user);
+
+/* ===== Feasibility: the person says whether assigned work fits the time; the assigner can change the duration ===== */
+function feasHtml(t){
+  const f = t.feas; if (!f || !t.assignedBy) return '';
+  const me = ui.user;
+  if (f.state==='pending' && t.owner===me) return `<div class="feas"><b>Can you finish this in ${t.days} day${t.days===1?'':'s'} (by ${fmtShort(t.dueDate)})?</b>
+    <div class="row" style="margin-top:6px"><button class="btn sm" data-act="feas-ok" data-id="${t.id}">Yes, feasible</button><button class="btn sm ghost danger" data-act="feas-no" data-id="${t.id}">Not feasible</button></div>
+    <form class="feasf" data-id="${t.id}" hidden novalidate><label class="f">Why not? What is the problem?<textarea name="why" rows="2"></textarea></label>
+      <label class="f days">Days you need<input type="number" name="need" min="1" max="60" value="${t.days+1}"></label><div class="err" hidden></div>
+      <div class="row end"><button type="button" class="btn sm ghost" data-act="feas-cancel" data-id="${t.id}">Cancel</button><button class="btn sm">Send to ${esc(userName(t.assignedBy))}</button></div></form></div>`;
+  if (f.state==='pending') return `<span class="b">Feasibility: waiting for ${esc(userName(t.owner))}</span>`;
+  if (f.state==='ok') return `<span class="b ok-b">Feasible ✓</span>`;
+  if (f.state==='not' && t.assignedBy===me) return `<div class="feas bad"><b>${esc(userName(t.owner))}: not feasible in ${t.days} day${t.days===1?'':'s'}.</b> Needs <b>${f.need} day${f.need===1?'':'s'}</b>.<div>${esc(f.why)}</div>
+    <div class="row" style="margin-top:6px"><button class="btn sm" data-act="feas-change" data-id="${t.id}">Change to ${f.need} days</button><button class="btn sm ghost" data-act="feas-keep" data-id="${t.id}">Keep ${t.days} day${t.days===1?'':'s'}</button></div></div>`;
+  if (f.state==='not') return `<span class="b emg">Not feasible — asked for ${f.need} days, waiting for ${esc(userName(t.assignedBy))}</span>`;
+  if (f.state==='changed') return `<span class="b ok-b">Duration changed to ${t.days} days</span>`;
+  if (f.state==='kept') return `<span class="b">Duration kept at ${t.days} day${t.days===1?'':'s'} by ${esc(userName(t.assignedBy))}</span>`;
+  return '';
+}
+function feasClick(act, a){
+  const t = db.tasks.find(x=>x.id===a.dataset.id); if (!t) return false;
+  const at = nowAbs(), me = ui.user;
+  if (act==='feas-ok' && t.owner===me){ t.feas = { state:'ok', at:new Date().toISOString() }; notify(t.assignedBy, `${userName(me)}: “${t.title}” is feasible in ${t.days} day(s).`, at, null); save(); render(); return true; }
+  if (act==='feas-no'){ const f = document.querySelector(`.feasf[data-id="${t.id}"]`); if (f){ f.hidden = false; f.querySelector('textarea').focus(); } return true; }
+  if (act==='feas-cancel'){ const f = document.querySelector(`.feasf[data-id="${t.id}"]`); if (f) f.hidden = true; return true; }
+  if ((act==='feas-change' || act==='feas-keep') && t.assignedBy===me && t.feas && t.feas.state==='not'){
+    if (act==='feas-change'){ t.days = t.feas.need; t.dueDate = addDays(t.startDate, t.days-1); t.feas.state = 'changed'; }
+    else t.feas.state = 'kept';
+    t.feas.decidedAt = new Date().toISOString();
+    const msg = act==='feas-change' ? `${userName(me)} changed “${t.title}” to ${t.days} days (due ${fmtShort(t.dueDate)}).` : `${userName(me)} kept “${t.title}” at ${t.days} day(s). Please plan accordingly or speak to them.`;
+    notify(t.owner, msg, at, null); emailPeople([t.owner], `Duration ${act==='feas-change'?'changed':'kept'}: ${t.title}`, msg); save(); render(); return true; }
+  return false;
+}
+function feasSubmit(form){
+  const t = db.tasks.find(x=>x.id===form.dataset.id); if (!t || t.owner!==ui.user) return;
+  const why = form.why.value.trim(), need = Math.max(1, Math.min(60, parseInt(form.need.value,10)||0)), err = form.querySelector('.err');
+  if (words(why) < 3){ err.hidden = false; err.textContent = 'Write the reason (a few words).'; return; }
+  if (need <= t.days){ err.hidden = false; err.textContent = `Enter more than ${t.days} day(s), or press “Yes, feasible”.`; return; }
+  t.feas = { state:'not', why:why.slice(0,500), need, at:new Date().toISOString() };
+  const msg = `${userName(ui.user)} says “${t.title}” is not feasible in ${t.days} day(s) and needs ${need}. Reason: ${why}`;
+  notify(t.assignedBy, msg, nowAbs(), null); emailPeople([t.assignedBy], `Not feasible: ${t.title}`, msg + '\n\nOpen Assign work in the portal to change the duration or keep it.');
+  save(); render();
+}
+function feasRepliesView(){
+  const list = db.tasks.filter(t=>t.assignedBy===ui.user && t.feas && t.feas.state==='not');
+  if (!list.length) return '';
+  return `<section class="card bad-card"><div class="sec-h"><h2>Not feasible — your decision</h2>${pill('miss', String(list.length))}</div>
+    ${list.map(t=>`<div class="crow"><div class="ctitle">${esc(userName(t.owner))} · ${esc(t.title)}</div>${feasHtml(t)}</div>`).join('')}</section>`;
+}
+
 /* Admin portal (CEO and GM only) and employee portal. */
 const ADMIN_TABS = ['dash','logins','activity','mrev','appr'];
 const isAdminUser = id => DASH_ROLES.includes(getUser(id).role);
@@ -3247,8 +3399,8 @@ async function saveLocation(kind, ref, pos){
     gps_time:g.gpsTime, device_time:g.devTime, gps_diff:g.gpsDiff });
   if (error) tip('Location not saved', error.message);
 }
-function emailPeople(ids, subject, text){
-  ids = [...new Set(ids)].filter(id=>id && id!==ui.user);
+function emailPeople(ids, subject, text, includeSelf){
+  ids = [...new Set(ids)].filter(id=>id && (includeSelf || id!==ui.user));
   if (!sb || !ids.length) return;
   sb.functions.invoke('notify', { body:{ to:ids, subject, text } }).catch(()=>{});
 }
@@ -3258,37 +3410,52 @@ async function aiAsk(prompt, json){
   if (!data || !data.text) throw new Error((data && data.error) || 'The AI gave no answer.');
   return data.text;
 }
-function addOrSaveTask(form){
+async function addOrSaveTask(form){
   const kind = form.dataset.kind, mode = form.dataset.mode, n = now(), me = ui.user, err = form.querySelector('.err');
+  const fail = m => { err.hidden = false; err.textContent = m; };
   const liveMode = kind==='assign' ? assignMode(n.mins) : phaseFor(n.mins, me);
   if (liveMode!==mode){ alert('This window has just closed.'); ui.editing=null; render(); return; }
   if (kind==='self' && db.closures[me+'|'+n.date]){ render(); return; }
   const title = form.title.value.trim();
   const priority = (form.querySelector('input[name=priority]:checked')||{}).value;
   const days = Math.max(1, Math.min(60, parseInt(form.days.value,10)||1));
-  if (!title){ err.hidden=false; err.textContent='Please enter the task.'; return; }
-  const projectId = form.project ? form.project.value : '';
+  if (!title) return fail('Please enter the task.');
+  const projectId = form.project ? form.project.value : '', details = form.details.value.trim();
   const edit = ui.editing ? db.tasks.find(x=>x.id===ui.editing) : null;
   if (edit && canEdit(edit, me, n)){
-    Object.assign(edit,{ title, details:form.details.value.trim(), priority, days, dueDate:addDays(edit.startDate,days-1), projectId });
-    ui.editing = null;
-  } else {
-    const owner = kind==='assign' ? form.target.value : me;
-    if (kind==='assign' && !owner){ err.hidden=false; err.textContent='Choose who to assign this to. Type a name or open the list.'; return; }
-    if (kind==='assign' && !assignableBy(me).some(r=>r.id===owner)) return;
-    if (kind==='assign' && closedToday(owner, n.date)){ err.hidden=false; err.textContent=`${userName(owner)} has already finished their day and submitted the closure report. Assign it tomorrow morning, or speak to them directly.`; return; }
-    if (kind==='assign' && needsGm(me, owner)){
-      if (!confirm(`${isGm(owner)?'Send this task to '+userName(owner):'This goes to the General Manager for approval first. Send it'}?`)) return;
-      sendRequest(me, owner, { title, details:form.details.value.trim(), priority, days, projectId });
-      save(); render(); tip('Sent for approval', isGm(owner) ? `${userName(owner)} can accept it, pass it to someone in your team, or decline it with a reason.` : `It will reach ${userName(owner)} once the General Manager approves it.`); return;
-    }
-    if (mode==='extra' && !confirm(`Add this as additional work${kind==='assign'?' for '+userName(owner):''}? It will be locked and cannot be edited.`)) return;
-    if (kind==='assign') makeTask(owner, me, { title, details:form.details.value.trim(), priority, days, projectId }, mode);
-    else db.tasks.push({ id:uid(), owner, assignedBy:null, category:mode==='plan'?'planned':'extra', priority, title,
-      details:form.details.value.trim(), days, startDate:n.date, dueDate:addDays(n.date,days-1), projectId,
-      log:{}, completedOn:null, createdAt:new Date().toISOString() });
+    Object.assign(edit,{ title, details, priority, days, dueDate:addDays(edit.startDate,days-1), projectId });
+    ui.editing = null; save(); render(); return;
   }
+  let owners = [me];
+  if (kind==='assign'){
+    const tg = form.targets ? form.targets.value : '', single = form.target.value;
+    owners = (tg ? tg.split(',') : []).concat(single && !tg.split(',').includes(single) ? [single] : []).filter(Boolean);
+    if (!owners.length) return fail('Choose who to assign this to. Type a name or open the list — you can add several people.');
+    owners = owners.filter(o=>assignableBy(me).some(r=>r.id===o));
+    const closed = owners.filter(o=>closedToday(o, n.date));
+    if (closed.length) return fail(`${closed.map(userName).join(', ')} ${closed.length===1?'has':'have'} already finished the day. Remove ${closed.length===1?'them':'them'} and assign tomorrow, or speak to them directly.`);
+  }
+  const viaGm = kind==='assign' ? owners.filter(o=>needsGm(me, o)) : [], direct = owners.filter(o=>!viaGm.includes(o));
+  const who = owners.length>1 ? `${owners.length} people` : userName(owners[0]);
+  if (kind==='assign' && !confirm(`Assign “${title}” to ${owners.map(userName).join(', ')}?${viaGm.length?`\n${viaGm.map(userName).join(', ')}: goes to the General Manager first.`:''}${mode==='extra'?'\nIt is added as additional work and locked.':''}`)) return;
+  if (kind==='self' && mode==='extra' && !confirm('Add this as additional work? It will be locked and cannot be edited.')) return;
+  const fileIn = form.querySelector('.tf-in'), files = fileIn ? [...fileIn.files] : [];
+  let ups = [];
+  if (files.length){ const btn = form.querySelector('.row.end .btn:not(.ghost)'); if (btn){ btn.disabled = true; btn.textContent = 'Uploading files…'; }
+    try{ ups = await uploadTaskFiles(files); }catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); } }
+  const f = { title, details, priority, days, projectId }, taskIds = [], reqIds = [];
+  if (kind==='assign'){
+    const group = owners.length>1 ? uid() : '';
+    direct.forEach(o=>taskIds.push(makeTask(o, me, f, mode, group?{ group }:{}, { noAssignerMail: direct.length>1 }).id));
+    if (direct.length>1) emailPeople([me], `You assigned “${title}” to ${direct.length} people`, `Confirmation: you assigned a task to ${direct.map(userName).join(', ')}.\nTask: ${title}\nPriority: ${priority}\nDuration: ${days} day(s)${details?'\nDetails: '+details:''}`, true);
+    viaGm.forEach(o=>{ sendRequest(me, o, f); reqIds.push(db.requests[db.requests.length-1].id); });
+  } else {
+    const t = { id:uid(), owner:me, assignedBy:null, category:mode==='plan'?'planned':'extra', priority, title, details, days, startDate:n.date, dueDate:addDays(n.date,days-1), projectId, log:{}, completedOn:null, createdAt:new Date().toISOString() };
+    db.tasks.push(t); taskIds.push(t.id);
+  }
+  if (ups.length) attachFiles(ups, taskIds, reqIds);
   save(); render();
+  if (kind==='assign') tip('Assigned', `${direct.length?`Assigned to ${direct.map(userName).join(', ')}.`:''}${viaGm.length?` Sent to the GM for ${viaGm.map(userName).join(', ')}.`:''}${ups.length?' The AI is reading the attachments.':''}`);
 }
 
 
@@ -3299,6 +3466,7 @@ document.addEventListener('submit', e=>{
   if (e.target.id==='newPwForm' || e.target.id==='chPwForm') return setNewPassword();
   if (e.target.id==='meetForm') return scheduleMeeting(false);
   if (e.target.id==='chatForm') return chatSend();
+  if (e.target.classList.contains('feasf')) return feasSubmit(e.target);
   if (e.target.id==='aiForm'){ const i = e.target.querySelector('#aiIn'), t = i.value; i.value = ''; return aiSend(t); }
   if (e.target.id==='camForm') return camSave(e.target);
   if (e.target.classList.contains('projf')) return createProject(e.target);
@@ -3326,6 +3494,9 @@ document.addEventListener('click', e=>{
   else if (act==='submit-closure'){ submitClosure(); return; }
   else if (act==='close-edit'){ ui.editClosure = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
   else if (act==='close-edit-cancel'){ ui.editClosure = false; }
+  else if (act.startsWith('feas-') && feasClick(act, a)) return;
+  else if (act==='tf-get'){ getTaskFile(a.dataset.path, a.dataset.name, a); return; }
+  else if (act==='tg-del'){ const tf = a.closest('.tform'), tg = tf.querySelector('input[name=targets]'); tg.value = tg.value.split(',').filter(x=>x && x!==a.dataset.id).join(','); paintTargets(tf); return; }
   else if (chatClick(act, a)) return;
   else if (mydClick(act, a)) return;
   else if (act==='sheet-dl'){ downloadMonthSheet(a); return; }
@@ -3418,7 +3589,7 @@ document.addEventListener('input', e=>{
   document.querySelectorAll('.team-h').forEach(hd=>{ let el=hd.nextElementSibling, any=false; while(el && el.classList.contains('prow')){ if(!el.hidden) any=true; el=el.nextElementSibling; } hd.hidden=!any; });
 });
 
-document.addEventListener('change', e=>{ if (e.target.id==='camShoot' || e.target.id==='camPick'){ camFile(e.target.files[0]); return; } if (e.target.classList && e.target.classList.contains('pf-in')){ if (e.target.files.length) uploadFiles(e.target.dataset.id, e.target.files); e.target.value=''; return; } });
+document.addEventListener('change', e=>{ if (e.target.classList && e.target.classList.contains('tf-more')){ addFilesToTask(e.target.dataset.id, [...e.target.files]); e.target.value=''; return; } if (e.target.id==='camShoot' || e.target.id==='camPick'){ camFile(e.target.files[0]); return; } if (e.target.classList && e.target.classList.contains('pf-in')){ if (e.target.files.length) uploadFiles(e.target.dataset.id, e.target.files); e.target.value=''; return; } });
 document.addEventListener('change', e=>{
   if (e.target.name==='oc'){ const pp = e.target.closest('form').querySelector('.pp'); if (pp) pp.hidden = e.target.value!=='postponed'; return; }
   const id = e.target.id;
