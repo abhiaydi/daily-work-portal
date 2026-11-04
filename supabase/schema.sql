@@ -158,3 +158,23 @@ alter table public.locations alter column lng drop not null;
 alter table public.locations add column if not exists note text;
 alter table public.locations add column if not exists device text;
 create index if not exists locations_kind_time_idx on public.locations(kind, created_at desc);
+
+-- Login/logout TIMES (no coordinates) for a person's own dashboard, their managers, the CEO and the GM.
+create or replace function public.session_times(p_person text, p_from timestamptz, p_to timestamptz)
+returns table(kind text, created_at timestamptz, device text, located boolean)
+language sql stable security definer set search_path = public as $$
+  with recursive me as (select id, role from people where user_id = auth.uid()),
+  t(id) as (
+    select p.id from people p, me where me.id = any(p.managers)
+    union
+    select p.id from people p join t on t.id = any(p.managers)
+  )
+  select l.kind, l.created_at, l.device, l.lat is not null
+  from locations l, me
+  where l.person = p_person and l.created_at >= p_from and l.created_at < p_to
+    and l.kind in ('signin','open','signout','login')
+    and (p_person = me.id or me.role in ('CEO','General Manager') or p_person in (select id from t))
+  order by l.created_at;
+$$;
+revoke execute on function public.session_times(text, timestamptz, timestamptz) from public, anon;
+grant execute on function public.session_times(text, timestamptz, timestamptz) to authenticated;

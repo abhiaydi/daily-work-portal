@@ -164,6 +164,15 @@ table.mst .pn{width:64px}
 .ai-sum.pend{border-color:var(--line);background:var(--card);display:flex;flex-direction:column;gap:2px}.ai-sum.pend span{color:var(--muted);font-size:13px}
 .ai-sum-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .ai-pct{font-weight:700;color:var(--accent);font-size:15px}
+.psel{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
+.psel button{border:0;background:none;padding:6px 12px;border-radius:999px;cursor:pointer;font:500 14px var(--f-body);color:var(--muted)}
+.psel button.on{background:var(--accent);color:var(--accent-ink)}
+.dash-score{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.ring{--v:0;width:120px;height:120px;border-radius:50%;flex:none;display:grid;place-content:center;text-align:center;
+  background:radial-gradient(closest-side,var(--bg) 78%,transparent 79%),conic-gradient(var(--accent) calc(var(--v)*1%),var(--lock-bg) 0)}
+.ring b{font:700 34px var(--f-display);line-height:1}.ring span{font-size:12px;color:var(--muted)}
+.dash-parts{flex:1 1 260px;min-width:0}
+.dgrp{border-top:1px solid var(--line);padding:8px 0}.dgrp summary{cursor:pointer}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:1000;padding:16px}
 .modal-box{background:var(--bg);color:var(--ink);border-radius:16px;padding:20px;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box}
 .modal-box h2{margin-top:0}
@@ -2699,7 +2708,10 @@ function activityView(n){
   const today = SESS.filter(s=>uaeDay(s.created_at)===d);
   const inToday = new Set(today.filter(s=>s.kind!=='signout').map(s=>s.person));
   const never = people.filter(u=>LOGINS && LOGINS[u.id] && LOGINS[u.id].hasLogin && !LOGINS[u.id].signedIn && !SESS.some(s=>s.person===u.id));
-  let h = `<section class="card"><div class="sec-h"><h2>Login activity</h2><label class="who">Date <input type="date" id="actDate" value="${d}" max="${n.date}" class="sel"></label></div>
+  const sm = defaultSheetMonth(n), dayOfMonth = +n.date.slice(8,10);
+  let h = `<section class="card ${dayOfMonth<=5?'geo':''}"><div class="sec-h"><h2>Monthly login sheet</h2><div class="row" style="gap:8px;align-items:center"><input type="month" id="sheetMonth" value="${sm}" max="${n.date.slice(0,7)}" class="sel"><button class="btn" data-act="sheet-dl">Download Excel</button></div></div>
+    <p class="hint" style="margin:0">${dayOfMonth<=5?'<b>Last month\'s sheet is ready.</b> ':''}One Excel file: a summary per person, every day with first login, last logout and both locations (map links), and all events.</p></section>`;
+  h += `<section class="card"><div class="sec-h"><h2>Login activity</h2><label class="who">Date <input type="date" id="actDate" value="${d}" max="${n.date}" class="sel"></label></div>
     <p class="hint" style="margin-top:0">Location is recorded when someone logs in, opens the portal while logged in (at most every 30 minutes), and logs out. Only the CEO and GM can see this page.</p>
     <div class="sum"><div><b>${inToday.size}</b>active on ${d===n.date?'today':fmtShort(d)}</div><div><b>${people.length - inToday.size}</b>not seen</div>${LOGINS?`<div><b>${never.length}</b>never logged in</div>`:''}</div>
     <div class="tblwrap"><table class="mst"><thead><tr><th>Person</th><th>Status</th><th>Last in</th><th>Location</th><th>Last out</th><th>Location</th></tr></thead><tbody>
@@ -2714,6 +2726,156 @@ function activityView(n){
   return h;
 }
 document.addEventListener('change', e=>{ if (e.target.id==='actDate'){ ui.actDate = e.target.value; render(); } });
+
+/* ===== Personal dashboard (everyone): login times, work status by period, score ===== */
+const PERIODS = [['day','Today'],['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']];
+const PRI_W = { Emergency:3, Important:2 };
+const dUTC = s => new Date(s+'T00:00:00Z'), iso = dt => dt.toISOString().slice(0,10);
+function periodRange(kind, anchor){
+  const t = dUTC(anchor), y = t.getUTCFullYear(), m = t.getUTCMonth();
+  if (kind==='day') return [anchor, anchor];
+  if (kind==='week'){ const dow = (t.getUTCDay()+6)%7, a = addDays(anchor, -dow); return [a, addDays(a,6)]; }
+  if (kind==='month') return [iso(new Date(Date.UTC(y,m,1))), iso(new Date(Date.UTC(y,m+1,0)))];
+  if (kind==='quarter'){ const q = Math.floor(m/3)*3; return [iso(new Date(Date.UTC(y,q,1))), iso(new Date(Date.UTC(y,q+3,0)))]; }
+  return [`${y}-01-01`, `${y}-12-31`];
+}
+function shiftAnchor(kind, anchor, dir){
+  const t = dUTC(anchor), y = t.getUTCFullYear(), m = t.getUTCMonth();
+  if (kind==='day') return addDays(anchor, dir);
+  if (kind==='week') return addDays(anchor, 7*dir);
+  if (kind==='month') return iso(new Date(Date.UTC(y, m+dir, 1)));
+  if (kind==='quarter') return iso(new Date(Date.UTC(y, m+3*dir, 1)));
+  return iso(new Date(Date.UTC(y+dir, 0, 1)));
+}
+function periodLabel(kind, a, b){
+  const f = (s,o) => dUTC(s).toLocaleDateString('en-GB', Object.assign({ timeZone:'UTC' }, o));
+  if (kind==='day') return f(a,{ weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  if (kind==='week') return `${f(a,{ day:'numeric', month:'short' })} – ${f(b,{ day:'numeric', month:'short', year:'numeric' })}`;
+  if (kind==='month') return f(a,{ month:'long', year:'numeric' });
+  if (kind==='quarter') return `Q${Math.floor(dUTC(a).getUTCMonth()/3)+1} ${dUTC(a).getUTCFullYear()}`;
+  return String(dUTC(a).getUTCFullYear());
+}
+function workStats(pid, a, b, n){
+  const today = n.date, end = b < today ? b : today;
+  if (a > today) return { future:true };
+  const tasks = db.tasks.filter(t=>t.owner===pid && t.startDate<=end && (!t.completedOn || t.completedOn>=a));
+  const fin = [], wrk = [], pen = []; let wsum = 0, wtot = 0;
+  tasks.forEach(t=>{ const done = t.completedOn && t.completedOn<=end, p = done ? 100 : progOn(t, end), w = PRI_W[t.priority]||1;
+    (done ? fin : p>0 ? wrk : pen).push({ t, p }); wsum += w*p; wtot += w; });
+  const due = tasks.filter(t=>t.dueDate>=a && t.dueDate<=end && (t.dueDate<today || (t.completedOn && t.completedOn<=t.dueDate)));
+  const onTime = due.filter(t=>t.completedOn && t.completedOn<=t.dueDate).length;
+  let days = 0, closed = 0;
+  for (let d = a; d <= end; d = addDays(d,1)){
+    if (!activeTasks(pid, d).length) continue;
+    const c = !!db.closures[pid+'|'+d];
+    if (d===today && !c && phaseFor(n.mins, pid)!=='over') continue;
+    days++; if (c) closed++;
+  }
+  const parts = [['Work done', wtot ? wsum/wtot : null, 0.6], ['Finished on time', due.length ? onTime/due.length*100 : null, 0.2], ['Closure reports submitted', days ? closed/days*100 : null, 0.2]];
+  const used = parts.filter(p=>p[1]!==null), wt = used.reduce((s,p)=>s+p[2],0);
+  const score = used.length ? Math.round(used.reduce((s,p)=>s+p[1]*p[2],0)/wt) : null;
+  return { tasks, fin, wrk, pen, parts, score, due:due.length, onTime, days, closed };
+}
+const uaeHM = isoTs => new Date(isoTs).toLocaleTimeString('en-GB', { timeZone:'Asia/Dubai', hour:'2-digit', minute:'2-digit' });
+const hmToMin = s => { const [h,m] = s.split(':').map(Number); return h*60+m; }, minToHM = x => `${String(Math.floor(x/60)).padStart(2,'0')}:${String(Math.round(x%60)).padStart(2,'0')}`;
+function sessionDays(rows){
+  const by = {};
+  rows.forEach(r=>{ const d = uaeDay(r.created_at), x = by[d] = by[d] || { d, inn:null, out:null, n:0, dev:'', loc:null, locOut:null };
+    x.n++; if (r.kind==='signout'){ x.out = r; } else if (!x.inn){ x.inn = r; } if (!x.dev && r.device) x.dev = r.device; });
+  return Object.values(by).sort((p,q)=>q.d.localeCompare(p.d));
+}
+const MYD = {};
+function viewablePeople(me){ return isAdminUser(me) ? USERS.slice() : [getUser(me)].concat(subtree(me)); }
+function myDashView(n){
+  const me = ui.user, md = ui.myd = ui.myd || { kind:'week', anchor:n.date, person:null };
+  const list = viewablePeople(me).filter(u=>hasOwnReport(u.id) || u.id===me);
+  if (!md.person || !list.some(u=>u.id===md.person)) md.person = hasOwnReport(me) ? me : (list.find(u=>u.id!==me)||getUser(me)).id;
+  const pid = md.person, [a, b] = periodRange(md.kind, md.anchor), u = getUser(pid), st = workStats(pid, a, b, n);
+  const key = `${pid}|${a}|${b}`;
+  if (!MYD[key]){ MYD[key] = 'loading';
+    const from = new Date(Date.parse(a+'T00:00:00+04:00')).toISOString(), to = new Date(Date.parse(addDays(b,1)+'T00:00:00+04:00')).toISOString();
+    sb.rpc('session_times', { p_person:pid, p_from:from, p_to:to }).then(r=>{ MYD[key] = r.error ? { err:r.error.message } : (r.data||[]); safeRender(); }); }
+  const ses = Array.isArray(MYD[key]) ? sessionDays(MYD[key]) : null;
+  let h = `<section class="card"><div class="sec-h"><h2>${pid===me?'My dashboard':esc(u.name)+' — dashboard'}</h2>
+      ${list.length>1?`<label class="who">Person <select id="mydPerson" class="sel">${list.map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${esc(x.name)}${x.id===me?' (me)':''}</option>`).join('')}</select></label>`:''}</div>
+    <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap"><div class="psel">${PERIODS.map(p=>`<button data-act="myd-kind" data-k="${p[0]}" class="${md.kind===p[0]?'on':''}">${p[0]==='day'?'Day':p[1]}</button>`).join('')}</div>
+      <button class="btn sm ghost" data-act="myd-shift" data-d="-1" aria-label="Previous">‹</button><b>${periodLabel(md.kind, a, b)}</b>
+      <button class="btn sm ghost" data-act="myd-shift" data-d="1" aria-label="Next" ${b>=n.date?'disabled':''}>›</button>
+      ${md.anchor!==n.date?'<button class="btn sm ghost" data-act="myd-now">Back to now</button>':''}</div></section>`;
+  if (st.future) return h + note('This period has not started yet.');
+  const sc = st.score;
+  h += `<section class="card"><div class="dash-score"><div class="ring" style="--v:${sc??0}"><b>${sc===null?'—':sc}</b><span>score</span></div>
+      <div class="dash-parts">${st.parts.map(p=>`<div>${bar(p[1]===null?0:Math.round(p[1]), `${p[0]} (${Math.round(p[2]*100)}%)${p[1]===null?' — no data':''}`)}</div>`).join('')}
+      <p class="hint" style="margin:6px 0 0">Score = 60% work done (AI %, Emergency ×3, Important ×2) + 20% tasks finished by their due date (${st.onTime}/${st.due}) + 20% days with a closure report (${st.closed}/${st.days}).</p></div></div>
+    <div class="sum" style="margin-top:12px"><div><b>${st.tasks.length}</b>tasks</div><div><b>${st.pen.length}</b>pending</div><div><b>${st.wrk.length}</b>working</div><div><b>${st.fin.length}</b>finished</div></div>
+    ${[['Pending (not started)', st.pen], ['Working on', st.wrk], ['Finished', st.fin]].map(([t, arr])=>arr.length?`<details class="dgrp"><summary><b>${t}</b> · ${arr.length}</summary>
+      ${arr.slice(0,100).map(x=>`<div class="ci"><span style="flex:1;min-width:0">${esc(x.t.title)}${x.t.projectId&&projById(x.t.projectId)?` <span class="b proj">${esc(projById(x.t.projectId).name)}</span>`:''}</span>${priBadge(x.t.priority)}<span class="b">due ${fmtShort(x.t.dueDate)}</span><span class="pct ${x.p>=100?'full':'part'}" style="min-width:44px;text-align:right">${x.p}%</span></div>`).join('')}</details>`:'').join('')}
+    ${!st.tasks.length?note('No tasks in this period.'):''}</section>`;
+  h += `<section class="card"><div class="sec-h"><h2>Login and logout</h2><span class="hint" style="margin:0">UAE time</span></div>`;
+  if (!ses) h += MYD[key] && MYD[key].err ? note('Could not load: '+esc(MYD[key].err), false, true) : '<p class="hint">Loading…</p>';
+  else {
+    const ins = ses.filter(x=>x.inn).map(x=>hmToMin(uaeHM(x.inn.created_at))), outs = ses.filter(x=>x.out).map(x=>hmToMin(uaeHM(x.out.created_at)));
+    const late = ins.filter(x=>x > hmToMin(CONFIG.planOpen)).length;
+    h += `<div class="sum"><div><b>${ses.length}</b>days logged in</div><div><b>${ins.length?minToHM(ins.reduce((s,x)=>s+x,0)/ins.length):'—'}</b>average first login</div><div><b>${outs.length?minToHM(outs.reduce((s,x)=>s+x,0)/outs.length):'—'}</b>average logout</div><div><b>${late}</b>after ${CONFIG.planOpen}</div></div>
+      ${ses.length?`<div class="tblwrap"><table class="mst"><thead><tr><th>Date</th><th>First login</th><th>Last logout</th><th>Device</th></tr></thead><tbody>${ses.slice(0,62).map(x=>`<tr><td>${fmtShort(x.d)}</td><td>${x.inn?uaeHM(x.inn.created_at):'—'}${x.inn&&hmToMin(uaeHM(x.inn.created_at))>hmToMin(CONFIG.planOpen)?' <span class="b emg">after '+CONFIG.planOpen+'</span>':''}</td><td>${x.out?uaeHM(x.out.created_at):'<span class="hint" style="margin:0">not logged out</span>'}</td><td>${esc(x.dev)}</td></tr>`).join('')}</tbody></table></div>`:note('No logins recorded in this period. (Login times are recorded from 4 November 2026.)')}`;
+  }
+  return h + `</section>`;
+}
+function mydClick(act, a){
+  const md = ui.myd; if (!md) return false;
+  if (act==='myd-kind'){ md.kind = a.dataset.k; render(); return true; }
+  if (act==='myd-shift'){ md.anchor = shiftAnchor(md.kind, md.anchor, +a.dataset.d); if (md.anchor > now().date) md.anchor = now().date; render(); return true; }
+  if (act==='myd-now'){ md.anchor = now().date; render(); return true; }
+  return false;
+}
+document.addEventListener('change', e=>{ if (e.target.id==='mydPerson'){ (ui.myd = ui.myd || {}).person = e.target.value; render(); } });
+
+/* ===== Monthly login/logout sheet (Excel) for the CEO and GM ===== */
+function loadXLSX(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((ok, bad)=>{ const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = ()=>ok(window.XLSX); s.onerror = ()=>bad(new Error('Could not load the Excel tool. Check your internet connection.')); document.head.appendChild(s); });
+}
+function defaultSheetMonth(n){ const t = dUTC(n.date); return t.getUTCDate() <= 5 ? iso(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth()-1, 1))).slice(0,7) : n.date.slice(0,7); }
+async function downloadMonthSheet(btn){
+  if (!isAdminUser(ui.user)) return;
+  const month = (document.getElementById('sheetMonth')||{}).value || defaultSheetMonth(now()); const [Y, M] = month.split('-').map(Number);
+  const a = `${month}-01`, last = iso(new Date(Date.UTC(Y, M, 0))), today = now().date, end = last < today ? last : today;
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Preparing…';
+  try{
+    const XLSX = await loadXLSX();
+    const from = new Date(Date.parse(a+'T00:00:00+04:00')).toISOString(), to = new Date(Date.parse(addDays(last,1)+'T00:00:00+04:00')).toISOString();
+    const { data, error } = await sb.from('locations').select('*').in('kind', ['signin','open','signout','login']).gte('created_at', from).lt('created_at', to).order('created_at').limit(20000);
+    if (error) throw error;
+    const rows = data || [], people = [...USERS].sort((x,y)=>(x.sort-y.sort) || x.name.localeCompare(y.name));
+    const locTxt = r => r ? (r.lat!=null ? mapUrl(r) : (r.note||'No location')) : '';
+    const daily = [['Date','Day','Employee','Job title','First login','Login location','Login accuracy (m)','Last logout','Logout location','Logout accuracy (m)','Device','Events','Status']], links = [];
+    const summary = [['Employee','Job title','Days with a login','First login after '+CONFIG.planOpen,'Average first login','Average logout','Days without a logout']];
+    people.forEach(u=>{
+      const mine = rows.filter(r=>r.person===u.id), ins = [], outs = []; let dl = 0, late = 0, noOut = 0;
+      for (let d = a; d <= end; d = addDays(d,1)){
+        const day = mine.filter(r=>uaeDay(r.created_at)===d), inn = day.find(r=>r.kind!=='signout'), out = [...day].reverse().find(r=>r.kind==='signout');
+        const dn = dUTC(d).toLocaleDateString('en-GB',{ weekday:'short', timeZone:'UTC' });
+        if (!day.length){ daily.push([d, dn, u.name, u.title, '', '', '', '', '', '', '', 0, 'No login recorded']); continue; }
+        dl++; if (inn){ const m = hmToMin(uaeHM(inn.created_at)); ins.push(m); if (m > hmToMin(CONFIG.planOpen)) late++; } if (out) outs.push(hmToMin(uaeHM(out.created_at))); else noOut++;
+        daily.push([d, dn, u.name, u.title, inn?uaeHM(inn.created_at):'', locTxt(inn), inn&&inn.acc?Math.round(inn.acc):'', out?uaeHM(out.created_at):'', locTxt(out), out&&out.acc?Math.round(out.acc):'', (inn||out||{}).device||'', day.length, inn && hmToMin(uaeHM(inn.created_at)) > hmToMin(CONFIG.planOpen) ? 'Late (after '+CONFIG.planOpen+')' : 'Logged in']);
+        if (inn && inn.lat!=null) links.push([daily.length-1, 5, mapUrl(inn)]); if (out && out.lat!=null) links.push([daily.length-1, 8, mapUrl(out)]);
+      }
+      const avg = arr => arr.length ? minToHM(arr.reduce((s,x)=>s+x,0)/arr.length) : '';
+      summary.push([u.name, u.title, dl, late, avg(ins), avg(outs), noOut]);
+    });
+    const events = [['Date','Time','Employee','Event','Latitude','Longitude','Accuracy (m)','Map','Note','Device']];
+    rows.forEach(r=>events.push([uaeDay(r.created_at), uaeHM(r.created_at), userName(r.person), SESS_LABEL[r.kind]||r.kind, r.lat??'', r.lng??'', r.acc?Math.round(r.acc):'', r.lat!=null?mapUrl(r):'', r.note||'', r.device||'']));
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(summary), ws2 = XLSX.utils.aoa_to_sheet(daily), ws3 = XLSX.utils.aoa_to_sheet(events);
+    links.forEach(([r,c,url])=>{ const ref = XLSX.utils.encode_cell({ r, c }); if (ws2[ref]){ ws2[ref].v = 'Open map'; ws2[ref].l = { Target:url }; } });
+    events.forEach((e,i)=>{ if (i && e[7]){ const ref = XLSX.utils.encode_cell({ r:i, c:7 }); ws3[ref].v = 'Open map'; ws3[ref].l = { Target:e[7] }; } });
+    ws1['!cols'] = [24,30,16,20,18,16,20].map(w=>({ wch:w })); ws2['!cols'] = [11,6,22,28,11,40,10,11,40,10,18,7,22].map(w=>({ wch:w })); ws3['!cols'] = [11,7,22,22,11,11,10,12,30,18].map(w=>({ wch:w }));
+    XLSX.utils.book_append_sheet(wb, ws1, 'Summary'); XLSX.utils.book_append_sheet(wb, ws2, 'Daily'); XLSX.utils.book_append_sheet(wb, ws3, 'All events');
+    XLSX.writeFile(wb, `Login-logout ${month}.xlsx`);
+  }catch(e){ tip('Could not make the sheet', e.message || String(e)); }
+  btn.disabled = false; btn.textContent = old;
+}
 
 /* Admin portal (CEO and GM only) and employee portal. */
 const ADMIN_TABS = ['dash','logins','activity','mrev','appr'];
@@ -2730,6 +2892,7 @@ function allTabs(id){
     const fsIds = subtree(id).filter(u=>isField(u.id)).map(u=>u.id);
     if (fsIds.length){ const p = (db.meetings||[]).filter(m=>m.status==='review' && fsIds.includes(m.owner)).length; t.push(['mrev', p?`Sales meetings (${p})`:'Sales meetings']); } }
   if (hasOwnReport(id)) t.push(['staff','My day']);
+  if (hasOwnReport(id) || subtree(id).length) t.push(['mydash', hasOwnReport(id)?'My dashboard':'Dashboards']);
   if (isField(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
   t.push(['proj','Projects']); t.push(['photos','Photo library']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
@@ -2759,7 +2922,7 @@ function render(){
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
-    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
@@ -2990,6 +3153,8 @@ document.addEventListener('click', e=>{
   else if (act==='submit-closure'){ submitClosure(); return; }
   else if (act==='close-edit'){ ui.editClosure = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
   else if (act==='close-edit-cancel'){ ui.editClosure = false; }
+  else if (mydClick(act, a)) return;
+  else if (act==='sheet-dl'){ downloadMonthSheet(a); return; }
   else if (aiClick(act, a)) return;
   else if (camClick(act, a)) return;
   else if (projClick(act, a)) return;
