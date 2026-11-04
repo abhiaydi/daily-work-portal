@@ -207,7 +207,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:99px;
   background:linear-gradient(135deg,var(--accent),#6b3fd4);color:#fff;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 8px 24px rgba(26,94,212,.35)}
 #aiFab[hidden]{display:none}
-.bot-av{width:40px;height:40px;image-rendering:auto;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);vertical-align:middle}
+.bot-av{width:40px;height:40px;image-rendering:auto;background:#fff;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);vertical-align:middle}
 .ai-h .bot-av{width:44px;height:44px}.ai-h b{display:inline-flex;align-items:center;gap:8px;font-size:17px}.bot-av.sm{width:22px;height:22px;border-width:1px;margin-right:5px;vertical-align:-6px}
 #aiFab{padding:6px 18px 6px 6px}
 #aiFab.wake::after{content:'';position:absolute;top:4px;right:6px;width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 2px #fff}
@@ -1223,7 +1223,7 @@ function listenOnce(){
     setTimeout(()=>{ try { r.start(); } catch(err){ if (typeof wakeResume==='function') wakeResume(); reject(new Error('Voice could not start. Try again.')); } }, WAKE && WAKE.on ? 250 : 0);
   });
 }
-/* Denson's voice: a male Indian-English voice when the device has one, else the most suitable male voice; deeper pitch for a bold sound.
+/* Densons' voice: a male Indian-English voice when the device has one, else the most suitable male voice; deeper pitch for a bold sound.
    Which voices exist depends on the browser/device (e.g. Edge offers "Microsoft Prabhat … English (India)", Windows "Microsoft Ravi"). */
 const MALE_IN = /prabhat|ravi|madhur|hemant|kunal|aarav|arjun|rishi|rehaan|rahul|male/i;
 const MALE_ANY = /\bmale\b|prabhat|ravi|madhur|hemant|david|mark|guy|ryan|george|daniel|james|thomas|christopher|eric|brian|andrew|fred|alex\b|aaron|arthur|oliver/i;
@@ -2079,10 +2079,10 @@ function projectDetail(p, n){
     <div class="pchat">${msgs.length ? msgs.map(m=>{
       if (m.sys) return `<div class="msg sys">${esc(userName(m.by))} ${esc(m.text)} · ${fmtTime(m.at)}</div>`;
       const fl = (m.files||[]).map(id=>db.pfiles.find(f=>f.id===id)).filter(Boolean);
-      return `<div class="msg ${m.ai?'ai':m.by===me?'me':''}"><small>${m.ai?`${BOT_SM}Denson · asked by ${esc(userName(m.by))}`:esc(userName(m.by))}${m.toAi?' → Denson':''} · ${fmtTime(m.at)}</small>${m.ai?esc(m.text):mentionHtml(m.text)}${fl.length?`<div>${fl.map(f=>`<button class="btn sm ghost fchip" data-act="pf-get" data-id="${f.id}">${FILE_IC}${esc(f.name)}</button>`).join('')}</div>`:''}</div>`; }).join('') : '<div class="empty">No messages yet. Say hello, or ask Denson about this project.</div>'}
-      ${AIBUSY[p.id]?`<div class="msg ai"><small>${BOT_SM}Denson</small>Thinking…</div>`:''}</div>
-    <form class="pchatf" data-id="${p.id}" novalidate><label class="f grow"><span class="sr">Message</span><textarea name="txt" rows="2" placeholder="Write a message… or ask Denson, e.g. “Find the latest quotation” or “What did the contract say about payment?”"></textarea></label>
-      <div class="row end"><button type="button" class="btn ghost" data-act="pc-ai" ${AIBUSY[p.id]?'disabled':''}>Ask Denson</button><button class="btn">Send</button></div></form></section>`;
+      return `<div class="msg ${m.ai?'ai':m.by===me?'me':''}"><small>${m.ai?`${BOT_SM}Densons · asked by ${esc(userName(m.by))}`:esc(userName(m.by))}${m.toAi?' → Densons':''} · ${fmtTime(m.at)}</small>${m.ai?esc(m.text):mentionHtml(m.text)}${fl.length?`<div>${fl.map(f=>`<button class="btn sm ghost fchip" data-act="pf-get" data-id="${f.id}">${FILE_IC}${esc(f.name)}</button>`).join('')}</div>`:''}</div>`; }).join('') : '<div class="empty">No messages yet. Say hello, or ask Densons about this project.</div>'}
+      ${AIBUSY[p.id]?`<div class="msg ai"><small>${BOT_SM}Densons</small>Thinking…</div>`:''}</div>
+    <form class="pchatf" data-id="${p.id}" novalidate><label class="f grow"><span class="sr">Message</span><textarea name="txt" rows="2" placeholder="Write a message… or ask Densons, e.g. “Find the latest quotation” or “What did the contract say about payment?”"></textarea></label>
+      <div class="row end"><button type="button" class="btn ghost" data-act="pc-ai" ${AIBUSY[p.id]?'disabled':''}>Ask Densons</button><button class="btn">Send</button></div></form></section>`;
   return h;
 }
 const FOLDER_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -2366,15 +2366,15 @@ document.addEventListener('keydown', e=>{ if (e.key!=='Escape') return; if (CAMS
 document.addEventListener('input', e=>{ if (e.target.id!=='phQ') return; ui.phQ = e.target.value; const q = ui.phQ.toLowerCase().trim();
   document.querySelectorAll('.ph').forEach(b=>{ b.hidden = !!q && !b.dataset.s.includes(q); }); });
 
-const BOT = 'Denson', BOT_IC = '<img class="bot-av" src="denson.jpg" alt="" aria-hidden="true">', BOT_SM = '<img class="bot-av sm" src="denson.jpg" alt="" aria-hidden="true">';
-/* ===== AI assistant ("Denson"): floating button on every page; typed or spoken; navigates and does tasks (with confirmation) ===== */
+const BOT = 'Densons', BOT_IC = '<img class="bot-av" src="logo.png" alt="" aria-hidden="true">', BOT_SM = '<img class="bot-av sm" src="logo.png" alt="" aria-hidden="true">';
+/* ===== AI assistant ("Densons"): floating button on every page; typed or spoken; navigates and does tasks (with confirmation) ===== */
 const AI_IC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>';
 const SPK_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
 const AST = { open:false, msgs:[], busy:false, voice:false, listening:false, pending:null, log:[] };
 function aiPrompt(text){
   const hist = AST.msgs.slice(-13, -1).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.text}${m.actions?' [proposed: '+m.actions.map(a=>a.type).join(', ')+' — '+(m.status||'')+']':''}`).join('\n');
   const done = AST.log.filter(x=>!x.undone).map(x=>`#${x.n}: ${x.desc}`).join('\n');
-  return `You are Denson, the friendly AI assistant inside the "Daily Work Portal" of Al Yamuna Densons, a UAE company. If asked your name, say you are Denson. You CAN navigate the portal and carry out the actions below on the user's behalf: the portal shows your proposed actions to the user and runs them after they confirm. Never say you are unable to assign work, add tasks or create projects — if the person is in the list, you can.
+  return `You are Densons, the friendly AI assistant inside the "Daily Work Portal" of Al Yamuna Densons, a UAE company. If asked your name, say you are Densons, the assistant of Al Yamuna Densons. You CAN navigate the portal and carry out the actions below on the user's behalf: the portal shows your proposed actions to the user and runs them after they confirm. Never say you are unable to assign work, add tasks or create projects — if the person is in the list, you can.
 Think step by step about what the user wants. If anything essential is missing or unclear (who, what, which project, which of two similar names, whether to undo something), ASK a short question and propose no action. Do not guess.
 Reply with ONLY a JSON object: {"reply":"...","actions":[]}
 Possible actions (use exact ids from the context; at most 5 per reply; they are confirmed together):
@@ -2570,7 +2570,7 @@ function aiContext(){
 }
 function ensureFab(show){
   let fab = document.getElementById('aiFab');
-  if (!fab){ fab = document.createElement('button'); fab.id = 'aiFab'; fab.type = 'button'; fab.dataset.act = 'ai-open'; fab.setAttribute('aria-label','Denson, the AI assistant');
+  if (!fab){ fab = document.createElement('button'); fab.id = 'aiFab'; fab.type = 'button'; fab.dataset.act = 'ai-open'; fab.setAttribute('aria-label','Densons, the AI assistant');
     fab.innerHTML = `${BOT_IC}<span>${BOT}</span>`; document.body.appendChild(fab); }
   fab.hidden = !show || AST.open;
   if (!show && AST.open){ AST.open = false; paintAI(); }
@@ -2580,10 +2580,10 @@ function paintAI(){
   const fab = document.getElementById('aiFab'); if (fab) fab.hidden = AST.open || !ui.authed;
   if (!AST.open){ if (p) p.remove(); return; }
   const keep = p && p.querySelector('#aiIn') ? p.querySelector('#aiIn').value : '';
-  if (!p){ p = document.createElement('section'); p.id = 'aiPanel'; p.setAttribute('aria-label','Denson, the AI assistant'); document.body.appendChild(p); }
+  if (!p){ p = document.createElement('section'); p.id = 'aiPanel'; p.setAttribute('aria-label','Densons, the AI assistant'); document.body.appendChild(p); }
   const msgs = AST.msgs.map((m,i)=>{
     if (m.role==='user') return `<div class="msg me">${esc(m.text)}</div>`;
-    let x = `<div class="msg ai"><small>${BOT_SM}Denson</small>${esc(m.text)}`;
+    let x = `<div class="msg ai"><small>${BOT_SM}Densons</small>${esc(m.text)}`;
     if (m.actions && m.status){
       x += `<div class="ai-act">${m.actions.map((a,ai)=>`<div class="ai-a1">${actSummary(a).filter(Boolean).map((l,j)=>`<div class="${j===1?'t':''}">${esc(l)}</div>`).join('')}</div>`).join('')}
         ${m.status==='pending' ? `<div class="row end" style="margin-top:8px"><button type="button" class="btn sm ghost" data-act="ai-no" data-i="${i}">Cancel</button><button type="button" class="btn sm" data-act="ai-yes" data-i="${i}">Confirm</button></div>`
@@ -2591,14 +2591,14 @@ function paintAI(){
     }
     return x + `</div>`; }).join('');
   p.innerHTML = `<div class="ai-h"><b>${BOT_IC}${BOT}</b>
-      <button type="button" class="btn sm ${WAKE.on?'':'ghost'} ai-v" data-act="ai-wake" aria-pressed="${WAKE.on}" title="Listen for “Hey Denson” while the portal is open">${WAKE.on?'● Hey Denson':'Hey Denson'}</button>
+      <button type="button" class="btn sm ${WAKE.on?'':'ghost'} ai-v" data-act="ai-wake" aria-pressed="${WAKE.on}" title="Listen for “Hey Densons” while the portal is open">${WAKE.on?'● Hey Densons':'Hey Densons'}</button>
       <button type="button" class="btn sm ${AST.voice?'':'ghost'} ai-v" data-act="ai-voice" aria-pressed="${AST.voice}" title="Spoken replies, hands-free${DVOICE?' · voice: '+esc(DVOICE.name):''}">${SPK_IC}<span>${AST.voice?'Voice on':'Voice'}</span></button>
       <button type="button" class="btn sm ghost" data-act="ai-close" aria-label="Close">×</button></div>
-    <div class="ai-msgs">${msgs || `<div class="ai-hello"><b>Hi ${esc(getUser(ui.user).name.split(' ')[0])}, I'm Denson — how can I help?</b><br>Type or tap the mic. For example:
+    <div class="ai-msgs">${msgs || `<div class="ai-hello"><b>Hi ${esc(getUser(ui.user).name.split(' ')[0])}, I'm Densons — how can I help?</b><br>Type or tap the mic. For example:
       <ul>${(assignableBy(ui.user).length?[`“Assign ${esc(assignableBy(ui.user).filter(x=>!isGm(x.id))[0]?.name.split(' ')[0]||assignableBy(ui.user)[0].name.split(' ')[0])} to send the price list to the client by Thursday”`]:[]).concat(['“Open my projects”','“What is left on my plan today?”', isMgmt(ui.user)?'“Who has not submitted their closure report?”':'“Take a photo”']).map(s=>`<li>${s}</li>`).join('')}</ul>
-      Turn on <b>Voice</b> to talk hands-free: I'll read my answers aloud and listen for your reply. Turn on <b>Hey Denson</b> and just say “Hey Denson, …” any time the portal is open.</div>`}
+      Turn on <b>Voice</b> to talk hands-free: I'll read my answers aloud and listen for your reply. Turn on <b>Hey Densons</b> and just say “Hey Densons, …” any time the portal is open.</div>`}
       ${AST.busy?'<div class="msg ai">Thinking…</div>':''}${AST.listening?'<div class="msg ai">Listening… speak now</div>':''}</div>
-    <form id="aiForm" class="ai-f" novalidate><input id="aiIn" autocomplete="off" placeholder="Ask Denson or tell him what to do…" aria-label="Message to Denson">
+    <form id="aiForm" class="ai-f" novalidate><input id="aiIn" autocomplete="off" placeholder="Ask Densons or tell it what to do…" aria-label="Message to Densons">
       <button type="button" class="stt-btn ai-mic ${AST.listening?'rec':''}" data-act="ai-mic" aria-label="Speak">${MIC}</button><button class="btn sm" ${AST.busy?'disabled':''}>Send</button></form>`;
   const inp = p.querySelector('#aiIn'); inp.value = keep;
   const box = p.querySelector('.ai-msgs'); box.scrollTop = box.scrollHeight;
@@ -3047,7 +3047,7 @@ function ensureChatFab(show){
 function chatMsgHtml(m, room){
   if (m.sys) return `<div class="msg sys">${esc(userName(m.by))} ${esc(m.text)} · ${fmtTime(m.at)}</div>`;
   const mine = m.by===ui.user, forMe = (m.mentions||[]).includes(ui.user);
-  return `<div class="msg ${m.ai?'ai':mine?'me':''} ${forMe&&!mine?'tagme':''}"><small>${m.ai?BOT_SM+'Denson':esc(userName(m.by))} · ${fmtTime(m.at)}</small>${mentionHtml(m.text)}</div>`;
+  return `<div class="msg ${m.ai?'ai':mine?'me':''} ${forMe&&!mine?'tagme':''}"><small>${m.ai?BOT_SM+'Densons':esc(userName(m.by))} · ${fmtTime(m.at)}</small>${mentionHtml(m.text)}</div>`;
 }
 function paintChat(){
   let p = document.getElementById('chatPanel');
@@ -3364,7 +3364,7 @@ function planClick(act){
   return true;
 }
 
-/* ===== "Hey Denson" wake word (opt-in per device). Listens while the portal is open and visible. ===== */
+/* ===== "Hey Densons" wake word (opt-in per device). Listens while the portal is open and visible. ===== */
 const WAKE_RE = /\b(hey|hi|ho|hello|ok|okay|oye)[\s,.!]+(d[ae]n+[sz]on'?s?|then\s?sons?|dan\s?sons?|den\s?sons?|danson|dawson|jensen|denzel)\b/i;
 const WAKE = { on:false, rec:null, paused:0, starting:false };
 try{ WAKE.on = localStorage.getItem('dwp-wake')==='1'; }catch(_){}
@@ -3379,7 +3379,7 @@ function wakeStart(){
     const cmd = txt.slice(m.index + m[0].length).replace(/^[\s,.!?]+/, '').trim();
     wakeStop(); wakeHeard(cmd);
   };
-  r.onerror = e=>{ if (e.error==='not-allowed' || e.error==='service-not-allowed'){ WAKE.on = false; try{ localStorage.setItem('dwp-wake','0'); }catch(_){} tip('Hey Denson', 'Microphone permission was refused, so "Hey Denson" was turned off.'); paintAI(); } };
+  r.onerror = e=>{ if (e.error==='not-allowed' || e.error==='service-not-allowed'){ WAKE.on = false; try{ localStorage.setItem('dwp-wake','0'); }catch(_){} tip('Hey Densons', 'Microphone permission was refused, so "Hey Densons" was turned off.'); paintAI(); } };
   r.onend = ()=>{ if (WAKE.rec===r) WAKE.rec = null; setTimeout(wakeStart, 400); };
   r.onstart = ()=>{ WAKE.starting = false; paintWakeDot(); };
   try{ r.start(); WAKE.rec = r; }catch(_){ WAKE.starting = false; WAKE.rec = null; }
@@ -3397,9 +3397,9 @@ async function wakeHeard(cmd){
   } finally { WAKE.paused = Math.max(0, WAKE.paused-1); setTimeout(()=>{ if (!AST.listening && !AST.busy) wakeStart(); }, 1500); }
 }
 function setWake(on){
-  if (on && !SR){ tip('Hey Denson', 'This browser cannot listen for "Hey Denson". Please use Chrome or Edge.'); return; }
+  if (on && !SR){ tip('Hey Densons', 'This browser cannot listen for "Hey Densons". Please use Chrome or Edge.'); return; }
   WAKE.on = on; try{ localStorage.setItem('dwp-wake', on?'1':'0'); }catch(_){}
-  if (on){ WAKE.paused = 0; wakeStart(); tip('Hey Denson is on', 'Say "Hey Denson" followed by what you need, while the portal is open on this device.'); } else wakeStop();
+  if (on){ WAKE.paused = 0; wakeStart(); tip('Hey Densons is on', 'Say "Hey Densons" followed by what you need, while the portal is open on this device.'); } else wakeStop();
   paintAI();
 }
 function paintWakeDot(){ const f = document.getElementById('aiFab'); if (f) f.classList.toggle('wake', !!WAKE.rec); }
