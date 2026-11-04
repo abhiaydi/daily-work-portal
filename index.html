@@ -172,7 +172,12 @@ table.mst .pn{width:64px}
   background:radial-gradient(closest-side,var(--bg) 78%,transparent 79%),conic-gradient(var(--accent) calc(var(--v)*1%),var(--lock-bg) 0)}
 .ring b{font:700 34px var(--f-display);line-height:1}.ring span{font-size:12px;color:var(--muted)}
 .dash-parts{flex:1 1 260px;min-width:0}
-.dgrp{border-top:1px solid var(--line);padding:8px 0}.dgrp summary{cursor:pointer}
+.dgrp{border-top:1px solid var(--line);padding:8px 0}
+.ondot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.22);margin-right:7px;vertical-align:middle;animation:onp 2s infinite}
+@keyframes onp{0%,100%{box-shadow:0 0 0 3px rgba(22,163,74,.22)}50%{box-shadow:0 0 0 6px rgba(22,163,74,.08)}}
+.pill.online{background:#dcfce7;color:#166534;font-weight:600}.pill.online::before{background:#16a34a}
+.sum .on b{color:#16a34a}
+tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:1000;padding:16px}
 .modal-box{background:var(--bg);color:var(--ink);border-radius:16px;padding:20px;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box}
 .modal-box h2{margin-top:0}
@@ -1693,7 +1698,7 @@ function dashView(n){
     g.list.forEach(i=>{
       const hay = (i.u.name+' '+i.u.title+' '+i.act.map(t=>t.title).join(' ')).toLowerCase();
       h += `<details class="prow" data-hay="${esc(hay)}" ${selP?'open':''}><summary>
-        <div class="nm"><b>${esc(i.u.name)}</b><span>${esc(i.u.title)}</span></div>
+        <div class="nm"><b>${onDot(i.u.id)}${esc(i.u.name)}</b><span>${esc(i.u.title)}</span></div>
         <div>${pill(i.cls,i.st)}</div>
         <div class="num">${i.planned}</div>
         <div class="num">${i.extra.length}${i.extra.some(t=>t.priority==='Emergency')?'<small style="color:var(--emg)">emergency</small>':''}</div>
@@ -2691,7 +2696,7 @@ async function doLogout(btn){
   if (btn){ btn.disabled = true; btn.textContent = 'Logging out…'; }
   try{ await logSession('signout', 8000); }catch(_){}
   ui.authed = false; ui.noAccess = false; ui.editing = null; ui.proj = null; AST.open = false; paintAI();
-  if (sb) await sb.auth.signOut(); render();
+  stopPresence(); if (sb) await sb.auth.signOut(); render();
 }
 async function loadSessions(){
   const since = new Date(Date.now() - 45*86400000).toISOString();
@@ -2713,13 +2718,13 @@ function activityView(n){
     <p class="hint" style="margin:0">${dayOfMonth<=5?'<b>Last month\'s sheet is ready.</b> ':''}One Excel file: a summary per person, every day with first login, last logout and both locations (map links), and all events.</p></section>`;
   h += `<section class="card"><div class="sec-h"><h2>Login activity</h2><label class="who">Date <input type="date" id="actDate" value="${d}" max="${n.date}" class="sel"></label></div>
     <p class="hint" style="margin-top:0">Location is recorded when someone logs in, opens the portal while logged in (at most every 30 minutes), and logs out. Only the CEO and GM can see this page.</p>
-    <div class="sum"><div><b>${inToday.size}</b>active on ${d===n.date?'today':fmtShort(d)}</div><div><b>${people.length - inToday.size}</b>not seen</div>${LOGINS?`<div><b>${never.length}</b>never logged in</div>`:''}</div>
+    <div class="sum"><div class="on"><b>${people.filter(u=>isOnline(u.id)).length}</b>online now</div><div><b>${inToday.size}</b>active on ${d===n.date?'today':fmtShort(d)}</div><div><b>${people.length - inToday.size}</b>not seen</div>${LOGINS?`<div><b>${never.length}</b>never logged in</div>`:''}</div>
     <div class="tblwrap"><table class="mst"><thead><tr><th>Person</th><th>Status</th><th>Last in</th><th>Location</th><th>Last out</th><th>Location</th></tr></thead><tbody>
-    ${people.map(u=>{ const mine = SESS.filter(s=>s.person===u.id), lin = mine.find(s=>s.kind!=='signout'), lout = mine.find(s=>s.kind==='signout');
+    ${people.slice().sort((x,y)=>(isOnline(y.id)-isOnline(x.id)) || (x.sort-y.sort)).map(u=>{ const mine = SESS.filter(s=>s.person===u.id), lin = mine.find(s=>s.kind!=='signout'), lout = mine.find(s=>s.kind==='signout');
       const L = LOGINS && LOGINS[u.id];
-      const st = inToday.has(u.id) ? pill('open', d===n.date?'Active today':'Active') : (L && !L.hasLogin) ? pill('miss','No login') : (!mine.length && L && !L.signedIn) ? pill('miss','Never logged in') : pill('soon', d===n.date?'Not seen today':'Not seen');
+      const st = isOnline(u.id) ? '<span class="pill online">Online now</span>' : inToday.has(u.id) ? pill('soon', d===n.date?'Active today, not open now':'Active') : (L && !L.hasLogin) ? pill('miss','No login') : (!mine.length && L && !L.signedIn) ? pill('miss','Never logged in') : pill('soon', d===n.date?'Not seen today':'Not seen');
       const t = s => s ? `${fmtShort(uaeDay(s.created_at))} ${new Date(s.created_at).toLocaleTimeString('en-GB',{timeZone:'Asia/Dubai',hour:'2-digit',minute:'2-digit'})}` : '—';
-      return `<tr><td><b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></td><td>${st}</td><td>${t(lin)}${lin?`<br><span class="hint" style="margin:0">${esc(lin.device||'')}</span>`:''}</td><td>${lin?sessLoc(lin):''}</td><td>${t(lout)}</td><td>${lout?sessLoc(lout):''}</td></tr>`; }).join('')}
+      return `<tr class="${isOnline(u.id)?'row-on':''}"><td>${onDot(u.id)}<b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></td><td>${st}</td><td>${t(lin)}${lin?`<br><span class="hint" style="margin:0">${esc(lin.device||'')}</span>`:''}</td><td>${lin?sessLoc(lin):''}</td><td>${t(lout)}</td><td>${lout?sessLoc(lout):''}</td></tr>`; }).join('')}
     </tbody></table></div></section>`;
   h += `<section class="card"><div class="sec-h"><h2>All events on ${fmtDate(d)}</h2>${pill('open', today.length+' events')}</div>
     ${today.length ? `<div class="tblwrap"><table class="mst"><thead><tr><th>Time</th><th>Person</th><th>Event</th><th>Location</th><th>Device</th></tr></thead><tbody>${today.map(s=>`<tr><td>${new Date(s.created_at).toLocaleTimeString('en-GB',{timeZone:'Asia/Dubai',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(userName(s.person))}</td><td>${SESS_LABEL[s.kind]||esc(s.kind)}</td><td>${sessLoc(s)}</td><td>${esc(s.device||'')}</td></tr>`).join('')}</tbody></table></div>` : note('No logins or logouts recorded on this date.')}</section>`;
@@ -2995,7 +3000,7 @@ function loginsView(){
     const st = L.hasLogin ? (self ? pill('open','You') : L.signedIn ? pill('open','Logged in') : pill('soon','Not logged in yet')) : L.emailOk ? pill('soon','Ready') : pill('miss','No email yet');
     const act = self ? '' : L.hasLogin ? `<button class="btn sm ghost" data-act="reset-login" data-id="${u.id}">Reset password</button>` : L.emailOk ? `<button class="btn sm ghost" data-act="mk-login" data-id="${u.id}">Create login</button>` : '';
     const ph = u.phone ? `<a href="tel:${esc(u.phone)}">${esc(u.phone.replace(/^(\+\d{3})(\d{2})(\d{3})(\d+)$/,'$1 $2 $3 $4'))}</a>` : '<span class="hint" style="margin:0">No phone</span>';
-    h += `<div class="ci" style="align-items:flex-start"><span style="min-width:200px;flex:1 1 200px"><b>${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span>
+    h += `<div class="ci" style="align-items:flex-start"><span style="min-width:200px;flex:1 1 200px"><b>${onDot(u.id)}${esc(u.name)}</b><br><span class="hint" style="margin:0">${esc(u.title)}</span></span>
       <span style="flex:2 1 260px;min-width:0">${L.emailOk?esc(u.email):'<span class="hint" style="margin:0">No email yet</span>'}<br>${ph}</span>${st}${act}</div>`; });
   return h + '</section>';
 }
@@ -3055,7 +3060,26 @@ async function loadAll(){
 }
 let renderTimer = null;
 const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeout(safeRender, 250); };
+/* Who has the portal open right now (live presence; nothing is stored). */
+let ONLINE = new Map(), PRES = null;
+const isOnline = id => ONLINE.has(id);
+const onDot = id => isOnline(id) ? '<span class="ondot" title="Online now" aria-label="Online now"></span>' : '';
+function startPresence(){
+  try{
+    if (PRES) sb.removeChannel(PRES);
+    const ch = PRES = sb.channel('online-now', { config:{ presence:{ key:ui.user } } });
+    ch.on('presence', { event:'sync' }, ()=>{
+      if (PRES!==ch) return;
+      const st = ch.presenceState(), m = new Map();
+      Object.keys(st).forEach(k=>{ const metas = st[k]||[]; m.set(k, metas.map(x=>x.since).filter(Boolean).sort()[0] || ''); });
+      const changed = m.size!==ONLINE.size || [...m.keys()].some(k=>!ONLINE.has(k)); ONLINE = m;
+      if (changed && isAdminUser(ui.user) && ['activity','dash','logins'].includes(ui.view)) scheduleRender();
+    }).subscribe(async status=>{ if (status==='SUBSCRIBED' && PRES===ch) await ch.track({ since:new Date().toISOString(), device:deviceName() }); });
+  }catch(_){ }
+}
+function stopPresence(){ try{ if (PRES){ PRES.untrack(); sb.removeChannel(PRES); } }catch(_){ } PRES = null; ONLINE = new Map(); }
 function subscribe(){
+  startPresence();
   sb.channel('records-live').on('postgres_changes', { event:'*', schema:'public', table:'records' }, p=>{
     const r = (p.new && p.new.collection) ? p.new : p.old; if (!r || !COLS.includes(r.collection)) return;
     applyRemote(r.collection, r.id, p.eventType==='DELETE' ? null : p.new.data); scheduleRender();
