@@ -1332,7 +1332,7 @@ function loginView(){
     <form id="newPwForm" novalidate style="margin-top:10px"><label class="f">New password (at least 8 characters)<input type="password" id="np1" autocomplete="new-password"></label>
     <label class="f">Repeat new password<input type="password" id="np2" autocomplete="new-password"></label><div class="err" id="npErr" hidden></div>
     <div class="row end"><button class="btn">Save password</button></div></form></section>`;
-  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Log in to the Daily Work Portal</h2><p class="hint" style="margin:2px 0 0">Al Yamuna Densons Industries</p>
+  return `<section class="card login"><span class="mark" aria-hidden="true">AY</span><h2>Log in to the Daily Work Portal</h2><p class="hint" style="margin:2px 0 0">Al Yamuna Densons Industries</p><p class="hint" style="margin:6px 0 0">Your location is recorded when you log in and log out. Allow location when your browser asks.</p>
     <form id="loginForm" novalidate style="margin-top:10px">
       <label class="f">Work email<input type="email" id="lgEmail" autocomplete="username" inputmode="email"></label>
       <label class="f">Password<input type="password" id="lgPass" autocomplete="current-password"></label>
@@ -2666,7 +2666,7 @@ document.addEventListener('input', e=>{ if (!e.target.classList || !e.target.cla
 
 /* ===== Render ===== */
 /* ===== Login / logout locations (everyone) and the Login activity page (CEO/GM) ===== */
-let SESS = [], SESS_LOADED = false, JUST_SIGNED_IN = false;
+let SESS = [], SESS_LOADED = false, JUST_SIGNED_IN = false, LOGIN_POS = null, LOCCTX = 'out';
 const SESS_KINDS = ['signin','open','signout'];
 function deviceName(){ const u = navigator.userAgent || '';
   const os = /iPhone|iPad/.test(u) ? 'iPhone/iPad' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : /Mac OS/.test(u) ? 'Mac' : 'Other';
@@ -2705,15 +2705,16 @@ async function doLogout(btn){
   ui.authed = false; ui.noAccess = false; ui.editing = null; ui.proj = null; AST.open = false; paintAI();
   stopPresence(); if (sb) await sb.auth.signOut(); render();
 }
-function locNeeded(why){
+function locNeeded(why, ctx){
+  LOCCTX = ctx || 'out'; const verb = LOCCTX==='in' ? 'log in' : 'log out';
   const el = modalEl('locModal'), ios = /iPhone|iPad/.test(navigator.userAgent), and = /Android/.test(navigator.userAgent);
   const steps = /refused/i.test(why||'') ? (ios
       ? '<li>Open the iPhone <b>Settings</b> → <b>Privacy & Security</b> → <b>Location Services</b>: make sure it is on, and that <b>Safari Websites</b> (or Chrome) is set to <b>While Using</b>.</li><li>Back here, reload the page and press <b>Try again</b>. If asked, choose <b>Allow</b>.</li>'
       : '<li>Tap the <b>lock / settings icon</b> next to the web address at the top.</li><li>Choose <b>Location</b> (or Permissions) → <b>Allow</b>.</li><li>Press <b>Try again</b>.</li>')
     : `<li>Turn on your ${and||ios?'phone\'s location (GPS)':'device location (Windows: Settings → Privacy → Location)'}.</li><li>If you are indoors, move near a window, then press <b>Try again</b>.</li>`;
-  el.innerHTML = `<div class="modal-box"><h2>Location needed to log out</h2>
-    <p style="margin-top:0">You can only log out after your location is recorded. ${esc(why||'')}.</p><ol style="padding-left:20px">${steps}</ol>
-    <div class="row end"><button type="button" class="btn ghost" data-act="loc-x">Stay logged in</button><button type="button" class="btn" data-act="loc-retry">Try again</button></div></div>`;
+  el.innerHTML = `<div class="modal-box"><h2>Location needed to ${verb}</h2>
+    <p style="margin-top:0">You can only ${verb} after your location is recorded. ${esc(why||'')}.</p><ol style="padding-left:20px">${steps}</ol>
+    <div class="row end"><button type="button" class="btn ghost" data-act="loc-x">${LOCCTX==='in'?'Cancel':'Stay logged in'}</button><button type="button" class="btn" data-act="loc-retry">Try again</button></div></div>`;
 }
 function closeLocModal(){ const el = document.getElementById('locModal'); if (el) el.remove(); }
 async function loadSessions(){
@@ -2964,9 +2965,12 @@ async function doLogin(){
   const email = document.getElementById('lgEmail').value.trim(), pw = document.getElementById('lgPass').value, err = document.getElementById('lgErr');
   const btn = document.querySelector('#loginForm .btn:not(.ghost)');
   if (!email || !pw){ err.hidden = false; err.textContent = 'Enter your work email and password.'; return; }
-  btn.disabled = true; err.hidden = true;
+  btn.disabled = true; err.hidden = true; const label = btn.textContent; btn.textContent = 'Getting location…';
+  const r = await getPos(15000);          // no location, no login
+  if (!r.pos){ btn.disabled = false; btn.textContent = label; locNeeded(r.note, 'in'); return; }
+  closeLocModal(); LOGIN_POS = r; btn.textContent = 'Logging in…';
   const { error } = await sb.auth.signInWithPassword({ email, password: pw });
-  btn.disabled = false;
+  btn.disabled = false; btn.textContent = label;
   if (error){ err.hidden = false; err.textContent = /invalid/i.test(error.message) ? 'Wrong email or password.' : error.message; return; }
   JUST_SIGNED_IN = true;
   await afterLogin();
@@ -3065,7 +3069,7 @@ async function afterLogin(){
   ui.portal = isAdminUser(ui.user) ? (load(UI_KEY, {}).portal || 'admin') : 'work';
   ui.view = tabsFor(ui.user)[0][0];   // everyone starts on their main tab after logging in
   render();
-  logSession(JUST_SIGNED_IN ? 'signin' : 'open'); JUST_SIGNED_IN = false;
+  logSession(JUST_SIGNED_IN ? 'signin' : 'open', 0, JUST_SIGNED_IN && LOGIN_POS && (Date.now() - LOGIN_POS.pos.timestamp) < 15*60000 ? LOGIN_POS : undefined); JUST_SIGNED_IN = false; LOGIN_POS = null;
 }
 async function loadAll(){
   db = { tasks:[], closures:{}, meetings:[], notifications:[], checkins:[], requests:[], projects:[], pchat:[], pfiles:[], photos:[], aisum:[] }; COLS.forEach(c=>shadow[c].clear());
@@ -3265,7 +3269,7 @@ document.addEventListener('click', e=>{
   else if (act==='perm'){ try{ Notification.requestPermission().then(()=>render()); }catch(_){ } return; }
   else if (act==='logout'){ doLogout(a); return; }
   else if (act==='loc-x'){ closeLocModal(); return; }
-  else if (act==='loc-retry'){ a.disabled = true; a.textContent = 'Getting location…'; doLogout(document.querySelector('#whoBox [data-act=logout]')); return; }
+  else if (act==='loc-retry'){ a.disabled = true; a.textContent = 'Getting location…'; if (LOCCTX==='in') doLogin(); else doLogout(document.querySelector('#whoBox [data-act=logout]')); return; }
   save(); render();
 });
 
