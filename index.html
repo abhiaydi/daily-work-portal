@@ -174,6 +174,24 @@ table.mst .pn{width:64px}
 .ph-n{padding:6px 8px 0;font-weight:600;font-size:13px;overflow-wrap:anywhere}
 .ph-m{padding:0 8px 8px;font-size:11px;color:var(--muted)}
 .ph:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+#aiFab{position:fixed;right:18px;bottom:18px;z-index:900;display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:99px;
+  background:linear-gradient(135deg,var(--accent),#6b3fd4);color:#fff;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 8px 24px rgba(26,94,212,.35)}
+#aiFab[hidden]{display:none}
+#aiFab:hover{filter:brightness(1.07)}
+#aiPanel{position:fixed;right:18px;bottom:18px;z-index:950;width:min(420px,calc(100vw - 36px));height:min(620px,calc(100vh - 36px));display:flex;flex-direction:column;
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 16px 48px rgba(0,0,0,.25);overflow:hidden}
+.ai-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--card)}
+.ai-h b{flex:1;display:flex;align-items:center;gap:6px;font-size:15px}.ai-h b svg{color:var(--accent);width:18px;height:18px}
+.ai-v{display:inline-flex;align-items:center;gap:5px}
+.ai-msgs{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:12px}
+.ai-hello{color:var(--muted);font-size:14px}.ai-hello b{color:var(--ink)}.ai-hello ul{margin:6px 0;padding-left:18px}
+.ai-act{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:13px;white-space:normal}
+.ai-act .t{font-weight:600;font-size:14px}
+.ai-st{margin-top:6px;font-size:12px;color:var(--muted)}.ai-st.ok{color:var(--ok);font-weight:600}
+.ai-f{display:flex;gap:6px;align-items:center;padding:10px;border-top:1px solid var(--line)}
+.ai-f input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit}
+.ai-f .ai-mic{position:static;flex:none}
+@media (max-width:560px){ #aiPanel{right:0;left:0;bottom:0;width:100%;height:85vh;border-radius:18px 18px 0 0} #aiFab{right:12px;bottom:12px} }
 .ok-msg{background:var(--ok-bg);color:var(--ok);border-radius:var(--r-s);padding:10px 12px;font-size:14px;margin-bottom:12px;font-weight:600}
 .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
 
@@ -2226,6 +2244,207 @@ document.addEventListener('keydown', e=>{ if (e.key!=='Escape') return; if (CAMS
 document.addEventListener('input', e=>{ if (e.target.id!=='phQ') return; ui.phQ = e.target.value; const q = ui.phQ.toLowerCase().trim();
   document.querySelectorAll('.ph').forEach(b=>{ b.hidden = !!q && !b.dataset.s.includes(q); }); });
 
+/* ===== AI assistant: floating button on every page; typed or spoken; navigates and does tasks (with confirmation) ===== */
+const AI_IC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>';
+const SPK_IC = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
+const AST = { open:false, msgs:[], busy:false, voice:false, listening:false, pending:null };
+const PAGE_NAMES = { alerts:'Notifications', account:'My account' };
+function pagesFor(id){ return tabsFor(id).map(t=>[t[0], t[1].replace(/\s*\(\d+\)$/,'')]).concat([['alerts','Notifications'],['account','My account']]); }
+function aiContext(){
+  const me = ui.user, u = getUser(me), n = now(), d = n.date, ph = phaseFor(n.mins, me);
+  const people = assignableBy(me).map(p=>`${p.id}: ${p.name}, ${p.title}${needsGm(me,p.id)?' [needs GM approval]':''}${closedToday(p.id,d)?' [finished their day]':''}`);
+  const mine = hasOwnReport(me) ? activeTasks(me, d).map(t=>`- ${t.title} (${t.priority}, ${t.category==='extra'?'additional':'planned'}${t.projectId&&projById(t.projectId)?', project '+projById(t.projectId).name:''}, ${progOn(t,d)}% so far)`) : [];
+  const team = subtree(me).filter(p=>hasOwnReport(p.id)).slice(0,30).map(p=>`- ${p.name}: ${activeTasks(p.id,d).length} open tasks, closure ${closedToday(p.id,d)?'submitted':'not submitted'}${isField(p.id)?(loginOf(p.id,d)?', logged in today':', NOT logged in today'):''}`);
+  const projs = myProjects(me).slice(0,20).map(p=>`${p.id}: ${p.name} — ${projProgress(p,d)}% done, ${p.status||'active'}${p.end?', target '+p.end:''}`);
+  const pendRev = reportsOf(me).filter(r=>Object.keys(db.closures).some(k=>k.startsWith(r.id+'|') && !db.closures[k].review)).length;
+  const lines = [
+    `User: ${u.name}, ${u.title} (${u.role}). Now: ${fmtDate(d)} ${n.label} UAE time.`,
+    hasOwnReport(me) ? `User's day: ${ph==='before'?'before 09:00':ph==='plan'?'morning plan window (until '+CONFIG.planClose+')':ph==='extra'?(closedToday(me,d)?'day finished, closure submitted':'working; can add additional work; can finish the day'):'closure deadline passed'}.` : '',
+    `Work assigned now goes in as: ${assignMode(n.mins)==='plan'?'morning plan (priorities Important, Moderate, Daily Work)':'additional work (priorities Emergency, Important)'}.`,
+    `Pages the user can open (id: name): ${pagesFor(me).map(p=>p[0]+': '+p[1]).join('; ')}.`,
+    people.length ? `People the user can assign work to:\n${people.join('\n')}` : 'The user cannot assign work to anyone.',
+    mine.length ? `User's open tasks today:\n${mine.join('\n')}` : '',
+    team.length ? `User's team today:\n${team.join('\n')}` : '',
+    pendRev ? `Team closure reports waiting for the user's review: ${pendRev}.` : '',
+    isGm(me) ? `Requests waiting for the user's approval: ${gmPendingCount(me)}.` : '',
+    isField(me) ? `User's meetings needing minutes: ${meetingsOf(me).filter(m=>needsInput(m,nowAbs())).length}.` : '',
+    projs.length ? `Projects the user can see (id: name):\n${projs.join('\n')}` : 'No projects yet.',
+    `Photos in the photo library: ${db.photos.length}.`
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+function aiPrompt(text){
+  const hist = AST.msgs.slice(-9, -1).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.text}`).join('\n');
+  return `You are the assistant inside the "Daily Work Portal" of a UAE company. You help the user move around the portal and do things.
+Reply with ONLY a JSON object: {"reply":"...","action":null}  or with an action object.
+Actions (use exact ids from the context; never invent ids):
+- {"type":"navigate","page":"<page id>"}  open a page
+- {"type":"open_project","project_id":"..."}
+- {"type":"assign_task","assignee_id":"...","title":"...","details":"","priority":"...","days":1,"project_id":""}
+- {"type":"add_my_task","title":"...","details":"","priority":"...","days":1,"project_id":""}  add to the user's own plan / additional work
+- {"type":"create_project","name":"...","description":"","end":"YYYY-MM-DD or empty","member_ids":[]}
+- {"type":"add_photo"}  open the camera / photo upload
+- {"type":"finish_day"}  open the closure report so the user can finish the day
+Rules:
+- "reply": short, friendly, plain English (or the user's language). For questions, answer ONLY from the context below; if it is not there, say you cannot see that and suggest the page to check.
+- Only one action per reply. If something essential is missing or a name fits more than one person, ask a short question and use no action.
+- Priority must be one allowed for the current mode. Use "Emergency" only if they say urgent/emergency/immediately. Default: "Important" for additional work, "Moderate" for the morning plan.
+- days: if a deadline is given ("by Thursday"), count days from today up to and including that day. Default 1.
+- Never claim you have done something: actions that change data are shown to the user to confirm first.
+Context:
+${aiContext()}
+${hist ? 'Conversation so far:\n'+hist+'\n' : ''}User: ${text.replace(/\s+/g,' ').slice(0,1500)}`;
+}
+function ensureFab(show){
+  let fab = document.getElementById('aiFab');
+  if (!fab){ fab = document.createElement('button'); fab.id = 'aiFab'; fab.type = 'button'; fab.dataset.act = 'ai-open'; fab.setAttribute('aria-label','AI assistant');
+    fab.innerHTML = `${AI_IC}<span>Ask AI</span>`; document.body.appendChild(fab); }
+  fab.hidden = !show || AST.open;
+  if (!show && AST.open){ AST.open = false; paintAI(); }
+}
+function actSummary(a){
+  const pj = a.project_id && projById(a.project_id);
+  if (a.type==='assign_task') return [`Assign to ${userName(a.assignee_id)}${needsGm(ui.user,a.assignee_id)&&!isGm(a.assignee_id)?' (goes to the GM for approval first)':isGm(a.assignee_id)?' (the GM can accept, pass on or decline)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'} · ${assignMode(now().mins)==='plan'?'morning plan':'additional work'}`, a.details, pj?'Project: '+pj.name:''];
+  if (a.type==='add_my_task') return [`Add to my ${a._mode==='plan'?'morning plan':'additional work'}${a._mode==='extra'?' (locked once added)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'}`, a.details, pj?'Project: '+pj.name:''];
+  if (a.type==='create_project') return ['Create a new project', a.name, a.description, a.end?'Target end: '+fmtShort(a.end):'', a.member_ids.length?'People: '+a.member_ids.map(userName).join(', '):''];
+  return [];
+}
+function paintAI(){
+  let p = document.getElementById('aiPanel');
+  const fab = document.getElementById('aiFab'); if (fab) fab.hidden = AST.open || !ui.authed;
+  if (!AST.open){ if (p) p.remove(); return; }
+  const keep = p && p.querySelector('#aiIn') ? p.querySelector('#aiIn').value : '';
+  if (!p){ p = document.createElement('section'); p.id = 'aiPanel'; p.setAttribute('aria-label','AI assistant'); document.body.appendChild(p); }
+  const msgs = AST.msgs.map((m,i)=>{
+    if (m.role==='user') return `<div class="msg me">${esc(m.text)}</div>`;
+    let x = `<div class="msg ai">${esc(m.text)}`;
+    if (m.action && m.status){
+      const lines = actSummary(m.action).filter(Boolean);
+      x += `<div class="ai-act">${lines.map((l,j)=>`<div class="${j===1?'t':''}">${esc(l)}</div>`).join('')}
+        ${m.status==='pending' ? `<div class="row end" style="margin-top:8px"><button type="button" class="btn sm ghost" data-act="ai-no" data-i="${i}">Cancel</button><button type="button" class="btn sm" data-act="ai-yes" data-i="${i}">Confirm</button></div>`
+          : `<div class="ai-st ${m.status==='done'?'ok':''}">${m.status==='done'?'✓ Done':m.status==='cancelled'?'Cancelled':esc(m.status)}</div>`}</div>`;
+    }
+    return x + `</div>`; }).join('');
+  p.innerHTML = `<div class="ai-h"><b>${AI_IC} AI assistant</b>
+      <button type="button" class="btn sm ${AST.voice?'':'ghost'} ai-v" data-act="ai-voice" aria-pressed="${AST.voice}" title="Spoken replies, hands-free">${SPK_IC}<span>${AST.voice?'Voice on':'Voice off'}</span></button>
+      <button type="button" class="btn sm ghost" data-act="ai-close" aria-label="Close">×</button></div>
+    <div class="ai-msgs">${msgs || `<div class="ai-hello"><b>Hi ${esc(getUser(ui.user).name.split(' ')[0])}, what can I do?</b><br>Type or tap the mic. For example:
+      <ul>${(assignableBy(ui.user).length?[`“Assign ${esc(assignableBy(ui.user).filter(x=>!isGm(x.id))[0]?.name.split(' ')[0]||assignableBy(ui.user)[0].name.split(' ')[0])} to send the price list to the client by Thursday”`]:[]).concat(['“Open my projects”','“What is left on my plan today?”', isMgmt(ui.user)?'“Who has not submitted their closure report?”':'“Take a photo”']).map(s=>`<li>${s}</li>`).join('')}</ul>
+      Turn on <b>Voice</b> to talk hands-free: I'll read my answers aloud and listen for your reply.</div>`}
+      ${AST.busy?'<div class="msg ai">Thinking…</div>':''}${AST.listening?'<div class="msg ai">Listening… speak now</div>':''}</div>
+    <form id="aiForm" class="ai-f" novalidate><input id="aiIn" autocomplete="off" placeholder="Ask or tell me what to do…" aria-label="Message to the AI assistant">
+      <button type="button" class="stt-btn ai-mic ${AST.listening?'rec':''}" data-act="ai-mic" aria-label="Speak">${MIC}</button><button class="btn sm" ${AST.busy?'disabled':''}>Send</button></form>`;
+  const inp = p.querySelector('#aiIn'); inp.value = keep;
+  const box = p.querySelector('.ai-msgs'); box.scrollTop = box.scrollHeight;
+  if (!AST.listening && !AST.busy) inp.focus({ preventScroll:true });
+}
+function aiNormalize(a){
+  if (!a || typeof a!=='object' || !a.type) return null;
+  const n = now(), me = ui.user;
+  const pri = list => list.includes(a.priority) ? a.priority : (list===EXTRA_PRI ? 'Important' : 'Moderate');
+  a.days = Math.max(1, Math.min(60, parseInt(a.days,10)||1));
+  a.title = String(a.title||'').trim().slice(0,140); a.details = String(a.details||'').trim().slice(0,500);
+  if (a.project_id && !canSeeProject(projById(a.project_id), me)) a.project_id = '';
+  if (a.type==='assign_task'){
+    if (!assignableBy(me).some(u=>u.id===a.assignee_id) || !a.title) return { error:'I could not match that person or task. Please say the name and the task again.' };
+    if (closedToday(a.assignee_id, n.date)) return { error:`${userName(a.assignee_id)} has already finished their day. Assign it tomorrow morning.` };
+    a.priority = pri(assignMode(n.mins)==='plan' ? PLAN_PRI : EXTRA_PRI); return a;
+  }
+  if (a.type==='add_my_task'){
+    const ph = phaseFor(n.mins, me);
+    if (!hasOwnReport(me)) return { error:'You do not keep a daily plan, so I cannot add tasks for you.' };
+    if (closedToday(me, n.date)) return { error:'You have already finished your day.' };
+    if (ph!=='plan' && ph!=='extra') return { error: ph==='before' ? `Your plan opens at ${CONFIG.planOpen}.` : 'The time for adding work today has passed.' };
+    if (!a.title) return { error:'What is the task?' };
+    a._mode = ph==='plan' ? 'plan' : 'extra'; a.priority = pri(a._mode==='plan' ? PLAN_PRI : EXTRA_PRI); return a;
+  }
+  if (a.type==='create_project'){
+    a.name = String(a.name||'').trim().slice(0,100); if (!a.name) return { error:'What should the project be called?' };
+    a.description = String(a.description||'').trim().slice(0,2000); a.end = /^\d{4}-\d{2}-\d{2}$/.test(a.end||'') ? a.end : '';
+    a.member_ids = (Array.isArray(a.member_ids)?a.member_ids:[]).filter(id=>USERS.some(u=>u.id===id) && id!==me); return a;
+  }
+  if (a.type==='navigate'){ const pg = pagesFor(me).find(p=>p[0]===a.page); return pg ? a : { error:'You do not have that page.' }; }
+  if (a.type==='open_project') return canSeeProject(projById(a.project_id), me) ? a : { error:'I could not find that project.' };
+  if (['add_photo','finish_day'].includes(a.type)) return a;
+  return null;
+}
+function aiGo(a){
+  AST.open = window.innerWidth >= 760;   // keep the chat open beside the page on big screens; close it on phones
+  if (a.type==='navigate'){ ui.view = a.page; ui.proj = null; ui.editing = null; }
+  else if (a.type==='open_project'){ ui.view = 'proj'; ui.proj = a.project_id; }
+  else if (a.type==='finish_day'){ if (!hasOwnReport(ui.user) || closedToday(ui.user, now().date)) return; ui.view = 'staff'; if (phaseFor(now().mins, ui.user)==='extra') ui.closing = true; }
+  else if (a.type==='add_photo'){ AST.open = false; paintAI(); camOpen(); return; }
+  save(); render(); paintAI(); window.scrollTo(0,0);
+  if (a.type==='finish_day') setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 80);
+}
+function aiDo(a){
+  const n = now(), me = ui.user, f = { title:a.title, details:a.details, priority:a.priority, days:a.days, projectId:a.project_id||'' };
+  if (a.type==='assign_task'){
+    if (closedToday(a.assignee_id, n.date)) return `${userName(a.assignee_id)} has already finished their day.`;
+    if (needsGm(me, a.assignee_id)){ sendRequest(me, a.assignee_id, f); save(); render(); return isGm(a.assignee_id) ? `Sent to ${userName(a.assignee_id)}.` : `Sent to the General Manager for approval.`; }
+    makeTask(a.assignee_id, me, f, assignMode(n.mins)); save(); render(); return `Assigned to ${userName(a.assignee_id)}.`;
+  }
+  if (a.type==='add_my_task'){
+    const ph = phaseFor(n.mins, me); if (closedToday(me, n.date) || (ph!=='plan' && ph!=='extra')) return 'It is too late to add work today.';
+    db.tasks.push({ id:uid(), owner:me, assignedBy:null, category:ph==='plan'?'planned':'extra', priority:a.priority, title:a.title, details:a.details, days:a.days,
+      startDate:n.date, dueDate:addDays(n.date, a.days-1), projectId:a.project_id||'', log:{}, completedOn:null, createdAt:new Date().toISOString() });
+    save(); render(); return 'Added to your day.';
+  }
+  if (a.type==='create_project'){
+    const p = { id:uid(), name:a.name, description:a.description, owner:me, members:[], start:n.date, end:a.end, status:'active', milestones:[], createdAt:new Date().toISOString() };
+    db.projects.push(p); addMembers(p, a.member_ids); save(); ui.view = 'proj'; ui.proj = p.id; render(); return `Project “${p.name}” created. You can add the schedule and files there.`;
+  }
+  return '';
+}
+const YES = /\b(yes|yeah|yep|yup|confirm|confirmed|ok|okay|sure|go ahead|do it|haan|han|ha|theek hai)\b/i, NO = /\b(no|nope|cancel|stop|don't|dont|nahi|mat)\b/i;
+async function aiSend(text){
+  text = (text||'').trim(); if (!text || AST.busy) return;
+  const last = AST.msgs[AST.msgs.length-1];
+  if (last && last.status==='pending'){                 // a reply to "confirm?" — yes / no
+    if (YES.test(text) && !NO.test(text)){ AST.msgs.push({ role:'user', text }); return aiDecide(AST.msgs.length-2, true); }
+    if (NO.test(text)){ AST.msgs.push({ role:'user', text }); return aiDecide(AST.msgs.length-2, false); }
+    last.status = 'cancelled';
+  }
+  AST.msgs.push({ role:'user', text }); AST.busy = true; paintAI();
+  let j;
+  try { j = parseJSONLoose(await aiAsk(aiPrompt(text))); }
+  catch(e){ AST.busy = false; AST.msgs.push({ role:'ai', text:'Sorry, I could not do that: '+e.message }); paintAI(); return; }
+  AST.busy = false;
+  let reply = String(j.reply||'').trim(), a = aiNormalize(j.action);
+  if (a && a.error){ reply = a.error; a = null; }
+  if (a && ['navigate','open_project','add_photo','finish_day'].includes(a.type)){
+    AST.msgs.push({ role:'ai', text: reply || 'Done.' }); aiGo(a); if (AST.voice) await speak(reply || 'Done.'); return;
+  }
+  if (a){
+    const m = { role:'ai', text: reply || 'Please check and confirm:', action:a, status:'pending' }; AST.msgs.push(m); paintAI();
+    if (AST.voice){ await speak(`${reply ? reply.replace(/[:.]\s*$/,'')+'. ' : ''}${actSummary(a).filter(Boolean).slice(0,3).join('. ').replace(/ · /g,', ')}. Say yes to confirm, or no to cancel.`); if (m.status==='pending') aiListen(); }
+    return;
+  }
+  AST.msgs.push({ role:'ai', text: reply || 'Sorry, I did not understand. Please try again.' }); paintAI();
+  if (AST.voice){ await speak(reply); if (AST.open && /\?\s*$/.test(reply)) aiListen(); }
+}
+async function aiDecide(i, yes){
+  const m = AST.msgs[i]; if (!m || m.status!=='pending') return;
+  if (!yes){ m.status = 'cancelled'; AST.msgs.push({ role:'ai', text:'Okay, cancelled.' }); paintAI(); if (AST.voice) speak('Cancelled.'); return; }
+  const out = aiDo(m.action); m.status = 'done'; AST.msgs.push({ role:'ai', text:out }); paintAI(); if (AST.voice) speak(out);
+}
+async function aiListen(){
+  if (AST.listening) return;
+  AST.listening = true; paintAI();
+  let said = '';
+  try { said = await listenOnce(); } catch(e){ AST.listening = false; paintAI(); if (!/No speech/.test(e.message)) tip('Voice', e.message); return; }
+  AST.listening = false; paintAI();
+  if (said) aiSend(said);
+}
+function aiClick(act, a){
+  if (act==='ai-open'){ AST.open = true; paintAI(); return true; }
+  if (act==='ai-close'){ AST.open = false; try{ speechSynthesis.cancel(); }catch(_){} paintAI(); return true; }
+  if (act==='ai-voice'){ AST.voice = !AST.voice; if (!AST.voice) try{ speechSynthesis.cancel(); }catch(_){} paintAI(); return true; }
+  if (act==='ai-mic'){ try{ speechSynthesis.cancel(); }catch(_){} aiListen(); return true; }
+  if (act==='ai-yes' || act==='ai-no'){ aiDecide(+a.dataset.i, act==='ai-yes'); return true; }
+  return false;
+}
+
 /* ===== Render ===== */
 function tabsFor(id){
   const t = [];
@@ -2255,6 +2474,7 @@ function render(){
   const tabsEl = document.getElementById('tabs'), main = document.getElementById('main'), who = document.getElementById('whoBox');
   const gate = ui.authed && isField(ui.user) && !loginOf(ui.user, n.date);
   tabsEl.hidden = !ui.authed || gate;
+  ensureFab(ui.authed && !gate);
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
@@ -2477,6 +2697,7 @@ document.addEventListener('submit', e=>{
   if (e.target.id==='loginForm') return doLogin();
   if (e.target.id==='newPwForm' || e.target.id==='chPwForm') return setNewPassword();
   if (e.target.id==='meetForm') return scheduleMeeting(false);
+  if (e.target.id==='aiForm'){ const i = e.target.querySelector('#aiIn'), t = i.value; i.value = ''; return aiSend(t); }
   if (e.target.id==='camForm') return camSave(e.target);
   if (e.target.classList.contains('projf')) return createProject(e.target);
   if (e.target.classList.contains('projedit')) return saveProjectEdit(e.target);
@@ -2500,6 +2721,7 @@ document.addEventListener('click', e=>{
     db.tasks = db.tasks.filter(x=>x.id!==t.id); ui.editing=null;
   }
   else if (act==='submit-closure'){ submitClosure(); return; }
+  else if (aiClick(act, a)) return;
   else if (camClick(act, a)) return;
   else if (projClick(act, a)) return;
   else if (act && act.startsWith('rq-')){ decideRequest(act.slice(3), a.closest('.rq')); return; }
