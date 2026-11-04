@@ -1507,7 +1507,7 @@ function meetingCard(m, na, mode, reviewer, mgmt){
   const st = mStart(m);
   let h = `<div class="crow mtg"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${fmtAbs(st)} · ${esc(m.withWhom)}${m.postponedFrom?' <span class="b">Rescheduled</span>':''}</div>${stPill(m,na)}</div>
     <div class="task-det">${esc(m.purpose)}${m.place?' · '+esc(m.place):''}</div>
-    <div class="badges"><span class="b">${m.mode==='online'?'Online':'In person'}</span><span class="b">${mDur(m)<60?mDur(m)+' min':(mDur(m)/60)+' h'} · until ${hhmm(mEnd(m))}</span></div>`;
+    <div class="badges"><span class="b">${m.mode==='online'?'Online':'In person'}</span><span class="b">${m.allDay?'Whole day':durLabel(mDur(m))} · until ${hhmm(mEnd(m))}</span></div>`;
   if (mode==='up'){
     const offs = REMIND_BEFORE.filter(o=>st-o>=m.createdAt);
     if (!mgmt) h += prepBox(m);
@@ -1554,10 +1554,11 @@ function meetingsView(n){
       <label class="f grow">Meeting with<input id="mWith" maxlength="120" placeholder="Person and company"></label>
       <div class="row"><fieldset class="f"><legend>Type</legend><div class="seg"><label><input type="radio" name="mMode" value="person" checked><span>In person</span></label><label><input type="radio" name="mMode" value="online"><span>Online</span></label></div></fieldset>
         <label class="f grow">Place<input id="mPlace" maxlength="120" placeholder="Area and city, e.g. Al Quoz, Dubai — or Teams / Zoom link"></label>
-        <label class="f days">Duration<select id="mDur" class="sel">${[30,45,60,90,120,150,180,240].map(x=>`<option value="${x}" ${x===60?'selected':''}>${x<60?x+' min':(x/60)+' h'}</option>`).join('')}</select></label></div>
+        <label class="f days">Duration<select id="mDur" class="sel">${MEET_DURS.map(x=>`<option value="${x}" ${x===60?'selected':''}>${durLabel(x)}</option>`).join('')}<option value="day">Whole day</option></select></label></div>
       <label class="f">What the meeting is for<textarea id="mPurpose" rows="2"></textarea></label>
       <div class="clk-row"><label class="f" style="flex:1;min-width:180px">Date<input type="date" id="mDate" min="${n.date}" value="${n.date}"></label>
-        <div class="f" style="flex:1;min-width:240px"><span>Time</span>${clockPicker('mTime', nextSlot())}</div></div>
+        <div class="f" id="mTimeBox" style="flex:1;min-width:240px"><span>Time</span>${clockPicker('mTime', nextSlot())}</div>
+        <p class="hint" id="mDayNote" hidden style="flex:1;min-width:240px;align-self:center">Whole day: ${CONFIG.planOpen}–${CONFIG.closureOpen} (from now if it is today).</p></div>
       <div class="err" id="mErr" hidden></div>
       <div class="row end"><button type="button" class="btn ghost" data-act="meet-now">Start meeting now</button><button class="btn">Schedule meeting</button></div>
       <p class="hint">Reminders by email and notification: 24 h, 12 h, 6 h, 1 h, 15 min and 10 min before. For in-person meetings the AI checks that you can get there in time from your other meetings that day.</p>
@@ -1572,17 +1573,23 @@ function meetingsView(n){
 async function scheduleMeeting(instant){
   const n = now(), err = document.getElementById('mErr'), fail = m => { err.hidden=false; err.textContent=m; };
   const w = document.getElementById('mWith').value.trim(), p = document.getElementById('mPurpose').value.trim(), pl = document.getElementById('mPlace').value.trim();
-  const mode = (document.querySelector('input[name=mMode]:checked')||{}).value || 'person', dur = parseInt((document.getElementById('mDur')||{}).value,10) || 60;
+  const mode = (document.querySelector('input[name=mMode]:checked')||{}).value || 'person', durV = (document.getElementById('mDur')||{}).value, allDay = durV==='day';
+  let dur = parseInt(durV,10) || 60;
   let d = document.getElementById('mDate').value, t = document.getElementById('mTime').value;
   if (instant){ d = n.date; t = n.label; }
+  if (allDay && d){   // whole working day; if it is today and the day has started, from now until the end of the day
+    const st = Math.max(toMins(CONFIG.planOpen), d===n.date ? toMins(n.label) : 0), en = toMins(CONFIG.closureOpen);
+    if (d===n.date && en - st < 30) return fail(`It is too late today for a whole-day meeting (the working day ends at ${CONFIG.closureOpen}). Choose another date.`);
+    t = d===n.date && st > toMins(CONFIG.planOpen) ? n.label : CONFIG.planOpen; dur = Math.max(30, en - toMins(t));
+  }
   if (!w) return fail('Enter who the meeting is with.');
   if (!p) return fail('Enter what the meeting is for.');
   if (mode==='person' && !pl) return fail('Enter where the meeting is (area and city), so travel time can be checked.');
   if (!d || !t) return fail('Choose a date and time, or press "Start meeting now".');
   const na = nowAbs();
   if (absOf(d,t) < na) return fail('That date and time has already passed. Choose a time from now onwards.');
-  const c = { id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, mode, dur, date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] };
-  const add = () => { db.meetings.push(c); save(); render(); tip('Meeting scheduled', `${w} · ${fmtShort(c.date)} ${c.time}${mode==='online'?' (online)':' · '+pl}`); };
+  const c = { id:uid(), owner:ui.user, withWhom:w, purpose:p, place:pl, mode, dur, ...(allDay?{allDay:true}:{}), date:d, time:t, createdAt:na, status:'scheduled', sent:{}, history:[] };
+  const add = () => { db.meetings.push(c); save(); render(); tip('Meeting scheduled', `${w} · ${fmtShort(c.date)} ${allDay?'whole day':c.time}${mode==='online'?' (online)':' · '+pl}`); };
   if (instant) return add();
   const btn = document.querySelector('#meetForm .row.end .btn:not(.ghost)'), old = btn ? btn.textContent : '';
   if (btn){ btn.disabled = true; btn.textContent = mode==='person' ? 'Checking travel time…' : 'Checking…'; }
@@ -1605,7 +1612,7 @@ function submitOutcome(f){
       const nd = f.nd.value, nt = f.querySelector('input[name=nt]').value;
       if (!nd || !nt) return fail('Choose the new date and time for the meeting.');
       if (absOf(nd,nt) < na) return fail('The new date and time must be in the future.');
-      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, mode:m.mode, dur:m.dur, date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
+      const nm = { id:uid(), owner:m.owner, withWhom:m.withWhom, purpose:m.purpose, place:m.place, mode:m.mode, dur:m.dur, ...(m.allDay?{allDay:true}:{}), date:nd, time:nt, createdAt:na, status:'scheduled', sent:{}, history:[], postponedFrom:m.id };
       db.meetings.push(nm); m.postponedTo = nm.id; m.postponeReason = txt;
     } else m.notes = txt;
     m.outcome = oc;
@@ -2855,6 +2862,7 @@ function activityView(n){
     ${today.length ? `<div class="tblwrap"><table class="mst"><thead><tr><th>Time</th><th>Person</th><th>Event</th><th>Location</th><th>Device</th></tr></thead><tbody>${today.map(s=>`<tr><td>${new Date(s.created_at).toLocaleTimeString('en-GB',{timeZone:'Asia/Dubai',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(userName(s.person))}</td><td>${SESS_LABEL[s.kind]||esc(s.kind)}</td><td>${sessLoc(s)}</td><td>${esc(s.device||'')}</td></tr>`).join('')}</tbody></table></div>` : note('No logins or logouts recorded on this date.')}</section>`;
   return h;
 }
+document.addEventListener('change', e=>{ if (e.target.id==='mDur'){ const day = e.target.value==='day', tb = document.getElementById('mTimeBox'), nt = document.getElementById('mDayNote'); if (tb) tb.hidden = day; if (nt) nt.hidden = !day; } });
 document.addEventListener('change', e=>{ if (e.target.id==='actDate'){ ui.actDate = e.target.value; render(); } });
 
 /* ===== Personal dashboard (everyone): login times, work status by period, score ===== */
@@ -3318,6 +3326,8 @@ document.addEventListener('change', e=>{ if (e.target.id==='arcDate'){ ui.arcDat
 
 /* ===== Meeting planner: overlap check and, for in-person meetings, an AI travel-time check between places ===== */
 const mDur = m => m.dur || 60;
+const MEET_DURS = [30,45,60,90,120,150,180,210,240,300,360,420,480,540,600];   // 30 min to 10 hours
+function durLabel(x){ return x<60 ? x+' min' : (x%60 ? (x/60).toFixed(1).replace('.0','') : x/60)+(x===60?' hour':' hours'); }
 const mEnd = m => mStart(m) + mDur(m);
 const hhmm = abs => fromAbs(abs).time;
 const round15 = a => Math.ceil(a/15)*15;
