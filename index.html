@@ -3107,7 +3107,7 @@ function attachFiles(ups, taskIds, reqIds){
   const task = db.tasks.find(x=>x.id===taskIds[0]) || db.requests.find(x=>x.id===(reqIds||[])[0]) || { title:'' };
   ups.forEach(async u=>{
     let brief = '', st = 'done';
-    try{ brief = await briefFor(u.file, task); }catch(e){ brief = 'AI brief not available right now.'; st = 'failed'; }
+    try{ brief = await briefFor(u.file, task); }catch(e){ brief = ''; st = 'failed'; }
     const set = list => list.forEach(x=>(x.files||[]).forEach(f=>{ if (f.id===u.rec.id){ f.brief = brief; f.briefState = st; } }));
     set(db.tasks); set(db.requests); save(); safeRender();
   });
@@ -3115,7 +3115,7 @@ function attachFiles(ups, taskIds, reqIds){
 function filesHtml(t, compact){
   const fs = t.files || []; if (!fs.length) return '';
   return `<div class="tfiles">${fs.map(f=>`<div class="tfile"><button type="button" class="linkbtn" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button>${(f.by===ui.user || isMgmt(ui.user))?` <button type="button" class="linkbtn tf-del" data-act="tf-del" data-id="${esc(f.id)}" data-path="${esc(f.path)}" data-name="${esc(f.name)}" title="Remove this file">Remove</button>`:''}
-    ${f.briefState==='pending'?'<span class="hint" style="margin:0"> · AI is reading it…</span>':f.brief?`<div class="tbrief"><b>AI brief:</b> ${esc(f.brief)}</div>`:''}</div>`).join('')}</div>`;
+    ${f.briefState==='pending'?'<span class="hint" style="margin:0"> · AI is reading it…</span>':f.briefState==='failed'?'<span class="hint" style="margin:0"> · AI brief will be retried automatically</span>':f.brief?`<div class="tbrief"><b>AI brief:</b> ${esc(f.brief)}</div>`:''}</div>`).join('')}</div>`;
 }
 async function getTaskFile(path, name, btn){
   btn.disabled = true;
@@ -3136,6 +3136,25 @@ async function removeTaskFile(fid, path, name, btn){
   if (r.error){ btn.disabled = false; tip('Could not remove', r.error.message); return; }
   db.tasks.concat(db.requests).forEach(x=>{ if ((x.files||[]).some(y=>y.id===fid)) x.files = x.files.filter(y=>y.id!==fid); });
   save(); render(); tip('Removed', `“${name}” was removed.`);
+}
+/* Briefs that failed (e.g. the AI was busy) are retried by the uploader's open portal, at most every 10 minutes per file. */
+const BRIEF_TRY = {}; let BRIEF_BUSY = false;
+async function retryFailedBriefs(){
+  if (BRIEF_BUSY || !sb || !ui.authed) return;
+  const seen = new Set(), todo = [];
+  db.tasks.concat(db.requests).forEach(x=>(x.files||[]).forEach(f=>{ if (f.briefState==='failed' && f.by===ui.user && !seen.has(f.id) && Date.now() - (BRIEF_TRY[f.id]||0) > 600000){ seen.add(f.id); todo.push({ f, task:x }); } }));
+  if (!todo.length) return; BRIEF_BUSY = true;
+  for (const { f, task } of todo.slice(0,3)){
+    BRIEF_TRY[f.id] = Date.now();
+    try{
+      const { data, error } = await sb.storage.from('taskfiles').createSignedUrl(f.path, 300); if (error) throw error;
+      const file = new File([await (await fetch(data.signedUrl)).blob()], f.name, { type:f.mime || '' });
+      const brief = await briefFor(file, task);
+      db.tasks.concat(db.requests).forEach(x=>(x.files||[]).forEach(y=>{ if (y.id===f.id){ y.brief = brief; y.briefState = 'done'; } }));
+      save(); safeRender();
+    }catch(_){ /* try again later */ }
+  }
+  BRIEF_BUSY = false;
 }
 async function addFilesToTask(id, files){
   const t = db.tasks.find(x=>x.id===id); if (!t || !files.length) return;
@@ -3671,7 +3690,7 @@ document.addEventListener('change', e=>{
 setInterval(()=>{
   const changed = runReminders();
   if (changed) save();
-  if (ui.authed){ autoMeetingGeo(); retryPendingScores(); }
+  if (ui.authed){ autoMeetingGeo(); retryPendingScores(); retryFailedBriefs(); }
   if (sigNow() !== lastSig || changed || pendingRender) safeRender();
   else updateClock();
   flushFresh();

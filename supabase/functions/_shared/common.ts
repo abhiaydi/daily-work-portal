@@ -86,8 +86,8 @@ async function askGemini(key: string, prompt: string, maxTokens: number, json = 
   let res = await geminiGenerate(key, first, prompt, maxTokens, json, files);
   if (res.status === 429 || res.status === 503) { await new Promise((r) => setTimeout(r, 2000)); res = await geminiGenerate(key, first, prompt, maxTokens, json, files); }
   if (res.ok) geminiModel = first;
-  else if (res.status === 404 || res.status === 400) {
-    // The model may have been retired: try the newest available "flash" models instead.
+  else if ([400, 404, 429, 500, 503].includes(res.status)) {
+    // Retired or overloaded model: try the newest other available models instead.
     for (const m of (await geminiModels(key)).filter((x) => x !== first).slice(0, 5)) {
       res = await geminiGenerate(key, m, prompt, maxTokens, json, files);
       if (res.ok) { geminiModel = m; console.log("Gemini model in use:", m); break; }
