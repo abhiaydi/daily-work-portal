@@ -217,6 +217,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .pd-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}.pd-form .pd-note{flex:1 1 100%;min-width:180px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit}.pd-form .stt{flex:1;min-width:180px}.pd-form .err{flex-basis:100%}
 .pt-mode{border:0;padding:0;margin:8px 0 0}.pt-mode legend{font-weight:600;font-size:13px;margin-bottom:4px}.pt-mode label{display:flex!important;flex-direction:row!important;gap:8px;align-items:flex-start;font-size:13px;margin:4px 0;cursor:pointer}.pt-mode input{width:16px!important;height:16px!important;min-height:0!important;flex:none;margin:2px 0 0;accent-color:#1a5ed4}
 .parts-ed .pt-tog{display:flex!important;flex-direction:row!important;justify-content:flex-start!important;gap:8px;align-items:center;font-weight:500;cursor:pointer;margin:0}.parts-ed .pt-tog input{width:18px!important;height:18px!important;min-height:0!important;flex:none;margin:0;padding:0;accent-color:#1a5ed4}.pt-box{margin-top:6px}.pt-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}.pt-row .pt-name,.pt-row .stt{flex:1;min-width:0}.pt-row .pt-days{width:70px}
+.cb-line{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:6px}.cb-line .sel{max-width:260px}.cb-ed .cb-sel{max-width:420px;margin-top:4px}
 .tt-task{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--bg)}.tt-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .tt-p{font-weight:700;font-size:13px;padding:2px 8px;border-radius:99px;background:var(--soft,#f3f4f6)}.tt-p.ok{background:#e9f7ee;color:#0f7a3d}
 .tt-note{font-size:13px;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--soft,#f3f4f6)}
@@ -789,6 +790,7 @@ function taskCard(t, n, showOwner){
       ${t.feas && t.feas.state==='pending' && t.owner!==ui.user ? feasHtml(t) : ''}${t.feas && t.feas.state==='not' && t.assignedBy!==ui.user ? feasHtml(t) : ''}
     </div>
     ${t.feas && ((t.feas.state==='pending' && t.owner===ui.user) || (t.feas.state==='not' && t.assignedBy===ui.user)) ? feasHtml(t) : ''}
+    ${collabLine(t)}
     ${taskCloseState(t, d)}
     ${t.owner===ui.user && hasOwnReport(ui.user) && !(t.completedOn && t.completedOn < d) ? commentsHtml(t, { box:true }) : (t.comments||[]).length ? commentsHtml(t) : ''}
     ${canAttach(t)||canCloseTask(t)?`<div class="tc-row">${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}${canCloseTask(t)&&ui.tc!==t.id?`<button type="button" class="linkbtn tf-add tc-btn" data-act="tc-open" data-id="${t.id}">✓ ${((t.log||{})[d]||{}).closedEarly?'Update closing note':'Close this task'}</button>`:''}</div>`:''}
@@ -817,6 +819,7 @@ function taskForm(kind, mode){
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     ${projSelect(t)}
     ${partsEditor(t)}
+    ${kind==='self' && !t ? collabEditor('self-'+mode) : ''}
     ${t?'':`<div class="f"><span>Attachments (optional)</span>
       <div class="clf-list" data-id="tf-${kind}-${mode}">${clfChips('tf-'+kind+'-'+mode)}</div>
       <label class="btn sm ghost clf-add">${CLIP_IC} ${(CL_FILES['tf-'+kind+'-'+mode]||[]).length?'Add more files':'Add files'}<input type="file" multiple class="cl-files" data-id="tf-${kind}-${mode}" hidden></label>
@@ -908,6 +911,7 @@ function staffView(n){
   else h += note(ck ? 'You have finished your day. Additional work is closed.' : `Additional work closed at ${deadlineOf(u)}.`, true);
   h += `<h3 class="sub">Additional work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No additional work.</div>`);
   h += `</section>`;
+  h += collabSection(n);
 
   const dl = deadlineOf(u);
   h += `<section class="card" id="closureCard"><div class="sec-h"><h2>3 · Closure report</h2>${
@@ -3354,7 +3358,7 @@ async function addFilesToTask(id, files){
     else if (t.assignedBy===ui.user) notify(t.owner, `${userName(ui.user)} attached ${ups.length} file(s) to your task “${t.title}”.`, nowAbs(), null); }
   catch(e){ tip('Upload failed', e.message); }
 }
-const canAttach = t => !t.completedOn && (t.owner===ui.user || t.assignedBy===ui.user);
+const canAttach = t => !t.completedOn && (t.owner===ui.user || t.assignedBy===ui.user || (t.collab||[]).includes(ui.user));
 
 /* ===== Feasibility: the person says whether assigned work fits the time; the assigner can change the duration ===== */
 function feasHtml(t){
@@ -3610,7 +3614,7 @@ async function closeTaskNow(btn){
 
 /* ===== Team today: managers see their team's work task by task, or project by project, and comment during the day ===== */
 const mgrIdsOf = id => [...new Set((getUser(id).managers||[]).concat(needsCeoReview(id) ? ceoIds() : []))];
-const canCommentOn = (t, me) => t.owner===me || t.assignedBy===me || subtree(me).some(u=>u.id===t.owner) || indirectOf(me).some(u=>u.id===t.owner);
+const canCommentOn = (t, me) => t.owner===me || t.assignedBy===me || (t.collab||[]).includes(me) || subtree(me).some(u=>u.id===t.owner) || indirectOf(me).some(u=>u.id===t.owner);
 function commentsHtml(t, opts){
   const cs = t.comments || [], me = ui.user;
   if (!cs.length && !(opts && opts.box)) return '';
@@ -3623,7 +3627,8 @@ function sendTaskComment(f){
   const na = nowAbs();
   (t.comments = t.comments || []).push({ by:me, at:na, text:text.slice(0,600) });
   // Tell the people in the conversation: the owner (if a manager wrote) or the managers who commented / assigned it (if the owner replied).
-  const to = t.owner===me ? [...new Set(t.comments.filter(c=>c.by!==me).map(c=>c.by).concat(t.assignedBy?[t.assignedBy]:[], mgrIdsOf(me)))] : [t.owner];
+  const others = t.comments.filter(c=>c.by!==me).map(c=>c.by).concat(t.assignedBy?[t.assignedBy]:[], t.collab||[]);
+  const to = t.owner===me ? [...new Set(others.concat(mgrIdsOf(me)))] : [...new Set([t.owner].concat(others))];
   const rcpt = to.filter(x=>x && x!==me);
   rcpt.forEach(x=>notify(x, `${userName(me)} on “${t.title}”: ${text.slice(0,140)}`, na, null));
   if (t.owner===me && rcpt.length) emailPeople(rcpt, `${userName(me)} — message about “${t.title}”`, `${userName(me)} wrote about the task “${t.title}”:\n\n${text}\n\nReply in the portal (Team today).`);
@@ -3638,7 +3643,7 @@ function teamTaskRow(t, d, showOwner){
     ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
     <div class="badges">${priBadge(t.priority)}<span class="b">${t.category==='extra'?'Additional':'Planned'}</span>
       ${t.projectId&&projById(t.projectId)&&!showOwner?`<span class="b proj">${esc(projById(t.projectId).name)}</span>`:''}
-      ${t.assignedBy?`<span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}
+      ${t.assignedBy?`<span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${(t.collab||[]).length?`<span class="b asg">With ${t.collab.map(userName).map(esc).join(', ')}</span>`:''}
       <span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${d>t.dueDate?'<span class="b emg">Overdue</span>':''}
       ${files?`<span class="b">${files} file${files===1?'':'s'}</span>`:''}</div>
     ${partsHtml(t, d, { readOnly:true })}
@@ -3721,7 +3726,7 @@ function partsSummary(t, d){
 }
 function partsHtml(t, d, opts){
   const pl = partsPlan(t); if (!pl.length) return '';
-  const seq = partsSeq(t), cur = pl.find(p=>!p.done), me = ui.user, own = t.owner===me && !(opts && opts.readOnly);
+  const seq = partsSeq(t), cur = pl.find(p=>!p.done), me = ui.user, own = (t.owner===me || (opts && opts.collab && (t.collab||[]).includes(me))) && !(opts && opts.readOnly);
   const doneN = pl.filter(p=>p.done).length;
   return `<div class="parts"><div class="parts-h"><b>Parts</b> <span class="hint" style="margin:0">${doneN} of ${pl.length} done · ${seq?'one after another':'same day / at the same time'}</span></div>
     ${pl.map(p=>{ const late = !p.done && d > p.end, now = !p.done && (seq ? (cur && cur.i===p.i) : true);
@@ -3731,12 +3736,12 @@ function partsHtml(t, d, opts){
         ${own && now && ui.pd===t.id+':'+p.id ? `<form class="pd-form" data-id="${t.id}" data-p="${p.id}" novalidate><textarea class="pd-note" rows="2" placeholder="What was finished in this part? (optional)"></textarea><button type="submit" class="btn sm">Mark done</button><button type="button" class="btn sm ghost" data-act="pd-x">Cancel</button><div class="err" hidden></div></form>`
           : own && now && canMarkPart(t) ? `<button type="button" class="linkbtn tc-btn" data-act="pd-open" data-id="${t.id}" data-p="${p.id}">✓ Mark this part done</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
-const canMarkPart = t => t.owner===ui.user && !closedToday(ui.user, now().date) && ['plan','extra'].includes(phaseFor(now().mins, ui.user)) && !(t.completedOn && t.completedOn < now().date);
+const canMarkPart = t => (t.owner===ui.user || (t.collab||[]).includes(ui.user)) && !closedToday(t.owner, now().date) && !closedToday(ui.user, now().date) && ['plan','extra'].includes(phaseFor(now().mins, ui.user)) && !(t.completedOn && t.completedOn < now().date);
 function doPartDone(t, p, note){
   const d = now().date; p.done = true; p.doneOn = d; p.note = String(note||'').trim();
   const open = partsPlan(t).filter(x=>!x.done), next = open[0] || null, na = nowAbs();
   const msg = `${userName(t.owner)} finished part “${p.title}” of “${t.title}”${next?(partsSeq(t)?` — next: ${next.title}`:` — ${open.length} part${open.length===1?'':'s'} left`):' — all parts done'}.`;
-  [...new Set([t.assignedBy, ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, msg, na, null));
+  [...new Set([t.owner, t.assignedBy, ...(t.collab||[]), ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, ui.user!==t.owner ? msg.replace(userName(t.owner), userName(ui.user)) : msg, na, null));
   save(); return next;
 }
 function markPartDone(f){
@@ -3783,6 +3788,53 @@ document.addEventListener('change', e=>{ if (!e.target.classList && !e.target.na
   if (e.target.classList.contains('pt-on')){ f.querySelector('.pt-box').hidden = !e.target.checked; syncPartsDays(f); }
   else if (e.target.classList.contains('pt-days') || e.target.name==='ptMode') syncPartsDays(f); });
 document.addEventListener('input', e=>{ if (e.target.classList && e.target.classList.contains('pt-days')){ const f = e.target.closest('form'); if (f) syncPartsDays(f); } });
+
+/* ===== Collaboration: the person adding their own task can add colleagues who work on it with them.
+   Collaborators see the task in "Working with colleagues" on My day, can comment, attach files and mark parts done; the owner closes it. ===== */
+const CB_PICK = {};   // form key -> chosen colleague ids (kept while the form is open)
+const isCollab = (t, id) => (t.collab||[]).includes(id);
+const collabPool = me => USERS.filter(u=>u.id!==me && hasOwnReport(u.id)).sort((a,b)=>a.name.localeCompare(b.name));
+function collabChips(key){ return (CB_PICK[key]||[]).map(id=>`<span class="clf-chip">${esc(userName(id))}<button type="button" class="linkbtn" data-act="cb-del" data-k="${key}" data-id="${id}" aria-label="Remove ${esc(userName(id))}">×</button></span>`).join(''); }
+function collabEditor(key){
+  const me = ui.user, chosen = CB_PICK[key] || [];
+  return `<div class="f cb-ed"><span>Work with colleagues (optional)</span>
+    <div class="clf-list cb-list" data-k="${key}">${collabChips(key)}</div>
+    <select class="sel cb-sel" data-k="${key}"><option value="">+ Add a colleague…</option>${collabPool(me).filter(u=>!chosen.includes(u.id)).map(u=>`<option value="${u.id}">${esc(u.name)} — ${esc(u.title)}</option>`).join('')}</select>
+    <span class="hint" style="margin:2px 0 0">They see this task on their My day, get a notification, and can comment, attach files and mark parts done. You stay responsible for closing it.</span></div>`;
+}
+function paintCollab(key){ const box = document.querySelector(`.cb-list[data-k="${key}"]`); if (box) box.innerHTML = collabChips(key);
+  const sel = document.querySelector(`.cb-sel[data-k="${key}"]`); if (sel){ const chosen = CB_PICK[key]||[]; sel.innerHTML = `<option value="">+ Add a colleague…</option>` + collabPool(ui.user).filter(u=>!chosen.includes(u.id)).map(u=>`<option value="${u.id}">${esc(u.name)} — ${esc(u.title)}</option>`).join(''); } }
+document.addEventListener('change', e=>{ if (e.target.classList && e.target.classList.contains('cb-sel') && e.target.value){ const k = e.target.dataset.k; (CB_PICK[k] = CB_PICK[k] || []).push(e.target.value); paintCollab(k); } });
+function tellCollaborators(t, ids, by){
+  const na = nowAbs(), fresh = ids.filter(x=>x && x!==by);
+  fresh.forEach(x=>notify(x, `${userName(by)} added you to work together on “${t.title}”. It is on your My day under “Working with colleagues”.`, na, null));
+  if (fresh.length) emailPeople(fresh, `You are working with ${userName(by)} on “${t.title}”`, `${userName(by)} added you as a collaborator on the task “${t.title}”${t.details?' — '+t.details:''}.\nDuration: ${t.days} day(s), due ${fmtShort(t.dueDate)}.\n\nYou will see it on your My day under "Working with colleagues", where you can comment, attach files and mark parts done.`);
+}
+function collabLine(t){
+  const cs = t.collab || []; if (!cs.length && t.owner!==ui.user) return '';
+  const own = t.owner===ui.user && !(t.completedOn && t.completedOn < now().date);
+  const key = 'card-'+t.id;
+  return `<div class="cb-line">${cs.length?`<span class="b asg">With ${cs.map(userName).map(esc).join(', ')}</span>`:''}${own?(ui.cbCard===t.id
+      ? `<select class="sel cb-card" data-id="${t.id}"><option value="">Add a colleague…</option>${collabPool(ui.user).filter(u=>!cs.includes(u.id)).map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select><button type="button" class="btn sm ghost" data-act="cb-card-x">Done</button>`
+      : `<button type="button" class="linkbtn tf-add" data-act="cb-card" data-id="${t.id}">+ ${cs.length?'Add another colleague':'Work with a colleague'}</button>`):''}</div>`;
+}
+document.addEventListener('change', e=>{ if (e.target.classList && e.target.classList.contains('cb-card') && e.target.value){
+  const t = db.tasks.find(x=>x.id===e.target.dataset.id); if (!t || t.owner!==ui.user) return;
+  const id = e.target.value; if (!(t.collab||[]).includes(id)){ t.collab = (t.collab||[]).concat(id); tellCollaborators(t, [id], ui.user); save(); }
+  render(); } });
+function collabSection(n){
+  const me = ui.user, d = n.date;
+  const ts = db.tasks.filter(t=>isCollab(t, me) && t.owner!==me && t.startDate<=d && (!t.completedOn || t.completedOn>=d)).sort((a,b)=>RANK[a.priority]-RANK[b.priority]);
+  if (!ts.length) return '';
+  return `<section class="card"><div class="sec-h"><h2>Working with colleagues</h2><span class="b">${ts.length} task${ts.length===1?'':'s'}</span></div>
+    <p class="hint" style="margin-top:0">Tasks a colleague added you to. Comment, attach files or mark parts done here; the owner closes the task.</p>
+    ${ts.map(t=>`<div class="tt-task"><div class="tt-h"><b><span class="b">${esc(userName(t.owner))}</span> ${esc(t.title)}</b><span class="tt-p ${progOn(t,d)>=100?'ok':''}">${progOn(t,d)}%</span></div>
+      ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
+      <div class="badges">${priBadge(t.priority)}<span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${d>t.dueDate?'<span class="b emg">Overdue</span>':''}${(t.collab||[]).length>1?`<span class="b asg">Also with ${t.collab.filter(x=>x!==me).map(userName).map(esc).join(', ')}</span>`:''}</div>
+      ${partsHtml(t, d, { collab:true })}${filesHtml(t)}${taskCloseState(t, d)}
+      ${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}
+      ${commentsHtml(t, { box:true })}</div>`).join('')}</section>`;
+}
 
 /* ===== Cancel a meeting (before it starts): reason required; follow-up reminder now and again after 7 days if not rebooked ===== */
 function cancelForm(m){
@@ -4329,6 +4381,7 @@ async function addOrSaveTask(form){
     viaGm.forEach(o=>{ sendRequest(me, o, f); reqIds.push(db.requests[db.requests.length-1].id); });
   } else {
     const t = { id:uid(), owner:me, assignedBy:null, category:mode==='plan'?'planned':'extra', priority, title, details, days, startDate:n.date, dueDate:addDays(n.date,days-1), projectId, ...(pr.parts?{ parts:pr.parts, partsMode:pr.mode }:{}), log:{}, completedOn:null, createdAt:new Date().toISOString() };
+    const cb = (CB_PICK['self-'+mode]||[]).filter(x=>x!==me); if (cb.length){ t.collab = cb; tellCollaborators(t, cb, me); } delete CB_PICK['self-'+mode];
     db.tasks.push(t); taskIds.push(t.id);
   }
   if (ups.length) attachFiles(ups, taskIds, reqIds);
@@ -4388,6 +4441,9 @@ document.addEventListener('click', e=>{
   else if (act==='pd-x'){ ui.pd = null; render(); return; }
   else if (act==='pt-add'){ const f = a.closest('form'), rows = f.querySelector('.pt-rows'); rows.insertAdjacentHTML('beforeend', `<div class="pt-row"><input class="pt-name" placeholder="Part, e.g. Simulation"><input class="pt-days" type="number" min="1" max="60" value="1" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`); syncPartsDays(f); rows.lastElementChild.querySelector('.pt-name').focus(); return; }
   else if (act==='pt-del'){ const f = a.closest('form'), r = a.closest('.pt-row'); if (f.querySelectorAll('.pt-row').length > 1) r.remove(); else r.querySelector('.pt-name').value = ''; syncPartsDays(f); return; }
+  else if (act==='cb-del'){ const k = a.dataset.k; CB_PICK[k] = (CB_PICK[k]||[]).filter(x=>x!==a.dataset.id); paintCollab(k); return; }
+  else if (act==='cb-card'){ ui.cbCard = a.dataset.id; render(); return; }
+  else if (act==='cb-card-x'){ ui.cbCard = null; render(); return; }
   else if (act==='tc-open'){ ui.tc = a.dataset.id; render(); setTimeout(()=>{ const x = document.querySelector('.tcform .tc-txt'); if (x) x.focus(); }, 50); return; }
   else if (act==='tc-cancel'){ ui.tc = null; render(); return; }
   else if (act==='tc-save'){ closeTaskNow(a); return; }
