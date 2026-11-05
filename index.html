@@ -597,7 +597,7 @@ body.adm .tabs button.on{box-shadow:inset 0 -3px 0 var(--brand)}
    ===================================================================== */
 const CONFIG = {
   planOpen:    '09:00',   // morning plan opens
-  planClose:   '09:45',   // morning plan locks; additional work starts
+  planClose:   '10:15',   // morning plan locks; additional work starts
   closureOpen: '18:00',   // normal end of the working day (closure is by button, not forced)
   minWords:    12,
   timeZone:    'Asia/Dubai'   // all windows run on UAE time, whatever the device's time zone
@@ -700,7 +700,7 @@ function phaseFor(m, userId){
   if (m <= toMins(deadlineOf(userId))) return 'extra';   // additional work open; the person closes their day with a button
   return 'over';
 }
-/* Assignment by a manager: before 09:45 → their morning plan; after → additional work (until that person closes their day) */
+/* Assignment by a manager: before the plan locks (CONFIG.planClose) → their morning plan; after → additional work (until that person closes their day) */
 function assignMode(m){
   if (m < toMins(CONFIG.planClose)) return 'plan';
   return 'extra';
