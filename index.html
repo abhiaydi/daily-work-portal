@@ -219,6 +219,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line);font-size:13px}.part:first-of-type{border-top:0}
 .part .pn{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft,#f3f4f6);color:var(--muted)}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
+.perf-on td{background:var(--soft,#eef2ff)}
 .lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
@@ -3156,7 +3157,6 @@ function myDashView(n){
       <button class="btn sm ghost" data-act="myd-shift" data-d="1" aria-label="Next" ${b>=n.date?'disabled':''}>›</button>
       ${md.anchor!==n.date?'<button class="btn sm ghost" data-act="myd-now">Back to now</button>':''}</div></section>`;
   if (st.future) return h + note('This period has not started yet.');
-  h += teamPerfHtml(me, md.kind, a, b, n);
   const sc = st.score;
   h += `<section class="card"><div class="dash-score"><div class="ring" style="--v:${sc??0}"><b>${sc===null?'—':sc}</b><span>score</span></div>
       <div class="dash-parts">${st.parts.map(p=>`<div>${bar(p[1]===null?0:Math.round(p[1]), `${p[0]} (${Math.round(p[2]*100)}%)${p[1]===null?' — no data':''}`)}</div>`).join('')}
@@ -3166,6 +3166,7 @@ function myDashView(n){
     ${[['Pending (not started)', st.pen], ['Working on', st.wrk], ['Finished — waiting for manager review', st.wait], ['Closed (reviewed by manager)', st.fin]].map(([t, arr])=>arr.length?`<details class="dgrp"><summary><b>${t}</b> · ${arr.length}</summary>
       ${arr.slice(0,100).map(x=>`<div class="ci"><span style="flex:1;min-width:0">${esc(x.t.title)}${x.t.projectId&&projById(x.t.projectId)?` <span class="b proj">${esc(projById(x.t.projectId).name)}</span>`:''}</span>${priBadge(x.t.priority)}<span class="b">due ${fmtShort(x.t.dueDate)}</span><span class="pct ${x.p>=100?'full':'part'}" style="min-width:44px;text-align:right">${x.p}%</span></div>`).join('')}</details>`:'').join('')}
     ${!st.tasks.length?note('No tasks in this period.'):''}</section>`;
+  h += teamPerfHtml(me, md.kind, a, b, n);
   h += `<section class="card"><div class="sec-h"><h2>Login and logout</h2><span class="hint" style="margin:0">UAE time</span></div>`;
   if (!ses) h += MYD[key] && MYD[key].err ? note('Could not load: '+esc(MYD[key].err), false, true) : '<p class="hint">Loading…</p>';
   else {
@@ -3183,9 +3184,9 @@ function teamPerfHtml(me, kind, a, b, n){
   const rows = ppl.map(u=>({ u, st:workStats(u.id, a, b, n) })).filter(r=>!r.st.future).sort((x,y)=>(y.st.score??-1)-(x.st.score??-1));
   const pc = v => v===null ? '—' : Math.round(v)+'%';
   return `<section class="card"><div class="sec-h"><h2>My team's performance</h2><button type="button" class="btn sm" data-act="perf-xl">Download work report (Excel)</button></div>
-    <p class="hint" style="margin-top:0">${esc(periodLabel(kind, a, b))}. Score = 60% work done + 20% finished on time + 20% closure reports, minus 1 point per late day (at most ${LATE_MAX}). Tap a name to open that person's dashboard.</p>
+    <p class="hint" style="margin-top:0">${esc(periodLabel(kind, a, b))}. Score = 60% work done + 20% finished on time + 20% closure reports, minus 1 point per late day (at most ${LATE_MAX}). Tap a name to open that person's dashboard at the top of this page.</p>
     <div class="tblwrap"><table class="mst perf"><thead><tr><th>Person</th><th>Score</th><th>Work done</th><th>On time</th><th>Closure reports</th><th>Tasks</th><th>Closed</th><th>Waiting review</th><th>Late tasks</th><th>Late days</th></tr></thead><tbody>
-    ${rows.map(({u,st})=>`<tr><td><button type="button" class="linkbtn" data-act="perf-open" data-id="${u.id}">${esc(u.name)}</button><div class="hint" style="margin:0">${esc(u.title)}</div></td>
+    ${rows.map(({u,st})=>`<tr ${ui.myd&&ui.myd.person===u.id?'class="perf-on"':''}><td><button type="button" class="linkbtn" data-act="perf-open" data-id="${u.id}">${esc(u.name)}</button><div class="hint" style="margin:0">${esc(u.title)}</div></td>
       <td><b>${st.score??'—'}</b>${st.deduct?`<div class="hint" style="margin:0;color:var(--emg)">−${st.deduct} late</div>`:''}</td><td>${pc(st.parts[0][1])}</td><td>${st.due?`${st.onTime}/${st.due}`:'—'}</td><td>${st.days?`${st.closed}/${st.days}`:'—'}</td>
       <td>${st.tasks.length}</td><td>${st.fin.length}</td><td>${st.wait.length}</td><td style="${st.late.length?'color:var(--emg);font-weight:600':''}">${st.late.length}</td><td style="${st.lateDays?'color:var(--emg);font-weight:600':''}">${st.lateDays}</td></tr>`).join('')}
     </tbody></table></div></section>`;
@@ -4192,7 +4193,8 @@ async function reRateAfterReview(tid, d){
     }
     save(); safeRender();
     const msg = `After the manager's review, the AI re-rated “${t.title}”${d!==now().date?` (${fmtShort(d)})`:''}: ${before}% → ${pct}%.${l.aiNote?' '+l.aiNote:''}`;
-    [...new Set([t.owner, ...mgrIdsOf(t.owner), t.assignedBy])].filter(Boolean).forEach(x=>notify(x, x===t.owner ? msg : msg.replace('re-rated “', `re-rated ${userName(t.owner)}'s “`), nowAbs(), null));
+    const msg2 = pct===before ? `After the manager's review, “${t.title}” stays at ${pct}%${t.completedOn===d?' and is now closed':''}.` : msg;
+    [...new Set([t.owner, ...mgrIdsOf(t.owner), t.assignedBy])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, x===t.owner ? msg2 : msg2.replace('re-rated “', `re-rated ${userName(t.owner)}'s “`).replace('review, “', `review, ${userName(t.owner)}'s “`), nowAbs(), null));
   }catch(e){
     const t2 = db.tasks.find(x=>x.id===tid); if (t2 && t2.log && t2.log[d]){ t2.log[d].reRate = 'retry'; t2.log[d].reRateTry = new Date().toISOString(); save(); safeRender(); }
   }finally{ delete RERATE_BUSY[key]; }
