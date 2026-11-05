@@ -210,6 +210,11 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .mch-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}.mch{width:100%;border-collapse:collapse;font-size:14px;min-width:720px}
 .mch th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}.mch td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .mch td small{color:var(--muted)}.mch .nw{white-space:nowrap}
+.tt-task{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--bg)}.tt-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.tt-p{font-weight:700;font-size:13px;padding:2px 8px;border-radius:99px;background:var(--soft,#f3f4f6)}.tt-p.ok{background:#e9f7ee;color:#0f7a3d}
+.tt-note{font-size:13px;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--soft,#f3f4f6)}
+.tcm{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}.tcm-i{font-size:13px;margin:4px 0;padding:6px 10px;border-radius:10px;background:#eef4ff;max-width:92%}.tcm-i.me{background:#f1f5f0;margin-left:auto}
+.tcm-i small{color:var(--muted)}.tcm-form{display:flex;gap:6px;margin-top:6px;align-items:center}.tcm-form .stt{flex:1;min-width:0}.tcm-form .tcm-in{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;background:var(--bg)}
 .tc-row{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center}.tc-btn{color:#0f7a3d;font-weight:600}
 .tc-st{margin-top:6px;font-size:13px;padding:6px 10px;border-radius:8px;background:#fff7e6;border:1px solid #f3d9a4}.tc-st.ok{background:#e9f7ee;border-color:#b7e2c6}.tc-st.pend{background:var(--soft,#f3f4f6);border-color:var(--line)}
 .clf-list{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}.clf-chip{display:inline-flex;align-items:center;gap:6px;background:var(--soft,#f3f4f6);border:1px solid var(--line);border-radius:99px;padding:4px 6px 4px 10px;font-size:13px;max-width:100%}
@@ -777,6 +782,7 @@ function taskCard(t, n, showOwner){
     </div>
     ${t.feas && ((t.feas.state==='pending' && t.owner===ui.user) || (t.feas.state==='not' && t.assignedBy===ui.user)) ? feasHtml(t) : ''}
     ${taskCloseState(t, d)}
+    ${t.owner===ui.user && hasOwnReport(ui.user) && !(t.completedOn && t.completedOn < d) ? commentsHtml(t, { box:true }) : (t.comments||[]).length ? commentsHtml(t) : ''}
     ${canAttach(t)||canCloseTask(t)?`<div class="tc-row">${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}${canCloseTask(t)&&ui.tc!==t.id?`<button type="button" class="linkbtn tf-add tc-btn" data-act="tc-open" data-id="${t.id}">✓ ${((t.log||{})[d]||{}).closedEarly?'Update closing note':'Close this task'}</button>`:''}</div>`:''}
     ${ui.tc===t.id && canCloseTask(t) ? taskCloseForm(t) : ''}
     ${carried?bar(prevProgress(t,d),'Progress so far'):''}
@@ -2716,9 +2722,9 @@ async function aiScoreClosure(k){
     const overall = Math.round(sum/items.length), was = c.ai && c.ai.status;
     c.ai = { status:'done', summary:String(j.summary||'').slice(0,1500), overall, at:new Date().toISOString() };
     save();
-    emailPeople(getUser(owner).managers.concat(needsCeoReview(owner) ? ceoIds() : []),
+    emailPeople(getUser(owner).managers.concat(needsCeoReview(owner) ? ceoIds() : [], [owner]),
       `${c.edits?'Updated closure':'Closure'} report from ${userName(owner)} — ${fmtDate(d)} (AI rating ${overall}%)`,
-      `${c.ai.summary}\n\n` + items.map(({t})=>`• ${t.title}: ${t.log[d].progress}% — ${t.log[d].aiNote}`).join('\n') + '\n\nPlease review it in the portal (Team reports).');
+      `${c.ai.summary}\n\n` + items.map(({t})=>`• ${t.title}: ${t.log[d].progress}% — ${t.log[d].aiNote}`).join('\n') + '\n\nManagers: please review it in the portal (Team reports).', true);
     if (owner===ui.user && was!=='done') tip('AI rating ready', `Your work today was rated ${overall}% overall. See the details in your closure report.`);
     return true;
   }catch(e){
@@ -3550,9 +3556,78 @@ async function closeTaskNow(btn){
     save(); safeRender();
     const who = [t.assignedBy].filter(x=>x && x!==me);
     who.forEach(x=>notify(x, `${userName(me)} closed “${t.title}” — AI rated ${pct}%.`, nowAbs(), null));
+    if (pct>=100){ const fl = (t.files||[]).map(x=>x.name).join(', ');
+      emailPeople([me, ...mgrIdsOf(me), ...(t.assignedBy?[t.assignedBy]:[])], `Task completed: “${t.title}” — ${userName(me)}`,
+        `${userName(me)} completed the task “${t.title}” on ${fmtDate(d)}.\n\nWhat was done: ${txt}\n\nAI rating: ${pct}%${r.note?' — '+r.note:''}${fl?'\nFiles: '+fl:''}`, true); }
     tip(pct>=100?'Task complete':'Task rated', pct>=100 ? `“${t.title}” is closed at 100%.` : `AI rated it ${pct}%. It stays open and carries forward.`);
   }catch(_){ tip('Saved', 'The AI could not rate it just now. It will be rated with your closure report.'); }
 }
+
+/* ===== Team today: managers see their team's work task by task, or project by project, and comment during the day ===== */
+const mgrIdsOf = id => [...new Set((getUser(id).managers||[]).concat(needsCeoReview(id) ? ceoIds() : []))];
+const canCommentOn = (t, me) => t.owner===me || t.assignedBy===me || subtree(me).some(u=>u.id===t.owner);
+function commentsHtml(t, opts){
+  const cs = t.comments || [], me = ui.user;
+  if (!cs.length && !(opts && opts.box)) return '';
+  return `<div class="tcm">${cs.map(c=>`<div class="tcm-i ${c.by===me?'me':''}"><b>${esc(userName(c.by))}</b> <small>${fmtAbs(c.at)}</small><div>${esc(c.text)}</div></div>`).join('')}
+    ${canCommentOn(t, me) ? `<form class="tcm-form" data-id="${t.id}" novalidate><input class="tcm-in" maxlength="600" placeholder="${t.owner===me?(cs.length?'Reply, or tell your manager about an issue…':'Facing an issue? Message your manager about this task…'):'Comment or ask about this task…'}"><button type="submit" class="btn sm">${t.owner===me?'Send to manager':'Comment'}</button></form>` : ''}</div>`;
+}
+function sendTaskComment(f){
+  const inp = f.querySelector('.tcm-in'), text = inp.value.trim(), me = ui.user;
+  const t = db.tasks.find(x=>x.id===f.dataset.id); if (!t || !text || !canCommentOn(t, me)) return;
+  const na = nowAbs();
+  (t.comments = t.comments || []).push({ by:me, at:na, text:text.slice(0,600) });
+  // Tell the people in the conversation: the owner (if a manager wrote) or the managers who commented / assigned it (if the owner replied).
+  const to = t.owner===me ? [...new Set(t.comments.filter(c=>c.by!==me).map(c=>c.by).concat(t.assignedBy?[t.assignedBy]:[], mgrIdsOf(me)))] : [t.owner];
+  const rcpt = to.filter(x=>x && x!==me);
+  rcpt.forEach(x=>notify(x, `${userName(me)} on “${t.title}”: ${text.slice(0,140)}`, na, null));
+  if (t.owner===me && rcpt.length) emailPeople(rcpt, `${userName(me)} — message about “${t.title}”`, `${userName(me)} wrote about the task “${t.title}”:\n\n${text}\n\nReply in the portal (Team today).`);
+  inp.value = ''; save(); render();
+}
+document.addEventListener('submit', e=>{ if (e.target.classList && e.target.classList.contains('tcm-form')){ e.preventDefault(); e.stopPropagation(); sendTaskComment(e.target); } }, true);
+function teamTaskRow(t, d, showOwner){
+  const pr = progOn(t, d), l = (t.log||{})[d] || {}, files = (t.files||[]).length;
+  return `<div class="tt-task">
+    <div class="tt-h"><b>${showOwner?`<span class="b">${esc(userName(t.owner))}</span> `:''}${esc(t.title)}</b>
+      <span class="tt-p ${pr>=100?'ok':''}">${pr}%</span></div>
+    ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
+    <div class="badges">${priBadge(t.priority)}<span class="b">${t.category==='extra'?'Additional':'Planned'}</span>
+      ${t.projectId&&projById(t.projectId)&&!showOwner?`<span class="b proj">${esc(projById(t.projectId).name)}</span>`:''}
+      ${t.assignedBy?`<span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}
+      <span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${d>t.dueDate?'<span class="b emg">Overdue</span>':''}
+      ${files?`<span class="b">${files} file${files===1?'':'s'}</span>`:''}</div>
+    ${l.justification?`<div class="tt-note"><b>${l.closedEarly?'Closing note':'Report'}:</b> ${esc(l.justification)}${l.aiNote?`<div class="hint" style="margin:2px 0 0">AI: ${esc(l.aiNote)}</div>`:''}</div>`:''}
+    ${files?filesHtml(t):''}
+    ${commentsHtml(t, { box:true })}
+  </div>`;
+}
+function teamTodayView(n){
+  const me = ui.user, d = n.date, st = ui.tt = ui.tt || { by:'person', who:'' };
+  const people = subtree(me).filter(u=>hasOwnReport(u.id) && (!st.who || u.id===st.who));
+  const all = subtree(me).filter(u=>hasOwnReport(u.id));
+  let h = `<section class="card"><div class="sec-h"><h2>Team today</h2><span class="hint" style="margin:0">${fmtDate(d)}</span></div>
+    <p class="hint" style="margin-top:0">What your team is working on right now, task by task. Comment on any task during the day; the person is notified and can reply.</p>
+    <div class="row" style="margin-bottom:6px;align-items:flex-end">
+      <div class="seg"><label><input type="radio" name="ttBy" value="person" ${st.by==='person'?'checked':''}><span>By person</span></label><label><input type="radio" name="ttBy" value="project" ${st.by==='project'?'checked':''}><span>By project</span></label></div>
+      ${all.length>1?`<label class="f" style="min-width:200px;margin:0">Person<select id="ttWho" class="sel"><option value="">Everyone</option>${all.map(u=>`<option value="${u.id}" ${u.id===st.who?'selected':''}>${esc(u.name)}</option>`).join('')}</select></label>`:''}</div></section>`;
+  if (!people.length) return h + `<section class="card">${note('No team members to show.')}</section>`;
+  if (st.by==='person'){
+    people.forEach(u=>{ const i = personInfo(u, d, n);
+      h += `<section class="card tt-person"><div class="sec-h"><h2 style="font-size:17px">${onDot(u.id)}${esc(u.name)} <small class="hint" style="margin:0">${esc(u.title)}</small></h2>${pill(i.cls, i.st)}</div>
+        ${i.act.length ? i.act.map(t=>teamTaskRow(t, d, false)).join('') : note('No tasks today yet.')}</section>`; });
+  } else {
+    const groups = new Map();
+    people.forEach(u=>activeTasks(u.id, d).forEach(t=>{ const k = t.projectId && projById(t.projectId) ? t.projectId : ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }));
+    const keys = [...groups.keys()].sort((a,b)=> (a==='') - (b==='') || (projById(a)?.name||'').localeCompare(projById(b)?.name||''));
+    if (!keys.length) h += `<section class="card">${note('No tasks today yet.')}</section>`;
+    keys.forEach(k=>{ const ts = groups.get(k), p = projById(k), avg = Math.round(ts.reduce((s,t)=>s+progOn(t,d),0)/ts.length);
+      h += `<section class="card"><div class="sec-h"><h2 style="font-size:17px">${p?esc(p.name):'Not part of a project'}</h2><span class="b">${ts.length} task${ts.length===1?'':'s'} · ${avg}% average</span></div>
+        ${p?`<div class="row" style="margin:-4px 0 8px"><button type="button" class="btn sm ghost" data-act="proj-open" data-id="${p.id}">Open project</button></div>`:''}
+        ${ts.sort((a,b)=>userName(a.owner).localeCompare(userName(b.owner))).map(t=>teamTaskRow(t, d, true)).join('')}</section>`; });
+  }
+  return h;
+}
+document.addEventListener('change', e=>{ if (e.target.name==='ttBy'){ (ui.tt = ui.tt || {}).by = e.target.value; render(); } else if (e.target.id==='ttWho'){ (ui.tt = ui.tt || {}).who = e.target.value; render(); } });
 
 /* ===== Cancel a meeting (before it starts): reason required; follow-up reminder now and again after 7 days if not rebooked ===== */
 function cancelForm(m){
@@ -3786,7 +3861,7 @@ function paintWakeDot(){ const f = document.getElementById('aiFab'); if (f) f.cl
 document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') wakeStart(); else wakeStop(); });
 
 /* Admin portal (CEO and GM only) and employee portal. */
-const ADMIN_TABS = ['dash','logins','activity','files','mrev','mchart','appr'];
+const ADMIN_TABS = ['dash','team','logins','activity','files','mrev','mchart','appr'];
 const isAdminUser = id => DASH_ROLES.includes(getUser(id).role);
 function tabsFor(id){
   const all = allTabs(id); if (!isAdminUser(id)) return all;
@@ -3802,6 +3877,7 @@ function allTabs(id){
   if (hasOwnReport(id) || subtree(id).length) t.push(['mydash', hasOwnReport(id)?'My dashboard':'Dashboards']);
   if (hasOwnReport(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
   if (!DASH_ROLES.includes(getUser(id).role) && USERS.some(u=>u.id!==id && !isField(u.id) && reviewersOf(u.id).some(r=>r.id===id))){ const p = (db.meetings||[]).filter(m=>m.status==='review' && canReviewMeeting(m, id)).length; t.push(['mrev', p?`Team meetings (${p})`:'Team meetings']); }
+  if (subtree(id).some(u=>hasOwnReport(u.id))) t.push(['team','Team today']);
   if (chartTabFor(id)) t.push(['mchart','Meeting chart']);
   t.push(['proj','Projects']); t.push(['photos','Photo library']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
@@ -3832,7 +3908,7 @@ function render(){
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
-    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='mchart' ? meetingChartView() : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
+    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='mchart' ? meetingChartView() : ui.view==='team' ? teamTodayView(n) : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
   const lgT = isField(ui.user) && loginOf(ui.user, n.date);
