@@ -596,7 +596,8 @@ body.adm .tabs button.on{box-shadow:inset 0 -3px 0 var(--brand)}
    CONFIGURATION — edit here
    ===================================================================== */
 const CONFIG = {
-  planOpen:    '09:00',   // morning plan opens
+  planOpen:    '00:01',   // morning plan opens (just after midnight, so plans can be made early)
+  workStart:   '09:00',   // start of the working day: late logins, whole-day meetings
   planClose:   '10:15',   // morning plan locks; additional work starts
   closureOpen: '18:00',   // normal end of the working day (closure is by button, not forced)
   minWords:    12,
@@ -1581,7 +1582,7 @@ function meetingsView(n){
       <label class="f">What the meeting is for<textarea id="mPurpose" rows="2">${rb?esc(rb.purpose):''}</textarea></label>
       <div class="clk-row"><label class="f" style="flex:1;min-width:180px">Date<input type="date" id="mDate" min="${n.date}" value="${n.date}"></label>
         <div class="f" id="mTimeBox" style="flex:1;min-width:240px"><span>Time</span>${clockPicker('mTime', nextSlot())}</div>
-        <p class="hint" id="mDayNote" hidden style="flex:1;min-width:240px;align-self:center">Whole day: ${CONFIG.planOpen}–${CONFIG.closureOpen} (from now if it is today).</p></div>
+        <p class="hint" id="mDayNote" hidden style="flex:1;min-width:240px;align-self:center">Whole day: ${CONFIG.workStart}–${CONFIG.closureOpen} (from now if it is today).</p></div>
       <div class="err" id="mErr" hidden></div>
       <div class="row end"><button type="button" class="btn ghost" data-act="meet-now">Start meeting now</button><button class="btn">Schedule meeting</button></div>
       <p class="hint">Reminders by email and notification: 24 h, 12 h, 6 h, 1 h, 15 min and 10 min before. For in-person meetings the AI checks that you can get there in time from your other meetings that day.</p>
@@ -3017,7 +3018,7 @@ function myDashView(n){
   if (!ses) h += MYD[key] && MYD[key].err ? note('Could not load: '+esc(MYD[key].err), false, true) : '<p class="hint">Loading…</p>';
   else {
     const ins = ses.filter(x=>x.inn).map(x=>hmToMin(uaeHM(x.inn.created_at))), outs = ses.filter(x=>x.out).map(x=>hmToMin(uaeHM(x.out.created_at)));
-    const late = ins.filter(x=>x > hmToMin(CONFIG.planOpen)).length;
+    const late = ins.filter(x=>x > hmToMin(CONFIG.workStart)).length;
     h += `<div class="sum"><div><b>${ses.length}</b>days logged in</div><div><b>${ins.length?minToHM(ins.reduce((s,x)=>s+x,0)/ins.length):'—'}</b>average first login</div><div><b>${outs.length?minToHM(outs.reduce((s,x)=>s+x,0)/outs.length):'—'}</b>average logout</div><div><b>${late}</b>after ${CONFIG.planOpen}</div></div>
       ${ses.length?`<div class="tblwrap"><table class="mst"><thead><tr><th>Date</th><th>First login</th><th>Last logout</th><th>Device</th></tr></thead><tbody>${ses.slice(0,62).map(x=>`<tr><td>${fmtShort(x.d)}</td><td>${x.inn?uaeHM(x.inn.created_at):'—'}${x.inn&&hmToMin(uaeHM(x.inn.created_at))>hmToMin(CONFIG.planOpen)?' <span class="b emg">after '+CONFIG.planOpen+'</span>':''}</td><td>${x.out?uaeHM(x.out.created_at):'<span class="hint" style="margin:0">not logged out</span>'}</td><td>${esc(x.dev)}</td></tr>`).join('')}</tbody></table></div>`:note('No logins recorded in this period. (Login times are recorded from 4 November 2026.)')}`;
   }
@@ -3052,14 +3053,14 @@ async function downloadMonthSheet(btn){
     const rows = data || [], people = [...USERS].sort((x,y)=>(x.sort-y.sort) || x.name.localeCompare(y.name));
     const locTxt = r => r ? (r.lat!=null ? mapUrl(r) : (r.note||'No location')) : '';
     const daily = [['Date','Day','Employee','Job title','First login','Login location','Login accuracy (m)','Last logout','Logout location','Logout accuracy (m)','Device','Events','Status']], links = [];
-    const summary = [['Employee','Job title','Days with a login','First login after '+CONFIG.planOpen,'Average first login','Average logout','Days without a logout']];
+    const summary = [['Employee','Job title','Days with a login','First login after '+CONFIG.workStart,'Average first login','Average logout','Days without a logout']];
     people.forEach(u=>{
       const mine = rows.filter(r=>r.person===u.id), ins = [], outs = []; let dl = 0, late = 0, noOut = 0;
       for (let d = a; d <= end; d = addDays(d,1)){
         const day = mine.filter(r=>uaeDay(r.created_at)===d), inn = day.find(r=>r.kind!=='signout'), out = [...day].reverse().find(r=>r.kind==='signout');
         const dn = dUTC(d).toLocaleDateString('en-GB',{ weekday:'short', timeZone:'UTC' });
         if (!day.length){ daily.push([d, dn, u.name, u.title, '', '', '', '', '', '', '', 0, 'No login recorded']); continue; }
-        dl++; if (inn){ const m = hmToMin(uaeHM(inn.created_at)); ins.push(m); if (m > hmToMin(CONFIG.planOpen)) late++; } if (out) outs.push(hmToMin(uaeHM(out.created_at))); else noOut++;
+        dl++; if (inn){ const m = hmToMin(uaeHM(inn.created_at)); ins.push(m); if (m > hmToMin(CONFIG.workStart)) late++; } if (out) outs.push(hmToMin(uaeHM(out.created_at))); else noOut++;
         daily.push([d, dn, u.name, u.title, inn?uaeHM(inn.created_at):'', locTxt(inn), inn&&inn.acc?Math.round(inn.acc):'', out?uaeHM(out.created_at):'', locTxt(out), out&&out.acc?Math.round(out.acc):'', (inn||out||{}).device||'', day.length, inn && hmToMin(uaeHM(inn.created_at)) > hmToMin(CONFIG.planOpen) ? 'Late (after '+CONFIG.planOpen+')' : 'Logged in']);
         if (inn && inn.lat!=null) links.push([daily.length-1, 5, mapUrl(inn)]); if (out && out.lat!=null) links.push([daily.length-1, 8, mapUrl(out)]);
       }
@@ -3395,9 +3396,9 @@ const mDur = m => m.dur || 60;
 const MEET_DURS = [30,45,60,90,120,150,180,210,240,300,360,420,480,540,600];   // 30 min to 10 hours
 /* Whole working day on date d: from the start of the day (or from now, if it is today and the day has started) to its end. */
 function wholeDay(d){
-  const n = now(), st = Math.max(toMins(CONFIG.planOpen), d===n.date ? toMins(n.label) : 0), en = toMins(CONFIG.closureOpen);
+  const n = now(), st = Math.max(toMins(CONFIG.workStart), d===n.date ? toMins(n.label) : 0), en = toMins(CONFIG.closureOpen);
   if (d===n.date && en - st < 30) return { error:`It is too late today for a whole-day meeting (the working day ends at ${CONFIG.closureOpen}). Choose another date.` };
-  const time = d===n.date && st > toMins(CONFIG.planOpen) ? n.label : CONFIG.planOpen;
+  const time = d===n.date && st > toMins(CONFIG.workStart) ? n.label : CONFIG.workStart;
   return { time, dur:Math.max(30, en - toMins(time)) };
 }
 const durSelect = (id, sel) => `<select id="${id}" class="sel">${MEET_DURS.map(x=>`<option value="${x}" ${String(x)===String(sel)?'selected':''}>${durLabel(x)}</option>`).join('')}<option value="day" ${sel==='day'?'selected':''}>Whole day</option></select>`;
