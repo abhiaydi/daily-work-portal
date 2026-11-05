@@ -216,7 +216,8 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
 .pd-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}.pd-form .pd-note{flex:1 1 100%;min-width:180px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit}.pd-form .stt{flex:1;min-width:180px}.pd-form .err{flex-basis:100%}
 .pt-mode{border:0;padding:0;margin:8px 0 0}.pt-mode legend{font-weight:600;font-size:13px;margin-bottom:4px}.pt-mode label{display:flex!important;flex-direction:row!important;gap:8px;align-items:flex-start;font-size:13px;margin:4px 0;cursor:pointer}.pt-mode input{width:16px!important;height:16px!important;min-height:0!important;flex:none;margin:2px 0 0;accent-color:#1a5ed4}
-.parts-ed .pt-tog{display:flex!important;flex-direction:row!important;justify-content:flex-start!important;gap:8px;align-items:center;font-weight:500;cursor:pointer;margin:0}.parts-ed .pt-tog input{width:18px!important;height:18px!important;min-height:0!important;flex:none;margin:0;padding:0;accent-color:#1a5ed4}.pt-box{margin-top:6px}.pt-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}.pt-row .pt-name,.pt-row .stt{flex:1;min-width:0}.pt-row .pt-days{width:70px}
+.parts-ed .pt-tog{display:flex!important;flex-direction:row!important;justify-content:flex-start!important;gap:8px;align-items:center;font-weight:500;cursor:pointer;margin:0}.parts-ed .pt-tog input{width:18px!important;height:18px!important;min-height:0!important;flex:none;margin:0;padding:0;accent-color:#1a5ed4}.pt-box{margin-top:6px}.pt-row{margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed var(--line)}.pt-main{display:flex;gap:8px;align-items:center}.pt-main .pt-name,.pt-main .stt{flex:1;min-width:0}.pt-main .pt-days{width:70px}
+.pt-cbrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}.pt-cbrow .pt-cb{max-width:300px;font-size:13px}.pt-cbl{display:contents}
 .cb-line{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:6px}.cb-line .sel{max-width:260px}.cb-ed .cb-sel{max-width:420px;margin-top:4px}
 .tt-task{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--bg)}.tt-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .tt-p{font-weight:700;font-size:13px;padding:2px 8px;border-radius:99px;background:var(--soft,#f3f4f6)}.tt-p.ok{background:#e9f7ee;color:#0f7a3d}
@@ -819,7 +820,7 @@ function taskForm(kind, mode){
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     ${projSelect(t)}
     ${partsEditor(t)}
-    ${kind==='self' && !t ? collabEditor('self-'+mode) : ''}
+    ${!t ? collabEditor(kind+'-'+mode) : ''}
     ${t?'':`<div class="f"><span>Attachments (optional)</span>
       <div class="clf-list" data-id="tf-${kind}-${mode}">${clfChips('tf-'+kind+'-'+mode)}</div>
       <label class="btn sm ghost clf-add">${CLIP_IC} ${(CL_FILES['tf-'+kind+'-'+mode]||[]).length?'Add more files':'Add files'}<input type="file" multiple class="cl-files" data-id="tf-${kind}-${mode}" hidden></label>
@@ -1882,8 +1883,9 @@ function dashView(n){
 function makeTask(owner, by, f, mode, extra, opts){
   const n = now(), cat = mode==='plan' ? 'planned' : 'extra';
   const t = Object.assign({ id:uid(), owner, assignedBy:by, category:cat, priority:f.priority, title:f.title, details:f.details||'', days:f.days,
-    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, f.projectId?{projectId:f.projectId}:{}, (f.parts&&f.parts.length)?{ parts:f.parts.map(p=>({ id:uid(), title:p.title, days:p.days })), partsMode:f.partsMode||'seq' }:{}, (f.files&&f.files.length)?{files:f.files.map(x=>({ ...x }))}:{}, owner!==by?{ feas:{ state:'pending' } }:{}, extra||{});
-  db.tasks.push(t);
+    startDate:n.date, dueDate:addDays(n.date, f.days-1), log:{}, completedOn:null, createdAt:new Date().toISOString() }, f.byVoice?{byVoice:true}:{}, f.projectId?{projectId:f.projectId}:{}, (f.parts&&f.parts.length)?{ parts:f.parts.map(p=>({ id:uid(), title:p.title, days:p.days, ...((p.collab||[]).length?{ collab:p.collab.filter(x=>x!==owner) }:{}) })), partsMode:f.partsMode||'seq' }:{}, (f.files&&f.files.length)?{files:f.files.map(x=>({ ...x }))}:{}, owner!==by?{ feas:{ state:'pending' } }:{}, extra||{});
+  if ((f.collab||[]).length){ t.collab = f.collab.filter(x=>x!==owner); if (t.collab.length) tellCollaborators(t, t.collab, by); else delete t.collab; }
+  db.tasks.push(t); tellPartCollaborators(t, by);
   const pj = f.projectId && projById(f.projectId); if (pj && !isMgmt(owner)) addMembers(pj, [owner]);
   const info = `Task: ${f.title}\nPriority: ${f.priority}\nDuration: ${f.days} day(s), due ${fmtShort(t.dueDate)}\nType: ${mode==='plan'?'Morning plan':'Additional work'}${f.details?'\nDetails: '+f.details:''}${extra&&extra.approvedBy?`\n${extra.delegatedFrom?'Passed on':'Approved'} by ${userName(extra.approvedBy)}`:''}${(f.files||[]).length?`\nAttachments: ${f.files.map(x=>x.name).join(', ')}`:''}`;
   // Every assignment emails both people: the assignee and the assigner.
@@ -1894,7 +1896,7 @@ function makeTask(owner, by, f, mode, extra, opts){
 function sendRequest(me, owner, f){
   const up = isGm(owner), at = nowAbs();
   db.requests.push({ id:uid(), from:me, to:owner, kind: up?'up':'approval', title:f.title, details:f.details||'', priority:f.priority, days:f.days,
-    byVoice:!!f.byVoice, projectId:f.projectId||'', files:f.files||[], ...(f.parts?{ parts:f.parts, partsMode:f.partsMode||'seq' }:{}), status:'pending', createdAt:new Date().toISOString(), date:now().date });
+    byVoice:!!f.byVoice, projectId:f.projectId||'', files:f.files||[], ...(f.parts?{ parts:f.parts, partsMode:f.partsMode||'seq' }:{}), ...(f.collab?{ collab:f.collab }:{}), status:'pending', createdAt:new Date().toISOString(), date:now().date });
   const gms = up ? [owner] : gmIds();
   const txt = up ? `${userName(me)} has sent you a task: ${f.title}. Accept it, pass it to their team, or decline it.`
                  : `${userName(me)} wants to assign a task to ${userName(owner)}: ${f.title}. Approve or decline it.`;
@@ -1968,7 +1970,7 @@ function decideRequest(kind, form){
   const err = form.querySelector('.err'), fail = m => { err.hidden=false; err.textContent=m; };
   if (!r || r.status!=='pending' || !isGm(me)) { render(); return; }
   const pri = form.querySelector('.rq-pri').value, reason = form.querySelector('.rq-reason').value.trim(), at = nowAbs();
-  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice, projectId:r.projectId||'', files:r.files||[], ...(r.parts?{ parts:r.parts, partsMode:r.partsMode||'seq' }:{}) };
+  const f = { title:r.title, details:r.details, priority:pri, days:r.days, byVoice:r.byVoice, projectId:r.projectId||'', files:r.files||[], ...(r.parts?{ parts:r.parts, partsMode:r.partsMode||'seq' }:{}), ...(r.collab?{ collab:r.collab }:{}) };
   const done = (status, extra) => { Object.assign(r, { status, decidedBy:me, decidedAt:new Date().toISOString() }, extra||{}); save(); render(); };
   if (kind==='reject'){
     if (reason.split(/\s+/).filter(Boolean).length < 2) return fail('Write a short reason (a few words) before declining.');
@@ -3627,7 +3629,7 @@ function sendTaskComment(f){
   const na = nowAbs();
   (t.comments = t.comments || []).push({ by:me, at:na, text:text.slice(0,600) });
   // Tell the people in the conversation: the owner (if a manager wrote) or the managers who commented / assigned it (if the owner replied).
-  const others = t.comments.filter(c=>c.by!==me).map(c=>c.by).concat(t.assignedBy?[t.assignedBy]:[], t.collab||[]);
+  const others = t.comments.filter(c=>c.by!==me).map(c=>c.by).concat(t.assignedBy?[t.assignedBy]:[], t.collab||[], partCollabs(t));
   const to = t.owner===me ? [...new Set(others.concat(mgrIdsOf(me)))] : [...new Set([t.owner].concat(others))];
   const rcpt = to.filter(x=>x && x!==me);
   rcpt.forEach(x=>notify(x, `${userName(me)} on “${t.title}”: ${text.slice(0,140)}`, na, null));
@@ -3726,28 +3728,31 @@ function partsSummary(t, d){
 }
 function partsHtml(t, d, opts){
   const pl = partsPlan(t); if (!pl.length) return '';
-  const seq = partsSeq(t), cur = pl.find(p=>!p.done), me = ui.user, own = (t.owner===me || (opts && opts.collab && (t.collab||[]).includes(me))) && !(opts && opts.readOnly);
+  const seq = partsSeq(t), cur = pl.find(p=>!p.done), me = ui.user, ro = !!(opts && opts.readOnly);
   const doneN = pl.filter(p=>p.done).length;
   return `<div class="parts"><div class="parts-h"><b>Parts</b> <span class="hint" style="margin:0">${doneN} of ${pl.length} done · ${seq?'one after another':'same day / at the same time'}</span></div>
     ${pl.map(p=>{ const late = !p.done && d > p.end, now = !p.done && (seq ? (cur && cur.i===p.i) : true);
       const cls = p.done ? 'done' : late ? 'late' : now ? 'cur' : '';
-      return `<div class="part ${cls}"><span class="pn">${p.done?'✓':p.i+1}</span><div class="pb"><b>${esc(p.title)}</b> <small>${p.days} day${p.days===1?'':'s'} · ${p.start===p.end?fmtShort(p.start):fmtShort(p.start)+'–'+fmtShort(p.end)}</small>
+      const own = !ro && canDoPart(t, p, me);
+      return `<div class="part ${cls}"><span class="pn">${p.done?'✓':p.i+1}</span><div class="pb"><b>${esc(p.title)}</b>${(p.collab||[]).length?` <span class="b asg">With ${p.collab.map(userName).map(esc).join(', ')}</span>`:''} <small>${p.days} day${p.days===1?'':'s'} · ${p.start===p.end?fmtShort(p.start):fmtShort(p.start)+'–'+fmtShort(p.end)}</small>
         ${p.done?`<div class="hint" style="margin:0">Done ${fmtShort(p.doneOn)}${p.note?' — '+esc(p.note):''}</div>`:late?`<div class="hint" style="margin:0;color:var(--emg)">Behind plan: should have finished ${fmtShort(p.end)}</div>`:now&&seq?`<div class="hint" style="margin:0">Current part${d>=p.start?` · day ${diffDays(p.start,d)+1} of ${p.days}`:''}</div>`:''}
         ${own && now && ui.pd===t.id+':'+p.id ? `<form class="pd-form" data-id="${t.id}" data-p="${p.id}" novalidate><textarea class="pd-note" rows="2" placeholder="What was finished in this part? (optional)"></textarea><button type="submit" class="btn sm">Mark done</button><button type="button" class="btn sm ghost" data-act="pd-x">Cancel</button><div class="err" hidden></div></form>`
-          : own && now && canMarkPart(t) ? `<button type="button" class="linkbtn tc-btn" data-act="pd-open" data-id="${t.id}" data-p="${p.id}">✓ Mark this part done</button>` : ''}</div></div>`; }).join('')}</div>`;
+          : own && now && canMarkPart(t, p) ? `<button type="button" class="linkbtn tc-btn" data-act="pd-open" data-id="${t.id}" data-p="${p.id}">✓ Mark this part done</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
-const canMarkPart = t => (t.owner===ui.user || (t.collab||[]).includes(ui.user)) && !closedToday(t.owner, now().date) && !closedToday(ui.user, now().date) && ['plan','extra'].includes(phaseFor(now().mins, ui.user)) && !(t.completedOn && t.completedOn < now().date);
+const canDoPart = (t, p, me) => t.owner===me || (t.collab||[]).includes(me) || (!!p && (p.collab||[]).includes(me));
+const canMarkPart = (t, p) => canDoPart(t, p, ui.user) && !closedToday(t.owner, now().date) && !closedToday(ui.user, now().date) && ['plan','extra'].includes(phaseFor(now().mins, ui.user)) && !(t.completedOn && t.completedOn < now().date);
 function doPartDone(t, p, note){
   const d = now().date; p.done = true; p.doneOn = d; p.note = String(note||'').trim();
   const open = partsPlan(t).filter(x=>!x.done), next = open[0] || null, na = nowAbs();
   const msg = `${userName(t.owner)} finished part “${p.title}” of “${t.title}”${next?(partsSeq(t)?` — next: ${next.title}`:` — ${open.length} part${open.length===1?'':'s'} left`):' — all parts done'}.`;
-  [...new Set([t.owner, t.assignedBy, ...(t.collab||[]), ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, ui.user!==t.owner ? msg.replace(userName(t.owner), userName(ui.user)) : msg, na, null));
+  [...new Set([t.owner, t.assignedBy, ...(t.collab||[]), ...partCollabs(t), ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, ui.user!==t.owner ? msg.replace(userName(t.owner), userName(ui.user)) : msg, na, null));
   save(); return next;
 }
 function markPartDone(f){
   const t = db.tasks.find(x=>x.id===f.dataset.id), note = f.querySelector('.pd-note').value.trim();
-  if (!t || !canMarkPart(t)) { ui.pd = null; render(); return; }
-  const p = (t.parts||[]).find(x=>x.id===f.dataset.p); if (!p || p.done) return;
+  const p = t && (t.parts||[]).find(x=>x.id===f.dataset.p);
+  if (!t || !p || !canMarkPart(t, p)) { ui.pd = null; render(); return; }
+  if (p.done) return;
   if (partsSeq(t) && currentPart(t) && currentPart(t).id!==p.id) return;
   const next = doPartDone(t, p, note);
   ui.pd = null; save(); render();
@@ -3756,9 +3761,16 @@ function markPartDone(f){
 }
 document.addEventListener('submit', e=>{ if (e.target.classList && e.target.classList.contains('pd-form')){ e.preventDefault(); e.stopPropagation(); markPartDone(e.target); } }, true);
 /* Task form: optional parts editor. The person says how the parts run before any total is worked out. */
+function ptCbChips(ids){ return ids.map(id=>`<span class="clf-chip">${esc(userName(id))}<button type="button" class="linkbtn" data-act="pt-cb-del" data-id="${id}" aria-label="Remove">×</button></span>`).join(''); }
+function ptCbOptions(ids){ return `<option value="">+ With a colleague (only this part)</option>` + collabPool(ui.user).filter(u=>!ids.includes(u.id)).map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join(''); }
+function ptRowHtml(p){ const ids = (p && p.collab) || [];
+  return `<div class="pt-row" data-cb="${ids.join(',')}"><div class="pt-main"><input class="pt-name" placeholder="Part, e.g. Drawing" value="${esc(p?p.title:'')}"><input class="pt-days" type="number" min="1" max="60" value="${p?p.days:1}" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>
+    <div class="pt-cbrow"><span class="pt-cbl">${ptCbChips(ids)}</span><select class="sel pt-cb">${ptCbOptions(ids)}</select></div></div>`; }
+function ptCbPaint(row){ const ids = (row.dataset.cb||'').split(',').filter(Boolean); row.querySelector('.pt-cbl').innerHTML = ptCbChips(ids); row.querySelector('.pt-cb').innerHTML = ptCbOptions(ids); }
+document.addEventListener('change', e=>{ if (e.target.classList && e.target.classList.contains('pt-cb') && e.target.value){ const row = e.target.closest('.pt-row'); const ids = (row.dataset.cb||'').split(',').filter(Boolean); if (!ids.includes(e.target.value)) ids.push(e.target.value); row.dataset.cb = ids.join(','); ptCbPaint(row); } });
 function partsEditor(t){
   const ps = (t && t.parts && t.parts.length) ? t.parts : [], mode = ps.length ? (t.partsMode||'seq') : '';
-  const row = p => `<div class="pt-row"><input class="pt-name" placeholder="Part, e.g. Drawing" value="${esc(p?p.title:'')}"><input class="pt-days" type="number" min="1" max="60" value="${p?p.days:1}" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`;
+  const row = p => ptRowHtml(p);
   return `<div class="f parts-ed"><label class="pt-tog"><input type="checkbox" class="pt-on" ${ps.length?'checked':''}> This work has parts</label>
     <div class="pt-box" ${ps.length?'':'hidden'}><div class="pt-rows">${ps.length?ps.map(row).join(''):row(null)+row(null)}</div>
       <button type="button" class="btn sm ghost" data-act="pt-add">+ Add part</button>
@@ -3770,14 +3782,14 @@ function partsEditor(t){
 const ptMode = form => (form.querySelector('input[name=ptMode]:checked')||{}).value || '';
 function readParts(form, old){
   const on = form.querySelector('.pt-on'); if (!on || !on.checked) return { parts:null };
-  const rows = [...form.querySelectorAll('.pt-row')].map(r=>({ title:r.querySelector('.pt-name').value.trim(), days:Math.max(1, Math.min(60, parseInt(r.querySelector('.pt-days').value,10)||1)) })).filter(r=>r.title);
+  const rows = [...form.querySelectorAll('.pt-row')].map(r=>({ title:r.querySelector('.pt-name').value.trim(), days:Math.max(1, Math.min(60, parseInt(r.querySelector('.pt-days').value,10)||1)), collab:(r.dataset.cb||'').split(',').filter(Boolean) })).filter(r=>r.title);
   if (rows.length < 2) return { error:'Add at least two parts with a name, or untick "This work has parts".' };
   const mode = ptMode(form); if (!mode) return { error:'Choose how the parts are done: one after another, or on the same day / at the same time.' };
   const longest = Math.max(...rows.map(r=>r.days));
   let total;
   if (mode==='seq'){ total = rows.reduce((s,r)=>s+r.days, 0); if (total > 60) return { error:'All parts together can be at most 60 days.' }; }
   else { total = Math.max(1, Math.min(60, parseInt((form.querySelector('input[name=days]')||{}).value,10)||longest)); if (total < longest) return { error:`The total duration can't be shorter than the longest part (${longest} day${longest===1?'':'s'}).` }; }
-  return { parts: rows.map((r,i)=>{ const o = old && old[i] && old[i].title===r.title ? old[i] : null; return { id: o ? o.id : uid(), title:r.title, days:r.days, ...(o && o.done ? { done:true, doneOn:o.doneOn, note:o.note } : {}) }; }), days: total, mode };
+  return { parts: rows.map((r,i)=>{ const o = old && old[i] && old[i].title===r.title ? old[i] : null; return { id: o ? o.id : uid(), title:r.title, days:r.days, ...(r.collab.length?{ collab:r.collab }:{}), ...(o && o.done ? { done:true, doneOn:o.doneOn, note:o.note } : {}) }; }), days: total, mode };
 }
 function syncPartsDays(form){ const on = form.querySelector('.pt-on'), di = form.querySelector('input[name=days]'), calc = form.querySelector('.pt-calc'); if (!di) return;
   const mode = ptMode(form), ds = [...form.querySelectorAll('.pt-days')].map(x=>Math.max(1, parseInt(x.value,10)||1));
@@ -3792,15 +3804,24 @@ document.addEventListener('input', e=>{ if (e.target.classList && e.target.class
 /* ===== Collaboration: the person adding their own task can add colleagues who work on it with them.
    Collaborators see the task in "Working with colleagues" on My day, can comment, attach files and mark parts done; the owner closes it. ===== */
 const CB_PICK = {};   // form key -> chosen colleague ids (kept while the form is open)
-const isCollab = (t, id) => (t.collab||[]).includes(id);
-const collabPool = me => USERS.filter(u=>u.id!==me && hasOwnReport(u.id)).sort((a,b)=>a.name.localeCompare(b.name));
+const isCollab = (t, id) => (t.collab||[]).includes(id) || (t.parts||[]).some(p=>(p.collab||[]).includes(id));
+const partCollabs = t => [...new Set((t.parts||[]).flatMap(p=>p.collab||[]))];
+function tellPartCollaborators(t, by){
+  const na = nowAbs();
+  (t.parts||[]).forEach(p=>(p.collab||[]).filter(x=>x && x!==by && !(t.collab||[]).includes(x)).forEach(x=>{
+    notify(x, `${userName(by)} added you to the part “${p.title}” of “${t.title}”. It is on your My day under “Working with colleagues”.`, na, null);
+    emailPeople([x], `You are working with ${userName(by)} on “${p.title}”`, `${userName(by)} added you as a collaborator on the part “${p.title}” (${p.days} day(s)) of the task “${t.title}”.
+
+You will see it on your My day under "Working with colleagues", where you can comment, attach files and mark your part done.`); }));
+}
+const collabPool = me => USERS.filter(u=>u.id!==me).sort((a,b)=>a.name.localeCompare(b.name));   // anyone can work with anyone
 function collabChips(key){ return (CB_PICK[key]||[]).map(id=>`<span class="clf-chip">${esc(userName(id))}<button type="button" class="linkbtn" data-act="cb-del" data-k="${key}" data-id="${id}" aria-label="Remove ${esc(userName(id))}">×</button></span>`).join(''); }
 function collabEditor(key){
   const me = ui.user, chosen = CB_PICK[key] || [];
   return `<div class="f cb-ed"><span>Work with colleagues (optional)</span>
     <div class="clf-list cb-list" data-k="${key}">${collabChips(key)}</div>
     <select class="sel cb-sel" data-k="${key}"><option value="">+ Add a colleague…</option>${collabPool(me).filter(u=>!chosen.includes(u.id)).map(u=>`<option value="${u.id}">${esc(u.name)} — ${esc(u.title)}</option>`).join('')}</select>
-    <span class="hint" style="margin:2px 0 0">They see this task on their My day, get a notification, and can comment, attach files and mark parts done. You stay responsible for closing it.</span></div>`;
+    <span class="hint" style="margin:2px 0 0">Anyone in the company can be added. They see the task on their My day (or the "Working with colleagues" tab), get a notification, and can comment, attach files and mark parts done. The task's owner closes it. To add someone to just one part, use "With a colleague" on that part.</span></div>`;
 }
 function paintCollab(key){ const box = document.querySelector(`.cb-list[data-k="${key}"]`); if (box) box.innerHTML = collabChips(key);
   const sel = document.querySelector(`.cb-sel[data-k="${key}"]`); if (sel){ const chosen = CB_PICK[key]||[]; sel.innerHTML = `<option value="">+ Add a colleague…</option>` + collabPool(ui.user).filter(u=>!chosen.includes(u.id)).map(u=>`<option value="${u.id}">${esc(u.name)} — ${esc(u.title)}</option>`).join(''); } }
@@ -3830,7 +3851,7 @@ function collabSection(n){
     <p class="hint" style="margin-top:0">Tasks a colleague added you to. Comment, attach files or mark parts done here; the owner closes the task.</p>
     ${ts.map(t=>`<div class="tt-task"><div class="tt-h"><b><span class="b">${esc(userName(t.owner))}</span> ${esc(t.title)}</b><span class="tt-p ${progOn(t,d)>=100?'ok':''}">${progOn(t,d)}%</span></div>
       ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
-      <div class="badges">${priBadge(t.priority)}<span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${d>t.dueDate?'<span class="b emg">Overdue</span>':''}${(t.collab||[]).length>1?`<span class="b asg">Also with ${t.collab.filter(x=>x!==me).map(userName).map(esc).join(', ')}</span>`:''}</div>
+      <div class="badges">${priBadge(t.priority)}<span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${d>t.dueDate?'<span class="b emg">Overdue</span>':''}${!(t.collab||[]).includes(me)?`<span class="b proj">Your part: ${(t.parts||[]).filter(p=>(p.collab||[]).includes(me)).map(p=>esc(p.title)).join(', ')}</span>`:''}${(t.collab||[]).length>1?`<span class="b asg">Also with ${t.collab.filter(x=>x!==me).map(userName).map(esc).join(', ')}</span>`:''}</div>
       ${partsHtml(t, d, { collab:true })}${filesHtml(t)}${taskCloseState(t, d)}
       ${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}
       ${commentsHtml(t, { box:true })}</div>`).join('')}</section>`;
@@ -4086,6 +4107,7 @@ function allTabs(id){
   if (hasOwnReport(id)){ const k = meetingsOf(id).filter(m=>needsInput(m,nowAbs())).length; t.push(['meet', k?`Meetings (${k})`:'Meetings']); }
   if (!DASH_ROLES.includes(getUser(id).role) && USERS.some(u=>u.id!==id && !isField(u.id) && reviewersOf(u.id).some(r=>r.id===id))){ const p = (db.meetings||[]).filter(m=>m.status==='review' && canReviewMeeting(m, id)).length; t.push(['mrev', p?`Team meetings (${p})`:'Team meetings']); }
   if (teamOfMgr(id).length) t.push(['team','My team']);
+  if (!hasOwnReport(id) && db.tasks.some(x=>isCollab(x, id) && (!x.completedOn || x.completedOn>=now().date))) t.push(['collab','Working with colleagues']);
   if (chartTabFor(id)) t.push(['mchart','Meeting chart']);
   t.push(['proj','Projects']); t.push(['photos','Photo library']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
@@ -4116,7 +4138,7 @@ function render(){
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
-    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='mchart' ? meetingChartView() : ui.view==='team' ? teamTodayView(n) : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
+    : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='mchart' ? meetingChartView() : ui.view==='team' ? teamTodayView(n) : ui.view==='collab' ? (collabSection(n) || `<section class="card">${note('No shared tasks right now.')}</section>`) : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
   const lgT = isField(ui.user) && loginOf(ui.user, n.date);
@@ -4373,7 +4395,8 @@ async function addOrSaveTask(form){
   let ups = [];
   if (files.length){ const btn = form.querySelector('.row.end .btn:not(.ghost)'); if (btn){ btn.disabled = true; btn.textContent = 'Uploading files…'; }
     try{ ups = await uploadTaskFiles(files); delete CL_FILES[fkey]; }catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); } }
-  const f = { title, details, priority, days, projectId, ...(pr.parts?{ parts:pr.parts, partsMode:pr.mode }:{}) }, taskIds = [], reqIds = [];
+  const cbAll = (CB_PICK[kind+'-'+mode]||[]).slice(); delete CB_PICK[kind+'-'+mode];
+  const f = { title, details, priority, days, projectId, ...(pr.parts?{ parts:pr.parts, partsMode:pr.mode }:{}), ...(kind==='assign' && cbAll.length?{ collab:cbAll }:{}) }, taskIds = [], reqIds = [];
   if (kind==='assign'){
     const group = owners.length>1 ? uid() : '';
     direct.forEach(o=>taskIds.push(makeTask(o, me, f, mode, group?{ group }:{}, { noAssignerMail: direct.length>1 }).id));
@@ -4381,7 +4404,8 @@ async function addOrSaveTask(form){
     viaGm.forEach(o=>{ sendRequest(me, o, f); reqIds.push(db.requests[db.requests.length-1].id); });
   } else {
     const t = { id:uid(), owner:me, assignedBy:null, category:mode==='plan'?'planned':'extra', priority, title, details, days, startDate:n.date, dueDate:addDays(n.date,days-1), projectId, ...(pr.parts?{ parts:pr.parts, partsMode:pr.mode }:{}), log:{}, completedOn:null, createdAt:new Date().toISOString() };
-    const cb = (CB_PICK['self-'+mode]||[]).filter(x=>x!==me); if (cb.length){ t.collab = cb; tellCollaborators(t, cb, me); } delete CB_PICK['self-'+mode];
+    const cb = cbAll.filter(x=>x!==me); if (cb.length){ t.collab = cb; tellCollaborators(t, cb, me); }
+    (t.parts||[]).forEach(p=>{ if (p.collab) p.collab = p.collab.filter(x=>x!==me); }); tellPartCollaborators(t, me);
     db.tasks.push(t); taskIds.push(t.id);
   }
   if (ups.length) attachFiles(ups, taskIds, reqIds);
@@ -4439,7 +4463,8 @@ document.addEventListener('click', e=>{
   else if (act==='tt-hist'){ const st = ui.tt = ui.tt || {}; st.who = a.dataset.id; st.by = 'hist'; render(); window.scrollTo(0,0); return; }
   else if (act==='pd-open'){ ui.pd = a.dataset.id+':'+a.dataset.p; render(); setTimeout(()=>document.querySelector('.pd-form .pd-note')?.focus(), 50); return; }
   else if (act==='pd-x'){ ui.pd = null; render(); return; }
-  else if (act==='pt-add'){ const f = a.closest('form'), rows = f.querySelector('.pt-rows'); rows.insertAdjacentHTML('beforeend', `<div class="pt-row"><input class="pt-name" placeholder="Part, e.g. Simulation"><input class="pt-days" type="number" min="1" max="60" value="1" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`); syncPartsDays(f); rows.lastElementChild.querySelector('.pt-name').focus(); return; }
+  else if (act==='pt-add'){ const f = a.closest('form'), rows = f.querySelector('.pt-rows'); rows.insertAdjacentHTML('beforeend', ptRowHtml(null)); syncPartsDays(f); rows.lastElementChild.querySelector('.pt-name').focus(); return; }
+  else if (act==='pt-cb-del'){ const row = a.closest('.pt-row'); row.dataset.cb = (row.dataset.cb||'').split(',').filter(x=>x && x!==a.dataset.id).join(','); ptCbPaint(row); return; }
   else if (act==='pt-del'){ const f = a.closest('form'), r = a.closest('.pt-row'); if (f.querySelectorAll('.pt-row').length > 1) r.remove(); else r.querySelector('.pt-name').value = ''; syncPartsDays(f); return; }
   else if (act==='cb-del'){ const k = a.dataset.k; CB_PICK[k] = (CB_PICK[k]||[]).filter(x=>x!==a.dataset.id); paintCollab(k); return; }
   else if (act==='cb-card'){ ui.cbCard = a.dataset.id; render(); return; }
