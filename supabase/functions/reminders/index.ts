@@ -3,6 +3,7 @@
 //  - "notes missing" every 30 minutes (09:00–22:00 UAE) from the morning after the meeting,
 //    or 30 minutes after a MoM is sent back, until the salesperson writes it
 //  - cancelled meetings: one follow-up reminder (portal notification + email) 7 days later if not rebooked
+//  - collaboration requests: escalated to the collaborator's manager after 60 minutes without an answer; reminders until fixed; 15-minute reminder before the session
 // The scheduler sends a secret in the x-cron-secret header; it is checked against the database
 // (private.settings, readable only by the server).
 import { admin, json, sendEmail } from "../_shared/common.ts";
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
   const now = Date.now();
   const [{ data: rows }, { data: people }] = await Promise.all([
     a.from("records").select("id,data").eq("collection", "meetings"),
-    a.from("people").select("id,email"),
+    a.from("people").select("id,email,name,managers,role,is_field"),
   ]);
   const email: Record<string, string> = Object.fromEntries((people || []).map((p: Rec) => [p.id, p.email]));
   let sent = 0;
@@ -85,5 +86,50 @@ Deno.serve(async (req) => {
 
     if (changed) await a.rpc("set_email_sent", { mid: r.id, sent: es });
   }
+  sent += await collabRequests(a, people || [], email, now);
   return json({ ok: true, sent });
 });
+
+/* Collaboration requests: no answer within 60 minutes -> the collaborator's manager fixes the date and time.
+   Managers are reminded every 30 minutes until it is fixed. Everyone is reminded 15 minutes before the agreed time. */
+async function collabRequests(a: any, people: Rec[], email: Record<string, string>, now: number) {
+  const { data: rows } = await a.from("records").select("id,data").eq("collection", "tasks");
+  const nm: Record<string, Rec> = Object.fromEntries(people.map((p: Rec) => [p.id, p]));
+  const name = (id: string) => nm[id]?.name || id;
+  const ceo = people.filter((p) => p.role === "CEO").map((p) => p.id), gm = people.filter((p) => p.role === "General Manager").map((p) => p.id);
+  const mgrs = (id: string) => { const m = [...new Set([...(nm[id]?.managers || []), ...(nm[id]?.is_field ? ceo : [])])].filter((x) => x !== id); return m.length ? m : [...gm, ...ceo].filter((x) => x !== id); };
+  const nowAbs = Math.floor((now - EPOCH) / 60_000);
+  let n = 0;
+  for (const r of rows || []) {
+    const t: Rec = r.data; if (!t || !Array.isArray(t.cr) || !t.cr.length) continue;
+    let changed = false; const notes: Rec[] = [];
+    const note = (owner: string, text: string) => { const id = "cr-" + crypto.randomUUID(); notes.push({ collection: "notifications", id, data: { id, owner, text, at: nowAbs, read: false, email: true } }); };
+    for (const c of t.cr) {
+      const part = c.partId ? (t.parts || []).find((p: Rec) => p.id === c.partId)?.title : "";
+      const what = `${part ? `“${part}” of ` : ""}“${t.title}”`;
+      if (c.status === "pending" && nowAbs >= (c.askedAt || 0) + 60) {
+        c.status = "escalated"; c.escalatedAt = nowAbs; c.nagAt = nowAbs; changed = true;
+        for (const m of mgrs(c.who)) note(m, `${name(c.who)} did not answer a collaboration request within 60 minutes (${what}, proposed ${c.date} ${c.time}). Please fix the date and time on My day now.`);
+        for (const x of [...new Set([t.owner, c.by])]) if (x) note(x, `${name(c.who)} did not answer in time for ${what}. Their manager will fix the date and time.`);
+        const to = mgrs(c.who).map((m) => email[m]).filter(Boolean);
+        if (to.length) await sendEmail(to, `Action needed: fix a collaboration for ${name(c.who)}`, `${name(c.who)} did not answer within 60 minutes whether they can work with ${name(t.owner)} on ${what} (proposed ${c.date} at ${c.time}, UAE time).
+
+Please open the portal (My day → Collaboration requests) and fix the date and time, or take them off the work.`);
+        n++;
+      } else if ((c.status === "escalated" || c.status === "declined") && nowAbs - (c.nagAt || c.declinedAt || c.escalatedAt || 0) >= 30) {
+        c.nagAt = nowAbs; changed = true;
+        for (const m of mgrs(c.who)) note(m, `Reminder: the collaboration for ${name(c.who)} on ${what} still needs a date and time from you (My day → Collaboration requests).`);
+        n++;
+      } else if ((c.status === "accepted" || c.status === "fixed") && !c.rem15 && c.date && c.time) {
+        const at = Date.parse(`${c.date}T${c.time}:00+04:00`);
+        if (now >= at - 15 * 60_000 && now < at + 30 * 60_000) {
+          c.rem15 = true; changed = true;
+          for (const x of [...new Set([t.owner, c.who])]) note(x, `In 15 minutes (${c.time}): collaboration on ${what} — ${name(t.owner)} with ${name(c.who)}.`);
+          n++;
+        }
+      }
+    }
+    if (changed) { await a.from("records").upsert({ collection: "tasks", id: r.id, data: t }); if (notes.length) await a.from("records").upsert(notes); }
+  }
+  return n;
+}
