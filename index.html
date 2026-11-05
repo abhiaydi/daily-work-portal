@@ -219,6 +219,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line);font-size:13px}.part:first-of-type{border-top:0}
 .part .pn{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft,#f3f4f6);color:var(--muted)}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
+.rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
 .trf{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:6px}.trf-h{font-weight:600;font-size:14px}.trf-t{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit;font-size:15px;line-height:1.5;min-height:120px;resize:vertical}.trrow td{background:transparent;padding-top:0}
 .pf-pick{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}.pf-pick .clf-list{display:contents}.pt-files .tfiles{margin-top:2px}
@@ -781,7 +782,7 @@ function taskCard(t, n, showOwner){
     <div class="task-top">
       <div class="task-title">${showOwner?`<span class="b">${esc(userName(t.owner))}</span> `:''}${esc(t.title)}</div>
       ${editable
-        ? `<div class="acts"><button class="btn sm ghost" data-act="edit" data-id="${t.id}">Edit</button><button class="btn sm ghost danger" data-act="del" data-id="${t.id}">Delete</button></div>`
+        ? `<div class="acts"><button class="btn sm ghost" data-act="edit" data-id="${t.id}">Edit</button>${canDeleteTask(t, ui.user)?`<button class="btn sm ghost danger" data-act="del" data-id="${t.id}">Delete</button>`:''}</div>`
         : canDeleteTask(t, ui.user) ? `<div class="acts"><span class="lockic" title="Locked">${LOCK}</span><button class="btn sm ghost danger" data-act="del" data-id="${t.id}">Delete</button></div>` : `<span class="lockic" title="Locked">${LOCK}</span>`}
     </div>
     ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
@@ -870,7 +871,7 @@ function reportBlock(owner, d, canReview){
     ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
       <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${filesHtml(t)}</td>
       <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span></td>
-      <td class="pct ${l.pending?'':l.progress>=100?'full':'part'}">${l.pending?'<span class="hint" style="margin:0">pending</span>':l.progress+'%'}</td>
+      <td class="pct ${l.pending?'':l.progress>=100?'full':'part'}">${l.pending?'<span class="hint" style="margin:0">pending</span>':l.progress+'%'}${l.reRate==='done'&&l.aiFirst!==undefined&&l.aiFirst!==l.progress?`<div class="hint" style="margin:0;font-weight:400">was ${l.aiFirst}% before review</div>`:''}</td>
       <td>${l.justification?esc(l.justification):'—'}</td><td>${l.aiNote?esc(l.aiNote):'—'}</td></tr>${(()=>{ const rv = taskRevHtml(t, d); return rv ? `<tr class="trrow"><td colspan="5">${rv}</td></tr>` : ''; })()}`; }).join('')}
     </tbody></table></div>`;
   }
@@ -2761,12 +2762,12 @@ function scorePrompt(owner, d, items){
   return `You assess a staff member's end-of-day work report for a UAE manufacturing company. For each task, judge how much of the task's objective is complete now, as a CUMULATIVE percentage of the whole task (not just today's share), using ONLY what the employee wrote.
 Guidance: if they clearly say it is finished and describe the result, give 100.
 Parts: some tasks are split into parts, either one after another or at the same time (possibly all on the same day), as stated. Weigh each part by its days; finished parts count fully. A part past its planned end and not done means the task is behind plan: say so in the note.
-Attached files: where a task has files, the AI brief of each file is given. Use them as evidence: a file that shows the claimed result (e.g. the sent quotation, a completed sheet, a signed document) supports the score; if the file contradicts the report or does not show the work, score cautiously and say so. Mention the file in the note when it affected the score. Partial work gets a proportional score. Vague or unsupported claims ("worked on it") get a cautious score. Never go below the progress already recorded before today unless the employee says work was undone. Use multiples of 5.
+Attached files: where a task has files, the AI brief of each file is given. Use them as evidence: a file that shows the claimed result (e.g. the sent quotation, a completed sheet, a signed document) supports the score; if the file contradicts the report or does not show the work, score cautiously and say so. Mention the file in the note when it affected the score. Manager review: where a task has a review by the manager, the manager has checked the actual work. Treat it as stronger evidence than the employee's own words: if the manager says something is missing, wrong or must be redone, lower the score to match; if the manager confirms it is complete or good, the score can rise. Mention the review in the note when it changed the score. Partial work gets a proportional score. Vague or unsupported claims ("worked on it") get a cautious score. Never go below the progress already recorded before today unless the employee says work was undone. Use multiples of 5.
 Reply with ONLY JSON: {"tasks":[{"id":"<task id>","pct":0,"note":"one or two short sentences explaining the score, including what the attached files show if any"}],"summary":"3 to 5 sentences summarising the day for the manager: what was achieved (and what the attached files confirm), what is pending and why, anything needing attention"}
 Employee: ${u.name}, ${u.title}. Date: ${fmtDate(d)}.
 Tasks:
 ${items.map(({t,work})=>`[${t.id}] ${t.title}${t.details?' — '+t.details:''} | ${t.priority}, ${t.category==='extra'?'additional work':'planned'} | day ${diffDays(t.startDate,d)+1} of ${t.days} | progress before today: ${prevProgress(t,d)}%${t.assignedBy?' | assigned by '+userName(t.assignedBy):''}
-Employee wrote: "${String(work||'').replace(/"/g,"'").slice(0,1500)}"${(t.parts||[]).length?'\nParts (done one after another): '+partsSummary(t, d):''}${filesForScore(t, d)}`).join('\n')}`;
+Employee wrote: "${String(work||'').replace(/"/g,"'").slice(0,1500)}"${(t.parts||[]).length?'\nParts (done one after another): '+partsSummary(t, d):''}${filesForScore(t, d)}${reviewsForScore(t, d)}`).join('\n')}`;
 }
 async function aiScoreClosure(k){
   const c = db.closures[k]; if (!c || SCORE_BUSY[k]) return false;
@@ -2781,28 +2782,32 @@ async function aiScoreClosure(k){
     items.forEach(x=>{ x.t = db.tasks.find(t=>t.id===x.t.id) || x.t; });
     const res = Object.fromEntries((Array.isArray(j.tasks)?j.tasks:[]).map(x=>[x.id, x]));
     if (!items.every(({t})=>res[t.id] && isFinite(+res[t.id].pct))) throw new Error('The AI did not rate every task.');
-    let sum = 0;
+    let sum = 0; const again = c.ai && c.ai.status==='done';
     items.forEach(({t,work})=>{
       const pct = Math.max(0, Math.min(100, Math.round((+res[t.id].pct)/5)*5)); sum += pct;
-      t.log[d] = { progress:pct, justification:work||'', aiNote:String(res[t.id].note||'').slice(0,400), ...((t.files||[]).length?{ filesSeen:(t.files||[]).filter(f=>f.briefState==='done').length }:{}) };
+      const prev = t.log[d] || {}, keep = { ...(prev.closedEarly?{ closedEarly:true, closedAt:prev.closedAt }:{}) };
+      if (again && prev.progress!==undefined && hasMgrReview(t, d)) Object.assign(keep, { aiFirst: prev.aiFirst!==undefined ? prev.aiFirst : prev.progress, reRate:'done', reRatedFrom:prev.progress, reRatedAt:new Date().toISOString() });
+      t.log[d] = { ...keep, progress:pct, justification:work||'', aiNote:String(res[t.id].note||'').slice(0,400), ...(!again && hasMgrReview(t, d)?{ reviewUsed:true }:{}), ...((t.files||[]).length?{ filesSeen:(t.files||[]).filter(f=>f.briefState==='done').length }:{}) };
       if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
     });
-    const overall = Math.round(sum/items.length), was = c.ai && c.ai.status;
-    c.ai = { status:'done', summary:String(j.summary||'').slice(0,1500), overall, at:new Date().toISOString() };
+    const overall = Math.round(sum/items.length), was = c.ai && c.ai.status, first = again ? (c.ai.overallFirst!==undefined ? c.ai.overallFirst : c.ai.overall) : undefined;
+    c.ai = { status:'done', summary:String(j.summary||'').slice(0,1500), overall, at:new Date().toISOString(), ...(c.review?{ dayReviewUsed:true }:{}), ...(again && first!==overall?{ overallFirst:first, reRatedAt:new Date().toISOString() }:{}) };
     save();
-    emailPeople(getUser(owner).managers.concat(needsCeoReview(owner) ? ceoIds() : [], [owner]),
+    if (again) [...new Set([owner, ...mgrIdsOf(owner)])].filter(x=>x!==ui.user).forEach(x=>notify(x, `After the manager's review, the AI re-rated ${x===owner?'your':userName(owner)+"'s"} work for ${fmtShort(d)}: ${first}% → ${overall}% overall.`, nowAbs(), null));
+    if (!again) emailPeople(getUser(owner).managers.concat(needsCeoReview(owner) ? ceoIds() : [], [owner]),
       `${c.edits?'Updated closure':'Closure'} report from ${userName(owner)} — ${fmtDate(d)} (AI rating ${overall}%)`,
       `${c.ai.summary}\n\n` + items.map(({t})=>`• ${t.title}: ${t.log[d].progress}% — ${t.log[d].aiNote}`).join('\n') + '\n\nManagers: please review it in the portal (Team reports).', true);
     if (owner===ui.user && was!=='done') tip('AI rating ready', `Your work today was rated ${overall}% overall. See the details in your closure report.`);
     return true;
   }catch(e){
-    const c2 = db.closures[k]; if (c2) c2.ai = { status:'pending', error:String(e.message||e).slice(0,200), tryAt:new Date().toISOString() }; save();
+    const c2 = db.closures[k]; if (c2) c2.ai = (c2.ai && c2.ai.status==='done') ? Object.assign(c2.ai, { lastError:String(e.message||e).slice(0,200) }) : { status:'pending', error:String(e.message||e).slice(0,200), tryAt:new Date().toISOString() }; save();
     return false;
   }finally{ delete SCORE_BUSY[k]; }
 }
 /* Reports saved while the AI was unavailable are rated automatically later by the employee's or a manager's open portal. */
 let RETRY_BUSY = false;
 async function retryPendingScores(){
+  try{ retryReRates(); }catch(_){ }
   if (!ui.authed || RETRY_BUSY) return; const me = ui.user, mine = new Set([me, ...subtree(me).map(u=>u.id)]), t = Date.now();
   const ks = Object.keys(db.closures).filter(k=>{ const c = db.closures[k]; return c.ai && c.ai.status==='pending' && mine.has(k.split('|')[0]) && (!c.ai.tryAt || t - Date.parse(c.ai.tryAt) > 3*60000); }).slice(0,3);
   if (!ks.length) return; RETRY_BUSY = true;
@@ -2885,7 +2890,7 @@ function closureForm(tasks, d, prev){
 function aiResultBlock(owner, d){
   const c = db.closures[owner+'|'+d]; if (!c) return '';
   if (!c.ai || c.ai.status!=='done') return `<div class="ai-sum pend"><b>AI rating pending</b><span>The AI is rating this report. If the AI service is busy, it is rated automatically within a few minutes.</span></div>`;
-  return `<div class="ai-sum"><div class="ai-sum-h"><b>AI summary</b>${c.ai.overall!==null&&c.ai.overall!==undefined?`<span class="ai-pct">${c.ai.overall}% overall</span>`:''}</div><p>${esc(c.ai.summary)}</p>
+  return `<div class="ai-sum"><div class="ai-sum-h"><b>AI summary</b>${c.ai.overall!==null&&c.ai.overall!==undefined?`<span class="ai-pct">${c.ai.overall}% overall</span>`:''}${c.ai.overallFirst!==undefined&&c.ai.overallFirst!==c.ai.overall?`<span class="hint" style="margin:0 0 0 8px">was ${c.ai.overallFirst}% before manager reviews</span>`:''}</div><p>${esc(c.ai.summary)}</p>
     <div class="hint" style="margin:0">Rated by AI ${fmtStamp(c.ai.at)}${c.edits?` · edited ${c.edits} time${c.edits===1?'':'s'}`:''}. Percentages are set by the AI only.</div></div>`;
 }
 /* Day / morning-plan summaries (collection "aisum", id "<person>|<date>") */
@@ -4023,13 +4028,14 @@ function taskRevHtml(t, d, opts){
       <div class="err" hidden></div>
       <div class="row end" style="margin:0"><button type="button" class="btn sm" data-act="tr-save" data-id="${t.id}" data-d="${d}">${mine?'Update review':'Save review'}</button>${editing?`<button type="button" class="btn sm ghost" data-act="tr-x">Cancel</button>`:''}</div></div>`;
   }
+  h += reRateLine(t, d);
   return h ? `<div class="trbox">${h}</div>` : '';
 }
 /* The owner's view: the latest review of each task (any day) on their task card */
 function taskRevLatest(t){
   const ds = Object.keys(t.rev||{}).sort(); if (!ds.length) return '';
   const d = ds[ds.length-1];
-  return `<div class="trbox">${taskRevList(t, d).map(r=>trItem(r, d!==now().date?` (for ${esc(fmtShort(d))})`:'')).join('')}</div>`;
+  return `<div class="trbox">${taskRevList(t, d).map(r=>trItem(r, d!==now().date?` (for ${esc(fmtShort(d))})`:'')).join('')}${reRateLine(t, d)}</div>`;
 }
 document.addEventListener('input', e=>{ if (e.target.classList && e.target.classList.contains('trf-t')){ e.target.style.height = 'auto'; e.target.style.height = Math.min(600, e.target.scrollHeight+2)+'px'; } });
 function saveTaskReview(btn){
@@ -4044,14 +4050,83 @@ function saveTaskReview(btn){
   notify(t.owner, msg, nowAbs(), null);
   emailPeople([t.owner], `Review of your task: ${t.title}`, `${userName(me)} reviewed your task “${t.title}” for ${fmtDate(d)}.\n\n${txt}`);
   if (t.assignedBy && t.assignedBy!==me && t.assignedBy!==t.owner) notify(t.assignedBy, msg.replace('your task', `${userName(t.owner)}'s task`), nowAbs(), null);
-  save(); render(); tip('Review saved', `${userName(t.owner)} has been told.`);
+  save(); render();
+  const l = (t.log||{})[d];
+  if (l && !l.pending){ tip('Review saved', `${userName(t.owner)} has been told. The AI is now re-rating the task with your review…`); reRateAfterReview(t.id, d); }
+  else tip('Review saved', `${userName(t.owner)} has been told. The AI will use your review when it rates this task.`);
+}
+
+/* ===== After a manager reviews a task, the AI rates it again with the review in mind.
+   The first AI rating is kept (log.aiFirst) so everyone can see what changed; the day's overall % is recalculated. ===== */
+const RERATE_BUSY = {};
+function reviewsForScore(t, d){
+  const rs = taskRevList(t, d), c = db.closures[t.owner+'|'+d], day = c && c.review && (c.tasks||[]).includes(t.id) ? c.review : null;
+  if (!rs.length && !day) return '';
+  return '\nManager review (the manager has checked this work):\n' + rs.map(r=>`- ${userName(r.by)} on this task: "${r.verdict?(r.verdict==='redo'?'[Needs rework] ':'[Good work] '):''}${String(r.text||'').replace(/"/g,"'").slice(0,1500)}"`).join('\n')
+    + (day ? `${rs.length?'\n':''}- ${userName(day.by)} on the whole day's report: "${String(day.text||'').replace(/"/g,"'").slice(0,1500)}"` : '');
+}
+const hasMgrReview = (t, d) => taskRevList(t, d).length > 0 || !!(db.closures[t.owner+'|'+d] && db.closures[t.owner+'|'+d].review && (db.closures[t.owner+'|'+d].tasks||[]).includes(t.id));
+async function reRateAfterReview(tid, d){
+  const key = tid+'|'+d; if (RERATE_BUSY[key]) return;
+  let t = db.tasks.find(x=>x.id===tid); const l0 = t && (t.log||{})[d];
+  if (!t || !l0 || l0.pending || !taskRevList(t, d).length) return;   // nothing reported yet: the review is used when the report is rated
+  RERATE_BUSY[key] = true; l0.reRate = 'pending'; l0.reRateTry = new Date().toISOString(); save(); safeRender();
+  try{
+    const j = parseJSONLoose(await aiAsk(scorePrompt(t.owner, d, [{ t, work:l0.justification||'' }])));
+    const r = (Array.isArray(j.tasks)?j.tasks:[]).find(x=>x.id===tid) || (Array.isArray(j.tasks)?j.tasks[0]:null);
+    if (!r || !isFinite(+r.pct)) throw new Error('no rating');
+    t = db.tasks.find(x=>x.id===tid); if (!t || !t.log || !t.log[d]) return;   // re-read after await
+    const l = t.log[d], pct = Math.max(0, Math.min(100, Math.round((+r.pct)/5)*5)), before = l.progress;
+    if (l.aiFirst===undefined) l.aiFirst = before;
+    Object.assign(l, { progress:pct, aiNote:String(r.note||'').slice(0,400), reRatedAt:new Date().toISOString(), reRatedFrom:before, reRate:'done' });
+    if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
+    const c = db.closures[t.owner+'|'+d];
+    if (c && c.ai && c.ai.status==='done' && (c.tasks||[]).length){
+      const ts = c.tasks.map(id=>db.tasks.find(x=>x.id===id)).filter(Boolean);
+      const overall = Math.round(ts.reduce((s,x)=>s+((x.log||{})[d]?.progress||0),0)/ts.length);
+      if (c.ai.overallFirst===undefined) c.ai.overallFirst = c.ai.overall;
+      c.ai.overall = overall; c.ai.reRatedAt = new Date().toISOString();
+    }
+    save(); safeRender();
+    const msg = `After the manager's review, the AI re-rated “${t.title}”${d!==now().date?` (${fmtShort(d)})`:''}: ${before}% → ${pct}%.${l.aiNote?' '+l.aiNote:''}`;
+    [...new Set([t.owner, ...mgrIdsOf(t.owner), t.assignedBy])].filter(Boolean).forEach(x=>notify(x, x===t.owner ? msg : msg.replace('re-rated “', `re-rated ${userName(t.owner)}'s “`), nowAbs(), null));
+  }catch(e){
+    const t2 = db.tasks.find(x=>x.id===tid); if (t2 && t2.log && t2.log[d]){ t2.log[d].reRate = 'retry'; t2.log[d].reRateTry = new Date().toISOString(); save(); safeRender(); }
+  }finally{ delete RERATE_BUSY[key]; }
+}
+/* Line shown under the review: what the AI did with it */
+function reRateLine(t, d){
+  const l = (t.log||{})[d]; if (!l || !taskRevList(t, d).length) return '';
+  if (l.reRate==='pending') return `<div class="rr-line hint">AI is re-rating this task with the review…</div>`;
+  if (l.reRate==='retry') return `<div class="rr-line hint">AI re-rating could not run just now; it will be retried automatically.</div>`;
+  if (l.reRate==='done') return `<div class="rr-line"><b>AI re-rated after review:</b> ${l.reRatedFrom}% → <b>${l.progress}%</b>${l.aiFirst!==undefined && l.aiFirst!==l.reRatedFrom?` <span class="hint" style="margin:0">(first AI rating ${l.aiFirst}%)</span>`:''}${l.aiNote?`<div class="hint" style="margin:2px 0 0">${esc(l.aiNote)}</div>`:''}</div>`;
+  if (l.reviewUsed) return `<div class="rr-line">The AI rating (${l.progress}%) already takes the manager's review into account.</div>`;
+  return '';
+}
+/* Retry re-ratings that failed (AI busy / offline), from any open portal of the owner or their managers */
+function retryReRates(){
+  if (!ui.authed) return; const me = ui.user, mine = new Set([me, ...subtree(me).map(u=>u.id)]), now0 = Date.now();
+  /* catch-up for whole-day reviews: a reviewed report rated before the review was taken into account is re-rated once */
+  Object.keys(db.closures).filter(k=>{ const c = db.closures[k]; return mine.has(k.split('|')[0]) && c.review && c.ai && c.ai.status==='done' && !c.ai.dayReviewUsed && !SCORE_BUSY[k] && (!c.ai.dayTry || now0 - Date.parse(c.ai.dayTry) > 3*60000); })
+    .slice(0,2).forEach(k=>{ db.closures[k].ai.dayTry = new Date().toISOString(); aiScoreClosure(k).then(()=>safeRender()); });
+  db.tasks.filter(t=>mine.has(t.owner)).forEach(t=>Object.entries(t.log||{}).forEach(([d,l])=>{
+    const reviewed = taskRevList(t, d).length > 0;
+    /* catch-up: work reviewed before re-rating existed (or a review saved while offline) is re-rated once */
+    const missed = reviewed && !l.pending && !l.reRate && !l.reviewUsed && (l.justification || l.closedEarly);
+    const stale = ['retry','pending'].includes(l.reRate) && (!l.reRateTry || now0 - Date.parse(l.reRateTry) > 3*60000);
+    if ((missed || stale) && !RERATE_BUSY[t.id+'|'+d]) reRateAfterReview(t.id, d);
+  }));
 }
 
 /* ===== Deleting tasks: the work is not lost. A full record (schedule, parts, colleagues, progress, files, comments, who deleted it, when and why)
    is kept in "deleted" and shown on the dashboard, in the person's report, in My team, and on My day of everyone involved. ===== */
+/* Once work has been submitted (reported in a closure report or closed) or a manager has reviewed it, only the person's manager or the admin (GM/CEO) can delete it. */
+const taskLocked = t => Object.values(t.log||{}).some(l=>l && (l.justification || l.closedEarly || l.pending)) || Object.values(t.rev||{}).some(rs=>(rs||[]).length) || !!t.completedOn;
 function canDeleteTask(t, me){
-  if (t.collabLink) return isMgmt(me);
-  return (t.owner===me && !t.assignedBy) || t.assignedBy===me || isMgmt(me);
+  if (isMgmt(me)) return true;
+  if (t.collabLink) return false;
+  if (taskLocked(t)) return mgrIdsOf(t.owner).includes(me);
+  return (t.owner===me && !t.assignedBy) || t.assignedBy===me || mgrIdsOf(t.owner).includes(me);
 }
 const delPeople = t => [...new Set([t.owner, t.assignedBy, ...(t.collab||[]), ...partCollabs(t), ...(t.cr||[]).map(c=>c.who), ...mgrIdsOf(t.owner)])].filter(Boolean);
 function deleteTask(id){
@@ -4783,6 +4858,8 @@ document.addEventListener('click', e=>{
     if (!txt){ err.hidden=false; err.textContent='Please write a review before submitting.'; return; }
     db.closures[k].review = { by:ui.user, text:txt, at:new Date().toISOString() };
     emailPeople([k.split('|')[0]], `Your closure report was reviewed by ${userName(ui.user)}`, txt);
+    save(); render(); tip('Review saved', 'The AI is now re-rating the day with your review…');
+    aiScoreClosure(k).then(()=>safeRender()); return;
   }
   else if (act==='checkin'){ doCheckin(a,'visit'); return; }
   else if (act==='daylogin'){ doCheckin(a,'login'); return; }
