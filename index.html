@@ -889,18 +889,18 @@ function staffView(n){
   h += `<h3 class="sub">Additional work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No additional work.</div>`);
   h += `</section>`;
 
-  const dl = deadlineOf(u);
+  const dl = deadlineOf(u), canClose = ph==='plan' || ph==='extra';
   h += `<section class="card" id="closureCard"><div class="sec-h"><h2>3 · Closure report</h2>${
-    ck?pill('locked','Submitted'):ph==='over'?pill('miss','Deadline missed'):ui.closing&&ph==='extra'?pill('open',`Submit by ${dl}`):ph==='extra'?pill('soon','When you finish'):pill('soon',`From ${CONFIG.planClose}`)}</div>`;
+    ck?pill('locked','Submitted'):ph==='over'?pill('miss','Deadline missed'):ui.closing&&canClose?pill('open',`Submit by ${dl}`):canClose?pill('soon','When you finish'):pill('soon',`From ${CONFIG.planOpen}`)}</div>`;
   if (ck && ui.editClosure && closureEditable(u,d)) h += `<p class="hint" style="margin-top:0">Change what you wrote, then save. The AI will rate your work again. You can edit until your manager reviews the report.</p>` + closureForm((ck.tasks||[]).map(id=>db.tasks.find(t=>t.id===id)).filter(Boolean), d, ck);
   else if (ck) h += `<div class="ok-msg">Closure report submitted to ${esc(mgrNames(u))}. Incomplete tasks will appear automatically tomorrow morning.</div>` + reportBlock(u,d,false)
       + (closureEditable(u,d) ? `<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="close-edit">Edit my report</button><span class="hint" style="margin:0">Possible until ${esc(mgrNames(u))} reviews it.</span></div>` : '');
-  else if (ph==='extra' && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">For every task, including additional work, write what you did — and if it isn't finished, what is left and why. The AI then rates how much of each task is complete against its objective; you don't enter percentages. Deadline: ${dl}.</p>` + closureForm(act,d)
+  else if (canClose && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">For every task, including additional work, write what you did — and if it isn't finished, what is left and why. The AI then rates how much of each task is complete against its objective; you don't enter percentages. Deadline: ${dl}.</p>` + closureForm(act,d)
       + `<div class="row" style="margin-top:6px"><button class="btn sm ghost" data-act="close-cancel">Not yet, keep working</button></div>`;
-  else if (ph==='extra') h += `<div class="va-row"><button class="btn" data-act="close-start">Finish my day</button>
-      <p class="hint" style="margin:0">When your work is done, press this to write your closure report. Until then, you and your manager can keep adding additional work. Deadline: ${dl}.</p></div>`;
+  else if (canClose) h += `<div class="va-row"><button class="btn" data-act="close-start">Finish my day</button>
+      <p class="hint" style="margin:0">When your work is done, press this to write your closure report — you can do it as early as you finish, even before ${CONFIG.planClose}. Until then, you and your manager can keep adding work. Deadline: ${dl}.</p></div>`;
   else if (ph==='over') h += note(`The closure deadline (${dl}) has passed and no report was submitted. This will show as missed to ${esc(mgrNames(u))}. Open tasks will still carry forward.`, true, true);
-  else h += note(`You can write your closure report after ${CONFIG.planClose}, whenever you finish your day. Deadline: ${dl}.`);
+  else h += note(`You can write your closure report from ${CONFIG.planOpen}, whenever you finish your day. Deadline: ${dl}.`);
   h += `</section>`;
   return h;
 }
@@ -2590,7 +2590,7 @@ function aiContext(){
   const lines = [
     `User: ${u.name}, ${u.title} (${u.role}). Now: ${fmtDate(d)} ${n.label} UAE time.`,
     `Calendar for counting days (a deadline on that date = that many days): ${Array.from({length:14},(_,i)=>{ const x = addDays(d,i); return `${new Date(x+'T12:00:00Z').toLocaleDateString('en-GB',{weekday:'short',timeZone:'UTC'})} ${x} = ${i+1} day${i?'s':''}`; }).join('; ')}.`,
-    hasOwnReport(me) ? `User's day: ${ph==='before'?'before 09:00':ph==='plan'?'morning plan window (until '+CONFIG.planClose+')':ph==='extra'?(closedToday(me,d)?'day finished, closure submitted':'working; can add additional work; can finish the day'):'closure deadline passed'}.` : '',
+    hasOwnReport(me) ? `User's day: ${ph==='before'?'before '+CONFIG.planOpen:ph==='plan'?'morning plan window (until '+CONFIG.planClose+')':ph==='extra'?(closedToday(me,d)?'day finished, closure submitted':'working; can add additional work; can finish the day'):'closure deadline passed'}.` : '',
     `Work assigned now goes in as: ${assignMode(n.mins)==='plan'?'morning plan (priorities Important, Moderate, Daily Work)':'additional work (priorities Emergency, Important)'}.`,
     `Pages the user can open (id: name): ${pagesFor(me).map(p=>p[0]+': '+p[1]).join('; ')}.`,
     people.length ? `People the user can assign work to:\n${people.join('\n')}` : 'The user cannot assign work to anyone.',
@@ -2644,7 +2644,7 @@ function aiGo(a){
   AST.open = window.innerWidth >= 760;   // keep the chat open beside the page on big screens; close it on phones
   if (a.type==='navigate'){ ui.view = a.page; ui.proj = null; ui.editing = null; }
   else if (a.type==='open_project'){ ui.view = 'proj'; ui.proj = a.project_id; }
-  else if (a.type==='finish_day'){ if (!hasOwnReport(ui.user) || closedToday(ui.user, now().date)) return; ui.view = 'staff'; if (phaseFor(now().mins, ui.user)==='extra') ui.closing = true; }
+  else if (a.type==='finish_day'){ if (!hasOwnReport(ui.user) || closedToday(ui.user, now().date)) return; ui.view = 'staff'; if (['plan','extra'].includes(phaseFor(now().mins, ui.user))) ui.closing = true; }
   else if (a.type==='add_photo'){ AST.open = false; paintAI(); camOpen(); return; }
   save(); render(); paintAI(); window.scrollTo(0,0);
   if (a.type==='finish_day') setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 80);
@@ -2742,7 +2742,7 @@ document.addEventListener('change', e=>{ if (!e.target.classList || !e.target.cl
   e.target.value = ''; clfPaint(id); });
 async function submitClosure(){
   const n = now(), u = ui.user, d = n.date, k = u+'|'+d, prev = db.closures[k], editing = !!prev;
-  if (editing ? !closureEditable(u, d) : (phaseFor(n.mins,u)!=='extra')){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
+  if (editing ? !closureEditable(u, d) : !['plan','extra'].includes(phaseFor(n.mins,u))){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
   if (!editing){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
   const rows = [...document.querySelectorAll('#closureCard .crow[data-id]')], work = {}; let ok = true;
   rows.forEach(row=>{
@@ -4143,7 +4143,8 @@ document.addEventListener('click', e=>{
   else if (act==='ai-summary'){ const out = document.getElementById('aiSum'); a.disabled = true; a.textContent = 'Summarising…';
     aiAsk(summaryPrompt()).then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Summarise with AI'; }); return; }
   else if (act==='forgot'){ forgotPassword(); return; }
-  else if (act==='close-start'){ if (now().mins < toMins(CONFIG.closureOpen) && !confirm(`It's before ${CONFIG.closureOpen}. Are you finishing your work for today?`)) return; ui.closing = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
+  else if (act==='close-start'){ const pm = phaseFor(now().mins, ui.user)==='plan';
+    if (now().mins < toMins(CONFIG.closureOpen) && !confirm(`It's before ${CONFIG.closureOpen}. Are you finishing your work for today?${pm?`\n\nYour morning plan will be locked, and no more work can be added or assigned to you today.`:''}`)) return; ui.closing = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
   else if (act==='close-cancel'){ ui.closing = false; }
   else if (act==='va-start'){ voiceAssign(); return; }
   else if (act==='va-stop'){ try{ speechSynthesis.cancel(); }catch(_){} return; }
