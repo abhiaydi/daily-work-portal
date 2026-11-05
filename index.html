@@ -210,6 +210,8 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .mch-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}.mch{width:100%;border-collapse:collapse;font-size:14px;min-width:720px}
 .mch th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}.mch td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .mch td small{color:var(--muted)}.mch .nw{white-space:nowrap}
+.tc-row{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center}.tc-btn{color:#0f7a3d;font-weight:600}
+.tc-st{margin-top:6px;font-size:13px;padding:6px 10px;border-radius:8px;background:#fff7e6;border:1px solid #f3d9a4}.tc-st.ok{background:#e9f7ee;border-color:#b7e2c6}.tc-st.pend{background:var(--soft,#f3f4f6);border-color:var(--line)}
 .clf-list{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}.clf-chip{display:inline-flex;align-items:center;gap:6px;background:var(--soft,#f3f4f6);border:1px solid var(--line);border-radius:99px;padding:4px 6px 4px 10px;font-size:13px;max-width:100%}
 .clf-chip small{color:var(--muted)}.clf-chip .linkbtn{font-size:16px;line-height:1;padding:0 4px}.clf-add{align-self:flex-start;cursor:pointer}
 .plc{position:relative;display:block}.plc-list{position:absolute;left:0;right:0;top:100%;z-index:60;background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:4px;max-height:280px;overflow:auto}
@@ -725,6 +727,7 @@ function prevProgress(t, date){
 function canEdit(t, me, n){
   if (t.category!=='planned' || t.startDate!==n.date) return false;
   if (db.closures[t.owner+'|'+n.date]) return false;
+  if (((t.log||{})[n.date]||{}).closedEarly) return false;   // closed with a note: no more edits
   if (t.viaGm) return false;
   if (t.assignedBy) return t.assignedBy===me && assignMode(n.mins)==='plan';
   return t.owner===me && phaseFor(n.mins, me)==='plan';
@@ -773,7 +776,9 @@ function taskCard(t, n, showOwner){
       ${t.feas && t.feas.state==='pending' && t.owner!==ui.user ? feasHtml(t) : ''}${t.feas && t.feas.state==='not' && t.assignedBy!==ui.user ? feasHtml(t) : ''}
     </div>
     ${t.feas && ((t.feas.state==='pending' && t.owner===ui.user) || (t.feas.state==='not' && t.assignedBy===ui.user)) ? feasHtml(t) : ''}
-    ${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}
+    ${taskCloseState(t, d)}
+    ${canAttach(t)||canCloseTask(t)?`<div class="tc-row">${canAttach(t)?`<label class="linkbtn tf-add">${CLIP_IC}Attach files<input type="file" class="tf-more" data-id="${t.id}" multiple hidden></label>`:''}${canCloseTask(t)&&ui.tc!==t.id?`<button type="button" class="linkbtn tf-add tc-btn" data-act="tc-open" data-id="${t.id}">✓ ${((t.log||{})[d]||{}).closedEarly?'Update closing note':'Close this task'}</button>`:''}</div>`:''}
+    ${ui.tc===t.id && canCloseTask(t) ? taskCloseForm(t) : ''}
     ${carried?bar(prevProgress(t,d),'Progress so far'):''}
   </div>`;
 }
@@ -889,18 +894,18 @@ function staffView(n){
   h += `<h3 class="sub">Additional work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No additional work.</div>`);
   h += `</section>`;
 
-  const dl = deadlineOf(u), canClose = ph==='plan' || ph==='extra';
+  const dl = deadlineOf(u);
   h += `<section class="card" id="closureCard"><div class="sec-h"><h2>3 · Closure report</h2>${
-    ck?pill('locked','Submitted'):ph==='over'?pill('miss','Deadline missed'):ui.closing&&canClose?pill('open',`Submit by ${dl}`):canClose?pill('soon','When you finish'):pill('soon',`From ${CONFIG.planOpen}`)}</div>`;
+    ck?pill('locked','Submitted'):ph==='over'?pill('miss','Deadline missed'):ui.closing&&ph==='extra'?pill('open',`Submit by ${dl}`):ph==='extra'?pill('soon','When you finish'):pill('soon',`From ${CONFIG.planClose}`)}</div>`;
   if (ck && ui.editClosure && closureEditable(u,d)) h += `<p class="hint" style="margin-top:0">Change what you wrote, then save. The AI will rate your work again. You can edit until your manager reviews the report.</p>` + closureForm((ck.tasks||[]).map(id=>db.tasks.find(t=>t.id===id)).filter(Boolean), d, ck);
   else if (ck) h += `<div class="ok-msg">Closure report submitted to ${esc(mgrNames(u))}. Incomplete tasks will appear automatically tomorrow morning.</div>` + reportBlock(u,d,false)
       + (closureEditable(u,d) ? `<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="close-edit">Edit my report</button><span class="hint" style="margin:0">Possible until ${esc(mgrNames(u))} reviews it.</span></div>` : '');
-  else if (canClose && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">For every task, including additional work, write what you did — and if it isn't finished, what is left and why. The AI then rates how much of each task is complete against its objective; you don't enter percentages. Deadline: ${dl}.</p>` + closureForm(act,d)
+  else if (ph==='extra' && ui.closing) h += meetingBlock(u) + `<p class="hint" style="margin-top:0">For every task, including additional work, write what you did — and if it isn't finished, what is left and why. The AI then rates how much of each task is complete against its objective; you don't enter percentages. Deadline: ${dl}.</p>` + closureForm(act,d)
       + `<div class="row" style="margin-top:6px"><button class="btn sm ghost" data-act="close-cancel">Not yet, keep working</button></div>`;
-  else if (canClose) h += `<div class="va-row"><button class="btn" data-act="close-start">Finish my day</button>
-      <p class="hint" style="margin:0">When your work is done, press this to write your closure report — you can do it as early as you finish, even before ${CONFIG.planClose}. Until then, you and your manager can keep adding work. Deadline: ${dl}.</p></div>`;
+  else if (ph==='extra') h += `<div class="va-row"><button class="btn" data-act="close-start">Finish my day</button>
+      <p class="hint" style="margin:0">When your work is done, press this to write your closure report. Until then, you and your manager can keep adding additional work. Deadline: ${dl}.</p></div>`;
   else if (ph==='over') h += note(`The closure deadline (${dl}) has passed and no report was submitted. This will show as missed to ${esc(mgrNames(u))}. Open tasks will still carry forward.`, true, true);
-  else h += note(`You can write your closure report from ${CONFIG.planOpen}, whenever you finish your day. Deadline: ${dl}.`);
+  else h += note(`You can write your closure report after ${CONFIG.planClose}, whenever you finish your day. Deadline: ${dl}.`);
   h += `</section>`;
   return h;
 }
@@ -2644,7 +2649,7 @@ function aiGo(a){
   AST.open = window.innerWidth >= 760;   // keep the chat open beside the page on big screens; close it on phones
   if (a.type==='navigate'){ ui.view = a.page; ui.proj = null; ui.editing = null; }
   else if (a.type==='open_project'){ ui.view = 'proj'; ui.proj = a.project_id; }
-  else if (a.type==='finish_day'){ if (!hasOwnReport(ui.user) || closedToday(ui.user, now().date)) return; ui.view = 'staff'; if (['plan','extra'].includes(phaseFor(now().mins, ui.user))) ui.closing = true; }
+  else if (a.type==='finish_day'){ if (!hasOwnReport(ui.user) || closedToday(ui.user, now().date)) return; ui.view = 'staff'; if (phaseFor(now().mins, ui.user)==='extra') ui.closing = true; }
   else if (a.type==='add_photo'){ AST.open = false; paintAI(); camOpen(); return; }
   save(); render(); paintAI(); window.scrollTo(0,0);
   if (a.type==='finish_day') setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 80);
@@ -2742,7 +2747,7 @@ document.addEventListener('change', e=>{ if (!e.target.classList || !e.target.cl
   e.target.value = ''; clfPaint(id); });
 async function submitClosure(){
   const n = now(), u = ui.user, d = n.date, k = u+'|'+d, prev = db.closures[k], editing = !!prev;
-  if (editing ? !closureEditable(u, d) : !['plan','extra'].includes(phaseFor(n.mins,u))){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
+  if (editing ? !closureEditable(u, d) : (phaseFor(n.mins,u)!=='extra')){ alert(editing ? 'Your manager has already reviewed this report, so it can no longer be changed.' : 'The closure report cannot be submitted now.'); ui.editClosure = false; render(); return; }
   if (!editing){ const pm = meetingsOf(u).filter(m=>needsInput(m,nowAbs())); if (pm.length){ alert(`Write the notes for ${pm.length} meeting${pm.length===1?'':'s'} in the Meetings tab first. The closure report can't be submitted until then.`); return; } }
   const rows = [...document.querySelectorAll('#closureCard .crow[data-id]')], work = {}; let ok = true;
   rows.forEach(row=>{
@@ -2785,7 +2790,8 @@ function closureForm(tasks, d, prev){
   const submit = `<div class="row end">${editing?'<button type="button" class="btn ghost" data-act="close-edit-cancel">Cancel</button>':''}<button class="btn" data-act="submit-closure">${editing?'Save changes':'Submit closure report'}</button></div>`;
   if (!tasks.length) return note('No tasks to report today.') + submit;
   return tasks.map(t=>{
-    const val = editing ? ((prev.work||{})[t.id] || '') : '', w = words(val);
+    const early = ((t.log||{})[d]||{}).closedEarly ? (t.log[d].justification||'') : '';
+    const val = editing ? ((prev.work||{})[t.id] || '') : early, w = words(val);
     return `<div class="crow" data-id="${t.id}">
       <div class="ctitle">${esc(t.title)} ${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span>
         ${t.assignedBy?`<span class="b asg">Assigned by ${esc(userName(t.assignedBy))}</span>`:''}
@@ -3487,6 +3493,67 @@ const geoQ = m => m.placeGeo && m.placeGeo.lat!=null ? `${m.placeGeo.lat},${m.pl
 const gmapsPlace = m => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geoQ(m))}`;
 const gmapsRoute = (a, b) => `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(geoQ(a))}&destination=${encodeURIComponent(geoQ(b))}&travelmode=driving`;
 
+/* ===== Close a single task as soon as its work is finished (beside "Attach files" on the task card) =====
+   The person writes what they did (and can attach files); the AI reads the files and rates the task.
+   100% = the task is complete; less = it stays open and carries forward. The text is reused in the day's closure report. */
+function canCloseTask(t){
+  const n = now(), d = n.date;
+  if (t.owner!==ui.user || !hasOwnReport(ui.user) || closedToday(ui.user, d) || t.startDate > d) return false;
+  if (!['plan','extra'].includes(phaseFor(n.mins, ui.user))) return false;
+  return !(t.completedOn && t.completedOn < d) && !(t.completedOn===d);
+}
+function taskCloseState(t, d){
+  const l = (t.log||{})[d]; if (!l || !l.closedEarly) return '';
+  if (l.pending) return `<div class="tc-st pend"><b>Closed today</b> · AI rating pending. It will be rated with your closure report if the AI is busy.</div>`;
+  return `<div class="tc-st ${l.progress>=100?'ok':''}"><b>${l.progress>=100?'Task closed':'Closed for today'}</b> · AI rated ${l.progress}%${l.aiNote?' — '+esc(l.aiNote):''}${l.progress<100?' It stays open and carries forward.':''}</div>`;
+}
+function taskCloseForm(t){
+  const k = 'tc-'+t.id, prev = ((t.log||{})[now().date]||{}).justification || '';
+  return `<form class="tform tcform" data-id="${t.id}" novalidate style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+    <label class="f">What did you do? If anything is left, what and why?<textarea class="tc-txt" rows="3" placeholder="e.g. Sent the revised quotation to the client and they confirmed the delivery date.">${esc(prev)}</textarea></label>
+    <div class="f"><span>Attach files that show the work (optional)</span>
+      <div class="clf-list" data-id="${k}">${clfChips(k)}</div>
+      <label class="btn sm ghost clf-add">${CLIP_IC} ${(CL_FILES[k]||[]).length?'Add more files':'Add files'}<input type="file" multiple class="cl-files" data-id="${k}" hidden></label></div>
+    <div class="err" hidden></div>
+    <div class="row end"><button type="button" class="btn ghost" data-act="tc-cancel">Cancel</button><button type="button" class="btn" data-act="tc-save" data-id="${t.id}">Close task</button></div>
+    <p class="hint">The AI reads what you wrote and the files, and rates how much of the task is done. Your manager sees it in your closure report.</p></form>`;
+}
+async function closeTaskNow(btn){
+  const id = btn.dataset.id, f = btn.closest('form'), err = f.querySelector('.err'), n = now(), d = n.date, me = ui.user;
+  const fail = m => { err.hidden = false; err.textContent = m; };
+  const t0 = db.tasks.find(x=>x.id===id); if (!t0 || !canCloseTask(t0)){ ui.tc = null; render(); return; }
+  const txt = f.querySelector('.tc-txt').value.trim(), w = words(txt);
+  if (w < MIN_WORK_WORDS) return fail(`Write what you did (at least ${MIN_WORK_WORDS} words). Currently ${w}.`);
+  const k = 'tc-'+id, files = [...(CL_FILES[k]||[])], old = btn.textContent;
+  btn.disabled = true;
+  let waits = Promise.resolve();
+  if (files.length){
+    btn.textContent = `Uploading ${files.length} file${files.length===1?'':'s'}…`;
+    try{ const ups = await uploadTaskFiles(files); waits = attachFiles(ups, [id]); delete CL_FILES[k]; }
+    catch(e){ btn.disabled = false; btn.textContent = old; return fail('Upload failed: '+e.message); }
+  }
+  let t = db.tasks.find(x=>x.id===id); if (!t) return;
+  t.log = t.log || {};
+  t.log[d] = Object.assign({}, t.log[d]||{ progress:prevProgress(t,d) }, { justification:txt.slice(0,2000), pending:true, closedEarly:true, closedAt:new Date().toISOString() });
+  ui.tc = null; save(); render();
+  tip('Task closed', files.length ? 'The AI is reading your files and rating the task…' : 'The AI is rating the task…');
+  await Promise.race([waits, new Promise(r=>setTimeout(r, 90000))]);
+  try{
+    t = db.tasks.find(x=>x.id===id); if (!t) return;
+    const j = parseJSONLoose(await aiAsk(scorePrompt(me, d, [{ t, work:txt }])));
+    const r = (Array.isArray(j.tasks)?j.tasks:[]).find(x=>x.id===id) || (Array.isArray(j.tasks)?j.tasks[0]:null);
+    if (!r || !isFinite(+r.pct)) throw new Error('no rating');
+    t = db.tasks.find(x=>x.id===id); if (!t) return;   // re-read after await
+    const pct = Math.max(0, Math.min(100, Math.round((+r.pct)/5)*5));
+    t.log[d] = { progress:pct, justification:txt.slice(0,2000), aiNote:String(r.note||'').slice(0,400), closedEarly:true, closedAt:t.log[d].closedAt };
+    if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
+    save(); safeRender();
+    const who = [t.assignedBy].filter(x=>x && x!==me);
+    who.forEach(x=>notify(x, `${userName(me)} closed “${t.title}” — AI rated ${pct}%.`, nowAbs(), null));
+    tip(pct>=100?'Task complete':'Task rated', pct>=100 ? `“${t.title}” is closed at 100%.` : `AI rated it ${pct}%. It stays open and carries forward.`);
+  }catch(_){ tip('Saved', 'The AI could not rate it just now. It will be rated with your closure report.'); }
+}
+
 /* ===== Cancel a meeting (before it starts): reason required; follow-up reminder now and again after 7 days if not rebooked ===== */
 function cancelForm(m){
   return `<form class="tform cxform" data-id="${m.id}" novalidate style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
@@ -4080,6 +4147,9 @@ document.addEventListener('click', e=>{
   else if (act==='tg-del'){ ui.tgt = (ui.tgt||[]).filter(x=>x!==a.dataset.id); paintTargets(a.closest('.tform')); return; }
   else if (act==='trial-reset'){ resetModal(); return; }
   else if (act==='plc-pick'){ placePick(a); return; }
+  else if (act==='tc-open'){ ui.tc = a.dataset.id; render(); setTimeout(()=>{ const x = document.querySelector('.tcform .tc-txt'); if (x) x.focus(); }, 50); return; }
+  else if (act==='tc-cancel'){ ui.tc = null; render(); return; }
+  else if (act==='tc-save'){ closeTaskNow(a); return; }
   else if (act==='clf-del'){ const l = CL_FILES[a.dataset.id]||[]; l.splice(+a.dataset.i, 1); clfPaint(a.dataset.id); return; }
   else if (act==='rs-open'){ ui.rs = { id:a.dataset.id }; ui.cx = null; render(); return; }
   else if (act==='rs-cancel'){ ui.rs = null; render(); return; }
@@ -4143,8 +4213,7 @@ document.addEventListener('click', e=>{
   else if (act==='ai-summary'){ const out = document.getElementById('aiSum'); a.disabled = true; a.textContent = 'Summarising…';
     aiAsk(summaryPrompt()).then(t=>{ out.textContent = t; out.hidden = false; }).catch(e=>tip('AI could not answer', e.message)).finally(()=>{ a.disabled = false; a.textContent = 'Summarise with AI'; }); return; }
   else if (act==='forgot'){ forgotPassword(); return; }
-  else if (act==='close-start'){ const pm = phaseFor(now().mins, ui.user)==='plan';
-    if (now().mins < toMins(CONFIG.closureOpen) && !confirm(`It's before ${CONFIG.closureOpen}. Are you finishing your work for today?${pm?`\n\nYour morning plan will be locked, and no more work can be added or assigned to you today.`:''}`)) return; ui.closing = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
+  else if (act==='close-start'){ if (now().mins < toMins(CONFIG.closureOpen) && !confirm(`It's before ${CONFIG.closureOpen}. Are you finishing your work for today?`)) return; ui.closing = true; render(); setTimeout(()=>document.getElementById('closureCard')?.scrollIntoView({behavior:'smooth'}), 50); return; }
   else if (act==='close-cancel'){ ui.closing = false; }
   else if (act==='va-start'){ voiceAssign(); return; }
   else if (act==='va-stop'){ try{ speechSynthesis.cancel(); }catch(_){} return; }
