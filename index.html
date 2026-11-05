@@ -214,7 +214,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line);font-size:13px}.part:first-of-type{border-top:0}
 .part .pn{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft,#f3f4f6);color:var(--muted)}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
-.pd-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}.pd-form .pd-note{flex:1;min-width:180px;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit}.pd-form .stt{flex:1;min-width:180px}.pd-form .err{flex-basis:100%}
+.pd-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}.pd-form .pd-note{flex:1 1 100%;min-width:180px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit}.pd-form .stt{flex:1;min-width:180px}.pd-form .err{flex-basis:100%}
 .parts-ed .pt-tog{display:flex!important;flex-direction:row!important;justify-content:flex-start!important;gap:8px;align-items:center;font-weight:500;cursor:pointer;margin:0}.parts-ed .pt-tog input{width:18px!important;height:18px!important;min-height:0!important;flex:none;margin:0;padding:0;accent-color:#1a5ed4}.pt-box{margin-top:6px}.pt-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}.pt-row .pt-name,.pt-row .stt{flex:1;min-width:0}.pt-row .pt-days{width:70px}
 .tt-task{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--bg)}.tt-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .tt-p{font-weight:700;font-size:13px;padding:2px 8px;border-radius:99px;background:var(--soft,#f3f4f6)}.tt-p.ok{background:#e9f7ee;color:#0f7a3d}
@@ -812,7 +812,7 @@ function taskForm(kind, mode){
   return `<form class="tform" data-kind="${kind}" data-mode="${mode}" novalidate>
     ${kind==='assign' ? (t ? `<div class="f">Assigned to<b style="color:var(--ink)">${esc(userName(t.owner))}</b><input type="hidden" name="target" value="${t.owner}"></div>`
       : `<div style="margin-bottom:12px">${picker('target', reps, '', 'Assign to (you can add several people)', 'Type a name or a letter, e.g. G')}<div class="chips tchips">${tgtChips()}</div><input type="hidden" name="targets" value="${(ui.tgt||[]).join(',')}"></div>`) : ''}
-    <label class="f grow">Task<input name="title" maxlength="140" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
+    <label class="f grow">Task<input name="title" value="${esc(t?.title)}" placeholder="${mode==='plan'?'What needs to be done today?':'What additional work came up?'}"></label>
     <label class="f">Details (optional)<textarea name="details" rows="2">${esc(t?.details)}</textarea></label>
     ${projSelect(t)}
     ${partsEditor(t)}
@@ -2468,10 +2468,10 @@ function aiNormalize(a){
   const n = now(), me = ui.user;
   const pri = list => list.includes(a.priority) ? a.priority : (list===EXTRA_PRI ? 'Important' : 'Moderate');
   a.days = Math.max(1, Math.min(60, parseInt(a.days,10)||1));
-  a.title = String(a.title||'').trim().slice(0,140); a.details = String(a.details||'').trim().slice(0,500);
+  a.title = String(a.title||'').trim(); a.details = String(a.details||'').trim();
   if (a.project_id && !canSeeProject(projById(a.project_id), me)) a.project_id = '';
   if (a.type==='assign_task' || a.type==='add_my_task'){
-    const ps = (Array.isArray(a.parts)?a.parts:[]).map(x=>({ title:String(x&&x.title||'').trim().slice(0,80), days:Math.max(1, Math.min(60, parseInt(x&&x.days,10)||1)) })).filter(x=>x.title);
+    const ps = (Array.isArray(a.parts)?a.parts:[]).map(x=>({ title:String(x&&x.title||'').trim(), days:Math.max(1, Math.min(60, parseInt(x&&x.days,10)||1)) })).filter(x=>x.title);
     if (ps.length >= 2){ const tot = ps.reduce((s,x)=>s+x.days, 0); if (tot > 60) return { error:'All parts together can be at most 60 days.' }; a.parts = ps; a.days = tot; } else delete a.parts;
   }
   if (a.type==='mark_part_done'){
@@ -2482,7 +2482,7 @@ function aiNormalize(a){
     const cur = currentPart(t); if (!cur) return { error:'All parts of that task are already done. You can close the task.' };
     const want = String(a.part||'').toLowerCase().trim();
     if (want && cur.title.toLowerCase()!==want && !cur.title.toLowerCase().includes(want)) return { error:`The current part of “${t.title}” is “${cur.title}”. Parts are done in order — is it “${cur.title}” you finished?` };
-    a.note = String(a.note||'').trim().slice(0,300); if (words(a.note) < 2) return { error:`What was finished in “${cur.title}”? Tell me in a few words.` };
+    a.note = String(a.note||'').trim();
     a._t = t; a._p = cur; return a;
   }
   if (a.type==='assign_task'){
@@ -3717,12 +3717,12 @@ function partsHtml(t, d, opts){
       const cls = p.done ? 'done' : late ? 'late' : now ? 'cur' : '';
       return `<div class="part ${cls}"><span class="pn">${p.done?'✓':p.i+1}</span><div class="pb"><b>${esc(p.title)}</b> <small>${p.days} day${p.days===1?'':'s'} · ${fmtShort(p.start)}–${fmtShort(p.end)}</small>
         ${p.done?`<div class="hint" style="margin:0">Done ${fmtShort(p.doneOn)}${p.note?' — '+esc(p.note):''}</div>`:late?`<div class="hint" style="margin:0;color:var(--emg)">Behind plan: should have finished ${fmtShort(p.end)}</div>`:now?`<div class="hint" style="margin:0">Current part${d>=p.start?` · day ${diffDays(p.start,d)+1} of ${p.days}`:''}</div>`:''}
-        ${own && now && ui.pd===t.id+':'+p.id ? `<form class="pd-form" data-id="${t.id}" data-p="${p.id}" novalidate><input class="pd-note" maxlength="300" placeholder="What was finished in this part? (a few words)"><button type="submit" class="btn sm">Mark done</button><button type="button" class="btn sm ghost" data-act="pd-x">Cancel</button><div class="err" hidden></div></form>`
+        ${own && now && ui.pd===t.id+':'+p.id ? `<form class="pd-form" data-id="${t.id}" data-p="${p.id}" novalidate><textarea class="pd-note" rows="2" placeholder="What was finished in this part? (optional)"></textarea><button type="submit" class="btn sm">Mark done</button><button type="button" class="btn sm ghost" data-act="pd-x">Cancel</button><div class="err" hidden></div></form>`
           : own && now && canMarkPart(t) ? `<button type="button" class="linkbtn tc-btn" data-act="pd-open" data-id="${t.id}" data-p="${p.id}">✓ Mark this part done</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
 const canMarkPart = t => t.owner===ui.user && !closedToday(ui.user, now().date) && ['plan','extra'].includes(phaseFor(now().mins, ui.user)) && !(t.completedOn && t.completedOn < now().date);
 function doPartDone(t, p, note){
-  const d = now().date; p.done = true; p.doneOn = d; p.note = String(note||'').slice(0,300);
+  const d = now().date; p.done = true; p.doneOn = d; p.note = String(note||'').trim();
   const next = partsPlan(t).find(x=>!x.done), na = nowAbs();
   const msg = `${userName(t.owner)} finished part “${p.title}” of “${t.title}”${next?` — next: ${next.title}`:' — all parts done'}.`;
   [...new Set([t.assignedBy, ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, msg, na, null));
@@ -3731,7 +3731,6 @@ function doPartDone(t, p, note){
 function markPartDone(f){
   const t = db.tasks.find(x=>x.id===f.dataset.id), err = f.querySelector('.err'), note = f.querySelector('.pd-note').value.trim();
   if (!t || !canMarkPart(t)) { ui.pd = null; render(); return; }
-  if (words(note) < 2){ err.hidden = false; err.textContent = 'Write a few words about what was finished.'; return; }
   const p = (t.parts||[]).find(x=>x.id===f.dataset.p); if (!p || p.done) return;
   const next = doPartDone(t, p, note);
   ui.pd = null; save(); render();
@@ -3742,7 +3741,7 @@ document.addEventListener('submit', e=>{ if (e.target.classList && e.target.clas
 /* Task form: optional parts editor */
 function partsEditor(t){
   const ps = (t && t.parts && t.parts.length) ? t.parts : [];
-  const row = p => `<div class="pt-row"><input class="pt-name" maxlength="80" placeholder="Part, e.g. Drawing" value="${esc(p?p.title:'')}"><input class="pt-days" type="number" min="1" max="60" value="${p?p.days:1}" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`;
+  const row = p => `<div class="pt-row"><input class="pt-name" placeholder="Part, e.g. Drawing" value="${esc(p?p.title:'')}"><input class="pt-days" type="number" min="1" max="60" value="${p?p.days:1}" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`;
   return `<div class="f parts-ed"><label class="pt-tog"><input type="checkbox" class="pt-on" ${ps.length?'checked':''}> This work has parts (stages one after another)</label>
     <div class="pt-box" ${ps.length?'':'hidden'}><div class="pt-rows">${ps.length?ps.map(row).join(''):row(null)+row(null)}</div>
       <button type="button" class="btn sm ghost" data-act="pt-add">+ Add part</button>
@@ -4365,7 +4364,7 @@ document.addEventListener('click', e=>{
   else if (act==='tt-hist'){ const st = ui.tt = ui.tt || {}; st.who = a.dataset.id; st.by = 'hist'; render(); window.scrollTo(0,0); return; }
   else if (act==='pd-open'){ ui.pd = a.dataset.id+':'+a.dataset.p; render(); setTimeout(()=>document.querySelector('.pd-form .pd-note')?.focus(), 50); return; }
   else if (act==='pd-x'){ ui.pd = null; render(); return; }
-  else if (act==='pt-add'){ const f = a.closest('form'), rows = f.querySelector('.pt-rows'); rows.insertAdjacentHTML('beforeend', `<div class="pt-row"><input class="pt-name" maxlength="80" placeholder="Part, e.g. Simulation"><input class="pt-days" type="number" min="1" max="60" value="1" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`); syncPartsDays(f); rows.lastElementChild.querySelector('.pt-name').focus(); return; }
+  else if (act==='pt-add'){ const f = a.closest('form'), rows = f.querySelector('.pt-rows'); rows.insertAdjacentHTML('beforeend', `<div class="pt-row"><input class="pt-name" placeholder="Part, e.g. Simulation"><input class="pt-days" type="number" min="1" max="60" value="1" aria-label="Days"><span class="hint" style="margin:0">days</span><button type="button" class="linkbtn tf-del" data-act="pt-del">Remove</button></div>`); syncPartsDays(f); rows.lastElementChild.querySelector('.pt-name').focus(); return; }
   else if (act==='pt-del'){ const f = a.closest('form'), r = a.closest('.pt-row'); if (f.querySelectorAll('.pt-row').length > 1) r.remove(); else r.querySelector('.pt-name').value = ''; syncPartsDays(f); return; }
   else if (act==='tc-open'){ ui.tc = a.dataset.id; render(); setTimeout(()=>{ const x = document.querySelector('.tcform .tc-txt'); if (x) x.focus(); }, 50); return; }
   else if (act==='tc-cancel'){ ui.tc = null; render(); return; }
