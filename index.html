@@ -219,6 +219,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line);font-size:13px}.part:first-of-type{border-top:0}
 .part .pn{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft,#f3f4f6);color:var(--muted)}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
+.lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
 .trf{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:6px}.trf-h{font-weight:600;font-size:14px}.trf-t{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit;font-size:15px;line-height:1.5;min-height:120px;resize:vertical}.trrow td{background:transparent;padding-top:0}
@@ -740,8 +741,18 @@ const needsCeoReview = id => isField(id) && !ceoIds().includes(id);
 const isCeo = id => getUser(id).role==='CEO';
 const ORDER = { before:0, plan:1, extra:2, closure:3, over:4 };
 
+/* A task is closed only when it is rated 100% AND a manager has reviewed it for that day.
+   Rated 100% without a review: "finished – waiting for manager review" (t.awaitRev = that day); it leaves the person's daily list
+   but is not closed. Below 100%: it stays open and carries forward. */
+function setDone(t, d, pct){
+  if (pct >= 100){
+    if (hasMgrReview(t, d)){ t.completedOn = d; delete t.awaitRev; }
+    else { t.awaitRev = d; if (t.completedOn===d) t.completedOn = null; }
+  } else { if (t.awaitRev===d) delete t.awaitRev; if (t.completedOn===d) t.completedOn = null; }
+}
+const awaiting = (t, date) => !!t.awaitRev && !t.completedOn && t.awaitRev < date;
 function activeTasks(owner, date){
-  return db.tasks.filter(t => t.owner===owner && t.startDate<=date && (!t.completedOn || t.completedOn>=date))
+  return db.tasks.filter(t => t.owner===owner && t.startDate<=date && (!t.completedOn || t.completedOn>=date) && !awaiting(t, date))
                  .sort((a,b)=> RANK[a.priority]-RANK[b.priority] || a.startDate.localeCompare(b.startDate));
 }
 function prevProgress(t, date){
@@ -796,6 +807,7 @@ function taskCard(t, n, showOwner){
       ${t.projectId && projById(t.projectId)?`<span class="b proj">Project: ${esc(projById(t.projectId).name)}</span>`:''}
       ${t.approvedBy?`<span class="b">${t.delegatedFrom?'Passed on':'Approved'} by ${esc(userName(t.approvedBy))}</span>`:''}
       ${t.check?`<span class="b ${t.check.ok?'':'emg'}">${t.check.ok?'Marked done':'Marked not done'} by ${esc(userName(t.check.by))}</span>`:''}
+      ${t.awaitRev && !t.completedOn ? '<span class="b">Finished · waiting for manager review</span>' : ''}${t.completedOn && t.completedOn > t.dueDate ? `<span class="b emg">Finished ${diffDays(t.dueDate, t.completedOn)} day(s) late</span>` : ''}
       <span class="b">Day ${dayN} of ${t.days}</span>
       ${carried?`<span class="b">Carried forward from ${fmtShort(t.startDate)}</span>`:''}
       ${overdue?'<span class="b emg">Overdue</span>':''}
@@ -928,6 +940,7 @@ function staffView(n){
   h += `<h3 class="sub">Additional work today</h3>` + (extra.length ? extra.map(t=>taskCard(t,n)).join('') : `<div class="empty">No additional work.</div>`);
   h += `</section>`;
   h += collabSection(n);
+  h += myAwaitingSection(n);
   h += myDeleted(n);
 
   const dl = deadlineOf(u);
@@ -967,7 +980,7 @@ function reviewView(n){
   const pending = Object.keys(db.closures).map(k=>{ const [owner,date] = k.split('|'); return { k, owner, date, c:db.closures[k] }; })
     .filter(x=>ids.includes(x.owner) && !x.c.review)
     .sort((a,b)=>a.date.localeCompare(b.date) || userName(a.owner).localeCompare(userName(b.owner)));
-  let h = `<section class="card"><div class="sec-h"><h2>Waiting for your review</h2>${
+  let h = awaitingMgrSection(me) + `<section class="card"><div class="sec-h"><h2>Waiting for your review</h2>${
     pending.length?pill('locked',`${pending.length} report${pending.length===1?'':'s'}`):pill('open','All reviewed')}</div>`;
   if (!pending.length) h += note('No reports waiting. A review box appears here as soon as someone in your team finishes their day and submits their closure report.');
   pending.forEach(x=>{
@@ -1892,6 +1905,16 @@ function dashView(n){
     });
   });
   h += `</section>`;
+  { const ms = d.slice(0,8)+'01', ids = people.map(u=>u.id);
+    const lateOpen = db.tasks.filter(t=>ids.includes(t.owner) && !finishOf(t) && t.startDate<=d && t.dueDate<d);
+    const lateDone = db.tasks.filter(t=>ids.includes(t.owner) && finishOf(t) && finishOf(t)>=ms && finishOf(t)<=d && finishOf(t)>t.dueDate);
+    if (lateOpen.length || lateDone.length){
+      const row = (t, txt) => `<div class="ci"><span style="flex:1;min-width:0"><span class="b">${esc(userName(t.owner))}</span> ${esc(t.title)}</span>${priBadge(t.priority)}<span class="b">due ${esc(fmtShort(t.dueDate))}</span><span class="b ${t.lateWaiver?'':'emg'}">${txt}${t.lateWaiver?' · points removed':''}</span></div><div class="lw-wrap">${lateWaiveHtml(t)}</div>`;
+      h += `<section class="card"><div class="sec-h"><h2>Late work</h2><span class="b emg">${lateOpen.length+lateDone.length}</span></div>
+        <p class="hint" style="margin-top:0">Each late day takes 1 point off the person's score for that period (at most ${LATE_MAX}) — see My dashboard for week, fortnight, month, quarter and year.</p>
+        ${lateOpen.length?`<h3 class="sub">Still open past the due date</h3>${lateOpen.sort((x,y)=>x.dueDate.localeCompare(y.dueDate)).map(t=>row(t, `${diffDays(t.dueDate, d)} day${diffDays(t.dueDate, d)===1?'':'s'} late`)).join('')}`:''}
+        ${lateDone.length?`<h3 class="sub">Finished late this month</h3>${lateDone.map(t=>row(t, `finished ${diffDays(t.dueDate, finishOf(t))} day${diffDays(t.dueDate, finishOf(t))===1?'':'s'} late`)).join('')}`:''}</section>`;
+    } }
   h += deletedSection(deletedOf(people.map(u=>u.id).concat(me), d), `Deleted work — ${isToday?'today':esc(fmtDate(d))}`, 'Every task deleted on this day: whose it was, who deleted it, when and why, with its full schedule, parts, colleagues, progress and files.', true);
   return h;
 }
@@ -2788,7 +2811,7 @@ async function aiScoreClosure(k){
       const prev = t.log[d] || {}, keep = { ...(prev.closedEarly?{ closedEarly:true, closedAt:prev.closedAt }:{}) };
       if (again && prev.progress!==undefined && hasMgrReview(t, d)) Object.assign(keep, { aiFirst: prev.aiFirst!==undefined ? prev.aiFirst : prev.progress, reRate:'done', reRatedFrom:prev.progress, reRatedAt:new Date().toISOString() });
       t.log[d] = { ...keep, progress:pct, justification:work||'', aiNote:String(res[t.id].note||'').slice(0,400), ...(!again && hasMgrReview(t, d)?{ reviewUsed:true }:{}), ...((t.files||[]).length?{ filesSeen:(t.files||[]).filter(f=>f.briefState==='done').length }:{}) };
-      if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
+      setDone(t, d, pct);
     });
     const overall = Math.round(sum/items.length), was = c.ai && c.ai.status, first = again ? (c.ai.overallFirst!==undefined ? c.ai.overallFirst : c.ai.overall) : undefined;
     c.ai = { status:'done', summary:String(j.summary||'').slice(0,1500), overall, at:new Date().toISOString(), ...(c.review?{ dayReviewUsed:true }:{}), ...(again && first!==overall?{ overallFirst:first, reRatedAt:new Date().toISOString() }:{}) };
@@ -3016,13 +3039,14 @@ document.addEventListener('change', e=>{ if (e.target.id==='mDur'){ const day = 
 document.addEventListener('change', e=>{ if (e.target.id==='actDate'){ ui.actDate = e.target.value; render(); } });
 
 /* ===== Personal dashboard (everyone): login times, work status by period, score ===== */
-const PERIODS = [['day','Today'],['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']];
+const PERIODS = [['day','Today'],['week','Week'],['fortnight','Fortnight'],['month','Month'],['quarter','Quarter'],['year','Year']];
 const PRI_W = { Emergency:3, Important:2 };
 const dUTC = s => new Date(s+'T00:00:00Z'), iso = dt => dt.toISOString().slice(0,10);
 function periodRange(kind, anchor){
   const t = dUTC(anchor), y = t.getUTCFullYear(), m = t.getUTCMonth();
   if (kind==='day') return [anchor, anchor];
   if (kind==='week'){ const dow = (t.getUTCDay()+6)%7, a = addDays(anchor, -dow); return [a, addDays(a,6)]; }
+  if (kind==='fortnight'){ const dd = t.getUTCDate(); return dd<=15 ? [iso(new Date(Date.UTC(y,m,1))), iso(new Date(Date.UTC(y,m,15)))] : [iso(new Date(Date.UTC(y,m,16))), iso(new Date(Date.UTC(y,m+1,0)))]; }
   if (kind==='month') return [iso(new Date(Date.UTC(y,m,1))), iso(new Date(Date.UTC(y,m+1,0)))];
   if (kind==='quarter'){ const q = Math.floor(m/3)*3; return [iso(new Date(Date.UTC(y,q,1))), iso(new Date(Date.UTC(y,q+3,0)))]; }
   return [`${y}-01-01`, `${y}-12-31`];
@@ -3031,6 +3055,7 @@ function shiftAnchor(kind, anchor, dir){
   const t = dUTC(anchor), y = t.getUTCFullYear(), m = t.getUTCMonth();
   if (kind==='day') return addDays(anchor, dir);
   if (kind==='week') return addDays(anchor, 7*dir);
+  if (kind==='fortnight'){ const dd = t.getUTCDate(); return dir>0 ? (dd<=15 ? iso(new Date(Date.UTC(y,m,16))) : iso(new Date(Date.UTC(y,m+1,1)))) : (dd<=15 ? iso(new Date(Date.UTC(y,m-1,16))) : iso(new Date(Date.UTC(y,m,1)))); }
   if (kind==='month') return iso(new Date(Date.UTC(y, m+dir, 1)));
   if (kind==='quarter') return iso(new Date(Date.UTC(y, m+3*dir, 1)));
   return iso(new Date(Date.UTC(y+dir, 0, 1)));
@@ -3038,20 +3063,59 @@ function shiftAnchor(kind, anchor, dir){
 function periodLabel(kind, a, b){
   const f = (s,o) => dUTC(s).toLocaleDateString('en-GB', Object.assign({ timeZone:'UTC' }, o));
   if (kind==='day') return f(a,{ weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  if (kind==='week') return `${f(a,{ day:'numeric', month:'short' })} – ${f(b,{ day:'numeric', month:'short', year:'numeric' })}`;
+  if (kind==='week' || kind==='fortnight') return `${f(a,{ day:'numeric', month:'short' })} – ${f(b,{ day:'numeric', month:'short', year:'numeric' })}`;
   if (kind==='month') return f(a,{ month:'long', year:'numeric' });
   if (kind==='quarter') return `Q${Math.floor(dUTC(a).getUTCMonth()/3)+1} ${dUTC(a).getUTCFullYear()}`;
   return String(dUTC(a).getUTCFullYear());
 }
+/* Late work: days a task ran past its due date (until it was finished, or until today if still open). Counted per day inside the period. */
+const LATE_MAX = 20;   // most points the late deduction can take off a period's score
+function finishOf(t){ return t.completedOn || t.awaitRev || null; }   // the day the person finished it (closing waits for the manager's review)
+function lateDaysIn(t, a, end){
+  const fin = finishOf(t), last = fin && fin <= end ? fin : end;
+  const from = addDays(t.dueDate, 1) > a ? addDays(t.dueDate, 1) : a;
+  return last >= from ? diffDays(from, last) + 1 : 0;
+}
+/* Late points can be removed for a task by the person's manager or the admin (GM/CEO), with a reason. */
+const canWaiveLate = (t, me) => me!==t.owner && (mgrIdsOf(t.owner).includes(me) || isMgmt(me));
+function lateWaiveHtml(t){
+  const me = ui.user, w = t.lateWaiver;
+  if (w) return `<div class="lw-st"><b>Late points removed</b> by ${esc(userName(w.by))}, ${esc(fmtStamp(w.at))}: ${esc(w.reason)}${canWaiveLate(t, me)?` <button type="button" class="linkbtn" data-act="lw-undo" data-id="${t.id}">Put the points back</button>`:''}</div>`;
+  if (!canWaiveLate(t, me)) return '';
+  if (ui.lw===t.id) return `<div class="lw-f"><label class="f" style="margin:0">Why should the late points be removed? <span class="req">(required)</span><textarea class="lw-t" rows="3" placeholder="e.g. Delay caused by the client changing the drawing; supplier strike — not the person's fault"></textarea></label><div class="err" hidden></div>
+    <div class="row end" style="margin:0"><button type="button" class="btn sm ghost" data-act="lw-x">Cancel</button><button type="button" class="btn sm" data-act="lw-save" data-id="${t.id}">Remove late points</button></div></div>`;
+  return `<button type="button" class="linkbtn" data-act="lw-open" data-id="${t.id}">Remove late points…</button>`;
+}
+function saveLateWaiver(btn){
+  const t = db.tasks.find(x=>x.id===btn.dataset.id), me = ui.user, box = btn.closest('.lw-f'), err = box.querySelector('.err');
+  if (!t || !canWaiveLate(t, me)) return;
+  const why = box.querySelector('.lw-t').value.trim();
+  if (words(why) < 5){ err.hidden = false; err.textContent = 'Give a proper reason (at least 5 words).'; return; }
+  t.lateWaiver = { by:me, at:new Date().toISOString(), reason:why.slice(0,1000) }; ui.lw = null;
+  const msg = `${userName(me)} removed the late points for “${t.title}”. Reason: ${why}`;
+  [...new Set([t.owner, ...mgrIdsOf(t.owner)])].filter(x=>x!==me).forEach(x=>notify(x, msg, nowAbs(), null));
+  save(); render(); tip('Late points removed', `“${t.title}” no longer counts as late in ${userName(t.owner)}'s score.`);
+}
+function undoLateWaiver(id){
+  const t = db.tasks.find(x=>x.id===id), me = ui.user; if (!t || !canWaiveLate(t, me) || !t.lateWaiver) return;
+  if (!confirm(`Put the late points back for “${t.title}”?`)) return;
+  delete t.lateWaiver; notify(t.owner, `${userName(me)} put back the late points for “${t.title}”.`, nowAbs(), null); save(); render();
+}
+const lateTotal = (t, today) => { const fin = finishOf(t), last = fin || today; return last > t.dueDate ? diffDays(t.dueDate, last) : 0; };
 function workStats(pid, a, b, n){
   const today = n.date, end = b < today ? b : today;
   if (a > today) return { future:true };
   const tasks = db.tasks.filter(t=>t.owner===pid && t.startDate<=end && (!t.completedOn || t.completedOn>=a));
-  const fin = [], wrk = [], pen = []; let wsum = 0, wtot = 0;
-  tasks.forEach(t=>{ const done = t.completedOn && t.completedOn<=end, p = done ? 100 : progOn(t, end), w = PRI_W[t.priority]||1;
-    (done ? fin : p>0 ? wrk : pen).push({ t, p }); wsum += w*p; wtot += w; });
-  const due = tasks.filter(t=>t.dueDate>=a && t.dueDate<=end && (t.dueDate<today || (t.completedOn && t.completedOn<=t.dueDate)));
-  const onTime = due.filter(t=>t.completedOn && t.completedOn<=t.dueDate).length;
+  const fin = [], wrk = [], pen = [], wait = []; let wsum = 0, wtot = 0;
+  tasks.forEach(t=>{ const done = t.completedOn && t.completedOn<=end, aw = !done && t.awaitRev && t.awaitRev<=end, p = done || aw ? 100 : progOn(t, end), w = PRI_W[t.priority]||1;
+    (done ? fin : aw ? wait : p>0 ? wrk : pen).push({ t, p }); wsum += w*p; wtot += w; });
+  /* tasks due in the period: on time if closed by the due date; tasks waiting for the manager's review are left out until reviewed */
+  /* a task whose late points were removed by the manager/admin counts as on time once closed, and is left out while still open */
+  const due = tasks.filter(t=>t.dueDate>=a && t.dueDate<=end && !(t.awaitRev && !t.completedOn) && !(t.lateWaiver && !t.completedOn) && (t.dueDate<today || (t.completedOn && t.completedOn<=t.dueDate)));
+  const onTime = due.filter(t=>t.completedOn && (t.completedOn<=t.dueDate || t.lateWaiver)).length;
+  const late = tasks.map(t=>({ t, days:lateDaysIn(t, a, end), total:lateTotal(t, today), open:!finishOf(t) || finishOf(t) > end })).filter(x=>x.days>0);
+  late.forEach(x=>{ x.waived = !!x.t.lateWaiver; });
+  const lateDays = late.filter(x=>!x.waived).reduce((s,x)=>s+x.days, 0), deduct = Math.min(LATE_MAX, lateDays), waivedDays = late.filter(x=>x.waived).reduce((s,x)=>s+x.days, 0);
   let days = 0, closed = 0;
   for (let d = a; d <= end; d = addDays(d,1)){
     if (!activeTasks(pid, d).length) continue;
@@ -3061,8 +3125,9 @@ function workStats(pid, a, b, n){
   }
   const parts = [['Work done', wtot ? wsum/wtot : null, 0.6], ['Finished on time', due.length ? onTime/due.length*100 : null, 0.2], ['Closure reports submitted', days ? closed/days*100 : null, 0.2]];
   const used = parts.filter(p=>p[1]!==null), wt = used.reduce((s,p)=>s+p[2],0);
-  const score = used.length ? Math.round(used.reduce((s,p)=>s+p[1]*p[2],0)/wt) : null;
-  return { tasks, fin, wrk, pen, parts, score, due:due.length, onTime, days, closed };
+  const base = used.length ? Math.round(used.reduce((s,p)=>s+p[1]*p[2],0)/wt) : null;
+  const score = base===null ? null : Math.max(0, base - deduct);
+  return { tasks, fin, wrk, pen, wait, parts, base, score, due:due.length, onTime, days, closed, late, lateDays, deduct, waivedDays };
 }
 const uaeHM = isoTs => new Date(isoTs).toLocaleTimeString('en-GB', { timeZone:'Asia/Dubai', hour:'2-digit', minute:'2-digit' });
 const hmToMin = s => { const [h,m] = s.split(':').map(Number); return h*60+m; }, minToHM = x => `${String(Math.floor(x/60)).padStart(2,'0')}:${String(Math.round(x%60)).padStart(2,'0')}`;
@@ -3091,12 +3156,14 @@ function myDashView(n){
       <button class="btn sm ghost" data-act="myd-shift" data-d="1" aria-label="Next" ${b>=n.date?'disabled':''}>›</button>
       ${md.anchor!==n.date?'<button class="btn sm ghost" data-act="myd-now">Back to now</button>':''}</div></section>`;
   if (st.future) return h + note('This period has not started yet.');
+  h += teamPerfHtml(me, md.kind, a, b, n);
   const sc = st.score;
   h += `<section class="card"><div class="dash-score"><div class="ring" style="--v:${sc??0}"><b>${sc===null?'—':sc}</b><span>score</span></div>
       <div class="dash-parts">${st.parts.map(p=>`<div>${bar(p[1]===null?0:Math.round(p[1]), `${p[0]} (${Math.round(p[2]*100)}%)${p[1]===null?' — no data':''}`)}</div>`).join('')}
-      <p class="hint" style="margin:6px 0 0">Score = 60% work done (AI %, Emergency ×3, Important ×2) + 20% tasks finished by their due date (${st.onTime}/${st.due}) + 20% days with a closure report (${st.closed}/${st.days}).</p></div></div>
-    <div class="sum" style="margin-top:12px"><div><b>${st.tasks.length}</b>tasks</div><div><b>${st.pen.length}</b>pending</div><div><b>${st.wrk.length}</b>working</div><div><b>${st.fin.length}</b>finished</div></div>
-    ${[['Pending (not started)', st.pen], ['Working on', st.wrk], ['Finished', st.fin]].map(([t, arr])=>arr.length?`<details class="dgrp"><summary><b>${t}</b> · ${arr.length}</summary>
+      <p class="hint" style="margin:6px 0 0">Score = 60% work done (AI %, Emergency ×3, Important ×2) + 20% tasks finished by their due date (${st.onTime}/${st.due}) + 20% days with a closure report (${st.closed}/${st.days}), minus 1 point for every day a task ran late (at most ${LATE_MAX}).${st.deduct?` <b style="color:var(--emg)">Late work: ${st.lateDays} day${st.lateDays===1?'':'s'} → −${st.deduct} (${st.base} → ${st.score}).</b>`:''}${st.waivedDays?` ${st.waivedDays} late day${st.waivedDays===1?'':'s'} not counted, and those tasks count as on time (late points removed by the manager).`:''}</p></div></div>
+    <div class="sum" style="margin-top:12px"><div><b>${st.tasks.length}</b>tasks</div><div><b>${st.pen.length}</b>pending</div><div><b>${st.wrk.length}</b>working</div><div><b>${st.wait.length}</b>waiting for review</div><div><b>${st.fin.length}</b>closed</div><div><b style="${st.late.length?'color:var(--emg)':''}">${st.late.length}</b>late</div></div>
+    ${st.late.length?`<details class="dgrp" open><summary><b style="color:var(--emg)">Late work</b> · ${st.late.length} task${st.late.length===1?'':'s'} · ${st.lateDays} late day${st.lateDays===1?'':'s'} in this period</summary>${st.late.map(x=>`<div class="ci"><span style="flex:1;min-width:0">${esc(x.t.title)}</span>${priBadge(x.t.priority)}<span class="b">due ${fmtShort(x.t.dueDate)}</span><span class="b ${x.waived?'':'emg'}">${x.open?`${x.total} day${x.total===1?'':'s'} overdue, still open`:`finished ${x.total} day${x.total===1?'':'s'} late`}${x.waived?' · points removed':''}</span></div><div class="lw-wrap">${lateWaiveHtml(x.t)}</div>`).join('')}</details>`:''}
+    ${[['Pending (not started)', st.pen], ['Working on', st.wrk], ['Finished — waiting for manager review', st.wait], ['Closed (reviewed by manager)', st.fin]].map(([t, arr])=>arr.length?`<details class="dgrp"><summary><b>${t}</b> · ${arr.length}</summary>
       ${arr.slice(0,100).map(x=>`<div class="ci"><span style="flex:1;min-width:0">${esc(x.t.title)}${x.t.projectId&&projById(x.t.projectId)?` <span class="b proj">${esc(projById(x.t.projectId).name)}</span>`:''}</span>${priBadge(x.t.priority)}<span class="b">due ${fmtShort(x.t.dueDate)}</span><span class="pct ${x.p>=100?'full':'part'}" style="min-width:44px;text-align:right">${x.p}%</span></div>`).join('')}</details>`:'').join('')}
     ${!st.tasks.length?note('No tasks in this period.'):''}</section>`;
   h += `<section class="card"><div class="sec-h"><h2>Login and logout</h2><span class="hint" style="margin:0">UAE time</span></div>`;
@@ -3109,9 +3176,45 @@ function myDashView(n){
   }
   return h + `</section>`;
 }
+/* ===== Managers: how each team member is working in the chosen period, with an Excel download ===== */
+const teamPeopleOf = me => (isAdminUser(me) ? USERS.filter(u=>u.id!==me) : subtree(me)).filter(u=>hasOwnReport(u.id));
+function teamPerfHtml(me, kind, a, b, n){
+  const ppl = teamPeopleOf(me); if (!ppl.length || kind==='day') return ppl.length ? `<section class="card"><div class="sec-h"><h2>My team's performance</h2></div>${note('Choose Week, Fortnight, Month, Quarter or Year to compare your team.')}</section>` : '';
+  const rows = ppl.map(u=>({ u, st:workStats(u.id, a, b, n) })).filter(r=>!r.st.future).sort((x,y)=>(y.st.score??-1)-(x.st.score??-1));
+  const pc = v => v===null ? '—' : Math.round(v)+'%';
+  return `<section class="card"><div class="sec-h"><h2>My team's performance</h2><button type="button" class="btn sm" data-act="perf-xl">Download work report (Excel)</button></div>
+    <p class="hint" style="margin-top:0">${esc(periodLabel(kind, a, b))}. Score = 60% work done + 20% finished on time + 20% closure reports, minus 1 point per late day (at most ${LATE_MAX}). Tap a name to open that person's dashboard.</p>
+    <div class="tblwrap"><table class="mst perf"><thead><tr><th>Person</th><th>Score</th><th>Work done</th><th>On time</th><th>Closure reports</th><th>Tasks</th><th>Closed</th><th>Waiting review</th><th>Late tasks</th><th>Late days</th></tr></thead><tbody>
+    ${rows.map(({u,st})=>`<tr><td><button type="button" class="linkbtn" data-act="perf-open" data-id="${u.id}">${esc(u.name)}</button><div class="hint" style="margin:0">${esc(u.title)}</div></td>
+      <td><b>${st.score??'—'}</b>${st.deduct?`<div class="hint" style="margin:0;color:var(--emg)">−${st.deduct} late</div>`:''}</td><td>${pc(st.parts[0][1])}</td><td>${st.due?`${st.onTime}/${st.due}`:'—'}</td><td>${st.days?`${st.closed}/${st.days}`:'—'}</td>
+      <td>${st.tasks.length}</td><td>${st.fin.length}</td><td>${st.wait.length}</td><td style="${st.late.length?'color:var(--emg);font-weight:600':''}">${st.late.length}</td><td style="${st.lateDays?'color:var(--emg);font-weight:600':''}">${st.lateDays}</td></tr>`).join('')}
+    </tbody></table></div></section>`;
+}
+async function downloadPerfSheet(btn){
+  const me = ui.user, md = ui.myd, n = now(); if (!md) return;
+  const [a, b] = periodRange(md.kind, md.anchor), ppl = teamPeopleOf(me); if (!ppl.length) return;
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Preparing…';
+  try{
+    const XLSX = await loadXLSX(), lbl = periodLabel(md.kind, a, b), end = b < n.date ? b : n.date;
+    const sum = [['Work report — '+lbl], [], ['Person','Title','Score','Score before late deduction','Late deduction','Work done %','Finished on time','Due in period','Closure reports','Working days','Tasks','Closed (reviewed)','Waiting for manager review','Working on','Not started','Late tasks','Late days counted','Late days with points removed']];
+    const det = [['Person','Task','Priority','Type','Project','Assigned by','Start','Due','Finished on','Status','Latest AI %','Late days (total)','Late days in period','Late points removed by','Reason for removing late points','Latest manager review']];
+    ppl.forEach(u=>{ const st = workStats(u.id, a, b, n); if (st.future) return;
+      sum.push([u.name, u.title, st.score??'', st.base??'', st.deduct, st.parts[0][1]===null?'':Math.round(st.parts[0][1]), st.onTime, st.due, st.closed, st.days, st.tasks.length, st.fin.length, st.wait.length, st.wrk.length, st.pen.length, st.late.length, st.lateDays, st.waivedDays]);
+      st.tasks.forEach(t=>{ const lt = st.late.find(x=>x.t===t), rd = Object.keys(t.rev||{}).sort().pop(), rv = rd ? (t.rev[rd]||[]).map(r=>`${userName(r.by)}: ${r.text||''}`).join(' | ') : '';
+        det.push([u.name, t.title, t.priority, t.category==='extra'?'Additional':'Planned', t.projectId&&projById(t.projectId)?projById(t.projectId).name:'', t.assignedBy?userName(t.assignedBy):'', t.startDate, t.dueDate, finishOf(t)||'',
+          t.completedOn && t.completedOn<=end ? 'Closed' : t.awaitRev ? 'Finished – waiting for manager review' : (progOn(t,end)>0 ? 'Working on' : 'Not started'), t.completedOn||t.awaitRev ? 100 : progOn(t, end), lateTotal(t, n.date), lt?lt.days:0, t.lateWaiver?userName(t.lateWaiver.by):'', t.lateWaiver?t.lateWaiver.reason:'', rv]); }); });
+    const wb = XLSX.utils.book_new(), s1 = XLSX.utils.aoa_to_sheet(sum), s2 = XLSX.utils.aoa_to_sheet(det);
+    s1['!cols'] = [{wch:24},{wch:24}].concat(Array(15).fill({wch:12})); s2['!cols'] = [{wch:22},{wch:40},{wch:11},{wch:11},{wch:18},{wch:18},{wch:11},{wch:11},{wch:11},{wch:30},{wch:10},{wch:10},{wch:10},{wch:20},{wch:45},{wch:50}];
+    XLSX.utils.book_append_sheet(wb, s1, 'Team summary'); XLSX.utils.book_append_sheet(wb, s2, 'Task details');
+    XLSX.writeFile(wb, `Work report ${lbl.replace(/\s*–\s*/g,' to ').replace(/[^\w\- ]+/g,' ').trim()}.xlsx`);
+  }catch(e){ tip('Could not make the file', e.message||'Please try again.'); }
+  btn.disabled = false; btn.textContent = old;
+}
 function mydClick(act, a){
   const md = ui.myd; if (!md) return false;
   if (act==='myd-kind'){ md.kind = a.dataset.k; render(); return true; }
+  if (act==='perf-xl'){ downloadPerfSheet(a); return true; }
+  if (act==='perf-open'){ md.person = a.dataset.id; render(); window.scrollTo({ top:0, behavior:'smooth' }); return true; }
   if (act==='myd-shift'){ md.anchor = shiftAnchor(md.kind, md.anchor, +a.dataset.d); if (md.anchor > now().date) md.anchor = now().date; render(); return true; }
   if (act==='myd-now'){ md.anchor = now().date; render(); return true; }
   return false;
@@ -3583,7 +3686,7 @@ function canCloseTask(t){
   const n = now(), d = n.date;
   if (t.owner!==ui.user || !hasOwnReport(ui.user) || closedToday(ui.user, d) || t.startDate > d) return false;
   if (!['plan','extra'].includes(phaseFor(n.mins, ui.user))) return false;
-  return !(t.completedOn && t.completedOn < d) && !(t.completedOn===d);
+  return !(t.completedOn && t.completedOn < d) && !(t.completedOn===d) && !t.awaitRev;
 }
 function taskCloseState(t, d){
   const l = (t.log||{})[d]; if (!l || !l.closedEarly) return '';
@@ -3629,7 +3732,7 @@ async function closeTaskNow(btn){
     t = db.tasks.find(x=>x.id===id); if (!t) return;   // re-read after await
     const pct = Math.max(0, Math.min(100, Math.round((+r.pct)/5)*5));
     t.log[d] = { progress:pct, justification:txt.slice(0,2000), aiNote:String(r.note||'').slice(0,400), closedEarly:true, closedAt:t.log[d].closedAt };
-    if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
+    setDone(t, d, pct);
     save(); safeRender();
     const who = [t.assignedBy].filter(x=>x && x!==me);
     who.forEach(x=>notify(x, `${userName(me)} closed “${t.title}” — AI rated ${pct}%.`, nowAbs(), null));
@@ -3697,7 +3800,7 @@ function teamTodayView(n){
   const d = st.date && st.date <= today ? st.date : today, isToday = d===today;
   const all = teamOfMgr(me), people = all.filter(u=>!st.who || u.id===st.who);
   const dayLbl = isToday ? 'Today' : fmtDate(d);
-  let h = crBox(n) + `<section class="card"><div class="sec-h"><h2>My team</h2><span class="hint" style="margin:0">${esc(dayLbl)}</span></div>
+  let h = crBox(n) + awaitingMgrSection(me) + `<section class="card"><div class="sec-h"><h2>My team</h2><span class="hint" style="margin:0">${esc(dayLbl)}</span></div>
     <p class="hint" style="margin-top:0">What your team members are doing today and what they did on earlier days, task by task. Comment on any task; the person is notified and can reply.</p>
     <div class="row" style="margin-bottom:6px;align-items:flex-end;gap:10px">
       <div class="f" style="margin:0"><span>Day</span><div class="row" style="gap:6px;align-items:center;margin:0"><button type="button" class="btn sm ghost" data-act="tt-day" data-d="-1" aria-label="Previous day">◀</button><input type="date" id="ttDate" max="${today}" value="${d}"><button type="button" class="btn sm ghost" data-act="tt-day" data-d="1" ${isToday?'disabled':''} aria-label="Next day">▶</button>${isToday?'':`<button type="button" class="btn sm ghost" data-act="tt-day" data-d="0">Today</button>`}</div></div>
@@ -4079,7 +4182,7 @@ async function reRateAfterReview(tid, d){
     const l = t.log[d], pct = Math.max(0, Math.min(100, Math.round((+r.pct)/5)*5)), before = l.progress;
     if (l.aiFirst===undefined) l.aiFirst = before;
     Object.assign(l, { progress:pct, aiNote:String(r.note||'').slice(0,400), reRatedAt:new Date().toISOString(), reRatedFrom:before, reRate:'done' });
-    if (pct>=100) t.completedOn = d; else if (t.completedOn===d) t.completedOn = null;
+    setDone(t, d, pct);
     const c = db.closures[t.owner+'|'+d];
     if (c && c.ai && c.ai.status==='done' && (c.tasks||[]).length){
       const ts = c.tasks.map(id=>db.tasks.find(x=>x.id===id)).filter(Boolean);
@@ -4118,6 +4221,27 @@ function retryReRates(){
   }));
 }
 
+/* ===== Finished work waiting for the manager's review (rated 100%, not closed until reviewed) ===== */
+function awaitingForMgr(me){
+  return db.tasks.filter(t=>t.awaitRev && !t.completedOn && canTaskReview(t, me) && (mgrIdsOf(t.owner).includes(me) || isMgmt(me) || t.assignedBy===me))
+    .sort((x,y)=>x.awaitRev.localeCompare(y.awaitRev));
+}
+function awaitingMgrSection(me){
+  const ts = awaitingForMgr(me); if (!ts.length) return '';
+  return `<section class="card"><div class="sec-h"><h2>Finished work waiting for your review</h2>${pill('locked', `${ts.length}`)}</div>
+    <p class="hint" style="margin-top:0">The AI rated these 100%. A task is closed only after you review it; the AI then re-rates it with your review. Below 100% it goes back to the person's list for the next day.</p>
+    ${ts.map(t=>`<div class="tt-task"><div class="tt-h"><b><span class="b">${esc(userName(t.owner))}</span> ${esc(t.title)}</b><span class="tt-p ok">100%</span></div>
+      <div class="badges">${priBadge(t.priority)}<span class="b">Finished ${esc(fmtShort(t.awaitRev))}</span><span class="b">due ${esc(fmtShort(t.dueDate))}</span>${t.awaitRev>t.dueDate?`<span class="b emg">${diffDays(t.dueDate, t.awaitRev)} day${diffDays(t.dueDate, t.awaitRev)===1?'':'s'} late</span>`:''}</div>
+      ${(t.log||{})[t.awaitRev]?.justification?`<div class="tt-note"><b>What they did:</b> ${esc(t.log[t.awaitRev].justification)}${t.log[t.awaitRev].aiNote?`<div class="hint" style="margin:2px 0 0">AI: ${esc(t.log[t.awaitRev].aiNote)}</div>`:''}</div>`:''}
+      ${partsHtml(t, t.awaitRev, { readOnly:true })}${filesHtml(t, false, { noParts:true })}
+      ${taskRevHtml(t, t.awaitRev)}</div>`).join('')}</section>`;
+}
+function myAwaitingSection(n){
+  const me = ui.user, ts = db.tasks.filter(t=>t.owner===me && t.awaitRev && !t.completedOn && t.awaitRev < n.date); if (!ts.length) return '';
+  return `<section class="card"><div class="sec-h"><h2>Finished — waiting for manager review</h2>${pill('soon', `${ts.length}`)}</div>
+    <p class="hint" style="margin-top:0">The AI rated these 100%. They close once your manager reviews them. If the review finds something missing, the task comes back to your list.</p>
+    ${ts.map(t=>`<div class="ci"><span style="flex:1;min-width:0">${esc(t.title)}</span>${priBadge(t.priority)}<span class="b">finished ${esc(fmtShort(t.awaitRev))}</span>${t.awaitRev>t.dueDate?`<span class="b emg">late</span>`:''}</div>`).join('')}</section>`;
+}
 /* ===== Deleting tasks: the work is not lost. A full record (schedule, parts, colleagues, progress, files, comments, who deleted it, when and why)
    is kept in "deleted" and shown on the dashboard, in the person's report, in My team, and on My day of everyone involved. ===== */
 /* Once work has been submitted (reported in a closure report or closed) or a manager has reviewed it, only the person's manager or the admin (GM/CEO) can delete it. */
@@ -4850,6 +4974,10 @@ document.addEventListener('click', e=>{
     notify(owner, `CEO review of your closure report (${fmtShort(k.split('|')[1])}): ${msg}`, nowAbs(), null);
   }
   else if (act==='tr-save'){ saveTaskReview(a); return; }
+  else if (act==='lw-open'){ ui.lw = a.dataset.id; render(); setTimeout(()=>document.querySelector('.lw-t')?.focus(), 50); return; }
+  else if (act==='lw-x'){ ui.lw = null; render(); return; }
+  else if (act==='lw-save'){ saveLateWaiver(a); return; }
+  else if (act==='lw-undo'){ undoLateWaiver(a.dataset.id); return; }
   else if (act==='tr-edit'){ ui.trEdit = a.dataset.id+'|'+a.dataset.d; render(); return; }
   else if (act==='tr-x'){ ui.trEdit = null; render(); return; }
   else if (act==='save-review'){
