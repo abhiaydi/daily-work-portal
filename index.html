@@ -219,8 +219,8 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line);font-size:13px}.part:first-of-type{border-top:0}
 .part .pn{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft,#f3f4f6);color:var(--muted)}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
-.trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--ok,#1a7f37);background:rgba(26,127,55,.06);border-radius:8px;padding:6px 10px}.trv.redo{border-left-color:var(--emg);background:rgba(180,35,24,.06)}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
-.trf{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:6px}.trf-h{font-weight:600;font-size:14px}.trf-t{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;resize:vertical}.trcell{min-width:220px}
+.trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
+.trf{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:6px}.trf-h{font-weight:600;font-size:14px}.trf-t{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit;font-size:15px;line-height:1.5;min-height:120px;resize:vertical}.trrow td{background:transparent;padding-top:0}
 .pf-pick{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}.pf-pick .clf-list{display:contents}.pt-files .tfiles{margin-top:2px}
 .pd-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}.pd-form .pd-note{flex:1 1 100%;min-width:180px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit}.pd-form .stt{flex:1;min-width:180px}.pd-form .err{flex-basis:100%}
 .pt-mode{border:0;padding:0;margin:8px 0 0}.pt-mode legend{font-weight:600;font-size:13px;margin-bottom:4px}.pt-mode label{display:flex!important;flex-direction:row!important;gap:8px;align-items:flex-start;font-size:13px;margin:4px 0;cursor:pointer}.pt-mode input{width:16px!important;height:16px!important;min-height:0!important;flex:none;margin:2px 0 0;accent-color:#1a5ed4}
@@ -866,17 +866,17 @@ function reportBlock(owner, d, canReview){
     <div><b>${extra}</b>additional work</div>${emg?`<div><b>${emg}</b>emergency</div>`:''}
   </div>`;
   if (ts.length){
-    h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>AI rating</th><th>What the employee wrote</th><th>AI note</th><th>Review of this task</th></tr></thead><tbody>
+    h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>AI rating</th><th>What the employee wrote</th><th>AI note</th></tr></thead><tbody>
     ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
       <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${filesHtml(t)}</td>
       <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span></td>
       <td class="pct ${l.pending?'':l.progress>=100?'full':'part'}">${l.pending?'<span class="hint" style="margin:0">pending</span>':l.progress+'%'}</td>
-      <td>${l.justification?esc(l.justification):'—'}</td><td>${l.aiNote?esc(l.aiNote):'—'}</td><td class="trcell">${taskRevHtml(t, d) || '<span class="hint" style="margin:0">Not reviewed yet</span>'}</td></tr>`; }).join('')}
+      <td>${l.justification?esc(l.justification):'—'}</td><td>${l.aiNote?esc(l.aiNote):'—'}</td></tr>${(()=>{ const rv = taskRevHtml(t, d); return rv ? `<tr class="trrow"><td colspan="5">${rv}</td></tr>` : ''; })()}`; }).join('')}
     </tbody></table></div>`;
   }
   const dels = deletedOf([owner], d);
   if (dels.length) h += `<h3 class="sub" style="color:var(--emg)">Deleted work on this day (${dels.length})</h3>` + dels.map(r=>deletedCard(r)).join('');
-  if (ts.length){ const rv = ts.filter(t=>taskRevList(t, d).length).length; h += `<div class="hint"><b>Tasks reviewed one by one: ${rv} of ${ts.length}.</b>${canReview && rv<ts.length?' Review each task in the last column, then write your overall review of the day below.':''}</div>`; }
+  if (ts.length){ const rv = ts.filter(t=>taskRevList(t, d).length).length; h += `<div class="hint"><b>Tasks reviewed one by one: ${rv} of ${ts.length}.</b>${canReview && rv<ts.length?' Write a review under each task, then your overall review of the day below.':''}</div>`; }
   h += `<div class="hint">Submitted ${fmtStamp(c.submittedAt)}${c.editedAt?' · last edited '+fmtStamp(c.editedAt):''} · goes to ${esc(mgrNames(owner))}</div>`;
   if (c.review){
     h += `<div class="review"><div class="meta">Review by ${esc(userName(c.review.by))} · ${fmtStamp(c.review.at)}</div><p>${esc(c.review.text)}</p></div>`;
@@ -4009,19 +4009,17 @@ function crLines(t){
     return `<div class="cr-l ${c.status}"><b>${esc(userName(c.who))}</b>${p?` · ${esc(p)}`:''} · ${esc(crWhen(c))} · ${lbl[c.status]||c.status}</div>`; }).join('')}</div>`;
 }
 /* ===== Review of each task, separately from the day's closure report.
-   t.rev[date] = [{ by, at, verdict:'ok'|'redo', text }] — one entry per reviewer per day (a reviewer can change theirs). ===== */
+   t.rev[date] = [{ by, at, text }] — one entry per reviewer per day (a reviewer can change theirs). ===== */
 const canTaskReview = (t, me) => me!==t.owner && (mgrIdsOf(t.owner).includes(me) || isMgmt(me) || t.assignedBy===me);
-const TR_LBL = { ok:'Good work', redo:'Needs rework' };
 function taskRevList(t, d){ return ((t.rev||{})[d] || []); }
+const trItem = (r, extra) => `<div class="trv"><div class="meta"><b>Manager's review</b> · ${esc(userName(r.by))} · ${esc(fmtStamp(r.at))}${extra||''}</div>${r.text?`<p>${esc(r.text)}</p>`:''}</div>`;
 function taskRevHtml(t, d, opts){
-  const me = ui.user, list = taskRevList(t, d), mine = list.find(r=>r.by===me), can = !(opts && opts.readOnly) && canTaskReview(t, me) && !t.deletedAt;
+  const me = ui.user, list = taskRevList(t, d), mine = list.find(r=>r.by===me), can = !(opts && opts.readOnly) && canTaskReview(t, me);
   const editing = ui.trEdit===t.id+'|'+d;
-  let h = list.filter(r=>!(editing && r.by===me)).map(r=>`<div class="trv ${r.verdict}"><div class="meta"><b>${esc(TR_LBL[r.verdict]||'Reviewed')}</b> · ${esc(userName(r.by))} · ${esc(fmtStamp(r.at))}${r.by===me && can?` <button type="button" class="linkbtn" data-act="tr-edit" data-id="${t.id}" data-d="${d}">Change</button>`:''}</div>${r.text?`<p>${esc(r.text)}</p>`:''}</div>`).join('');
+  let h = list.filter(r=>!(editing && r.by===me)).map(r=>trItem(r, r.by===me && can ? ` <button type="button" class="linkbtn" data-act="tr-edit" data-id="${t.id}" data-d="${d}">Change</button>` : '')).join('');
   if (can && (!mine || editing)){
-    const v = mine ? mine.verdict : '';
-    h += `<div class="trf" data-id="${t.id}" data-d="${d}"><div class="trf-h">Review this task${d!==now().date?` (${esc(fmtShort(d))})`:''}</div>
-      <div class="seg trf-v"><label><input type="radio" name="trv-${t.id}-${d}" value="ok" ${v==='ok'?'checked':''}><span>✓ Good work</span></label><label><input type="radio" name="trv-${t.id}-${d}" value="redo" ${v==='redo'?'checked':''}><span>↻ Needs rework</span></label></div>
-      <textarea class="trf-t" rows="2" placeholder="Your comment on this task (required if it needs rework)">${mine?esc(mine.text||''):''}</textarea>
+    h += `<div class="trf" data-id="${t.id}" data-d="${d}"><label class="trf-h" for="trt-${t.id}-${d}">Manager's review of this task${d!==now().date?` (${esc(fmtShort(d))})`:''}</label>
+      <textarea class="trf-t" id="trt-${t.id}-${d}" rows="5" placeholder="Write your review of this task: what was good, what needs to change, next steps…">${mine?esc(mine.text||''):''}</textarea>
       <div class="err" hidden></div>
       <div class="row end" style="margin:0"><button type="button" class="btn sm" data-act="tr-save" data-id="${t.id}" data-d="${d}">${mine?'Update review':'Save review'}</button>${editing?`<button type="button" class="btn sm ghost" data-act="tr-x">Cancel</button>`:''}</div></div>`;
   }
@@ -4031,21 +4029,20 @@ function taskRevHtml(t, d, opts){
 function taskRevLatest(t){
   const ds = Object.keys(t.rev||{}).sort(); if (!ds.length) return '';
   const d = ds[ds.length-1];
-  return `<div class="trbox">${taskRevList(t, d).map(r=>`<div class="trv ${r.verdict}"><div class="meta"><b>${esc(TR_LBL[r.verdict]||'Reviewed')}</b> · ${esc(userName(r.by))} · ${esc(fmtStamp(r.at))}${d!==now().date?` (for ${esc(fmtShort(d))})`:''}</div>${r.text?`<p>${esc(r.text)}</p>`:''}</div>`).join('')}</div>`;
+  return `<div class="trbox">${taskRevList(t, d).map(r=>trItem(r, d!==now().date?` (for ${esc(fmtShort(d))})`:'')).join('')}</div>`;
 }
+document.addEventListener('input', e=>{ if (e.target.classList && e.target.classList.contains('trf-t')){ e.target.style.height = 'auto'; e.target.style.height = Math.min(600, e.target.scrollHeight+2)+'px'; } });
 function saveTaskReview(btn){
   const box = btn.closest('.trf'), t = db.tasks.find(x=>x.id===btn.dataset.id), d = btn.dataset.d, me = ui.user, err = box.querySelector('.err');
   if (!t || !canTaskReview(t, me)) return;
-  const v = (box.querySelector('.trf-v input:checked')||{}).value, txt = box.querySelector('.trf-t').value.trim();
-  const fail = m => { err.hidden = false; err.textContent = m; };
-  if (!v) return fail('Choose Good work or Needs rework.');
-  if (v==='redo' && txt.length < 3) return fail('Say what needs to be redone.');
+  const txt = box.querySelector('.trf-t').value.trim();
+  if (txt.length < 2){ err.hidden = false; err.textContent = 'Write your review first.'; return; }
   t.rev = t.rev || {}; const list = t.rev[d] = (t.rev[d]||[]).filter(r=>r.by!==me);
-  list.push({ by:me, at:new Date().toISOString(), verdict:v, text:txt.slice(0, 2000) });
+  list.push({ by:me, at:new Date().toISOString(), text:txt.slice(0, 5000) });
   ui.trEdit = null;
-  const msg = `${userName(me)} reviewed your task “${t.title}”${d!==now().date?` (${fmtShort(d)})`:''}: ${TR_LBL[v]}${txt?' — '+txt:''}`;
+  const msg = `${userName(me)} reviewed your task “${t.title}”${d!==now().date?` (${fmtShort(d)})`:''}: ${txt.slice(0, 200)}`;
   notify(t.owner, msg, nowAbs(), null);
-  emailPeople([t.owner], `Task review: ${t.title} — ${TR_LBL[v]}`, `${userName(me)} reviewed your task “${t.title}” for ${fmtDate(d)}.\n\nVerdict: ${TR_LBL[v]}${txt?'\nComment: '+txt:''}`);
+  emailPeople([t.owner], `Review of your task: ${t.title}`, `${userName(me)} reviewed your task “${t.title}” for ${fmtDate(d)}.\n\n${txt}`);
   if (t.assignedBy && t.assignedBy!==me && t.assignedBy!==t.owner) notify(t.assignedBy, msg.replace('your task', `${userName(t.owner)}'s task`), nowAbs(), null);
   save(); render(); tip('Review saved', `${userName(t.owner)} has been told.`);
 }
@@ -4101,7 +4098,7 @@ function deletedCard(r, open){
         <ol class="del-list">${pl.map(p=>`<li>${esc(p.title)} — ${p.days} day${p.days===1?'':'s'}, ${p.start===p.end?esc(fmtShort(p.start)):esc(fmtShort(p.start))+'–'+esc(fmtShort(p.end))} · ${p.done?`done ${esc(fmtShort(p.doneOn))}${p.note?' — '+esc(p.note):''}`:'not done'}${(p.collab||[]).length?` · with ${p.collab.map(userName).map(esc).join(', ')}`:''}</li>`).join('')}</ol></div>`:''}
       ${(t.collab||[]).length?`<div class="del-sub"><b>Colleagues:</b> ${t.collab.map(userName).map(esc).join(', ')}</div>`:''}
       ${cs.length?`<div class="del-sub"><b>Sessions with colleagues</b><ul class="del-list">${cs.map(c=>`<li>${esc(userName(c.who))} · ${esc(crWhen(c))} · ${esc(({pending:'was waiting for an answer',accepted:'was confirmed',fixed:'was fixed by the manager',declined:'had said not available',escalated:'no answer, with the manager'})[c.status]||c.status)}</li>`).join('')}</ul></div>`:''}
-      ${days.length?`<div class="del-sub"><b>Progress reported</b><ul class="del-list">${days.map(dd=>{ const l = t.log[dd]||{}; return `<li>${esc(fmtShort(dd))}: ${l.progress||0}%${l.closedEarly?' (closed early)':''}${l.justification?' — '+esc(l.justification):''}${l.aiNote?` <span class="hint" style="margin:0">AI: ${esc(l.aiNote)}</span>`:''}${taskRevList(t, dd).map(r=>` <span class="b">${esc(TR_LBL[r.verdict])} · ${esc(userName(r.by))}${r.text?': '+esc(r.text):''}</span>`).join('')}</li>`; }).join('')}</ul></div>`:'<div class="hint" style="margin:0">No progress had been reported.</div>'}
+      ${days.length?`<div class="del-sub"><b>Progress reported</b><ul class="del-list">${days.map(dd=>{ const l = t.log[dd]||{}; return `<li>${esc(fmtShort(dd))}: ${l.progress||0}%${l.closedEarly?' (closed early)':''}${l.justification?' — '+esc(l.justification):''}${l.aiNote?` <span class="hint" style="margin:0">AI: ${esc(l.aiNote)}</span>`:''}${taskRevList(t, dd).map(r=>` <span class="b">Review by ${esc(userName(r.by))}${r.text?': '+esc(r.text):''}</span>`).join('')}</li>`; }).join('')}</ul></div>`:'<div class="hint" style="margin:0">No progress had been reported.</div>'}
       ${(t.files||[]).length?`<div class="del-sub"><b>Files</b><div class="tfiles">${t.files.map(f=>`<div class="tfile"><button type="button" class="linkbtn" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button>${f.brief?`<div class="tbrief"><b>AI brief:</b> ${esc(f.brief)}</div>`:''}</div>`).join('')}</div></div>`:''}
       ${(t.comments||[]).length?`<div class="del-sub"><b>Comments</b><ul class="del-list">${t.comments.map(c=>`<li><b>${esc(userName(c.by))}</b> ${esc(fmtStamp(c.at))}: ${esc(c.text)}</li>`).join('')}</ul></div>`:''}
       ${(r.linked||[]).length?`<div class="del-sub"><b>Colleagues' linked work removed with it:</b> ${r.linked.map(x=>`${esc(x.title)} (${esc(userName(x.owner))})`).join('; ')}</div>`:''}
