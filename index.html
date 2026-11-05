@@ -2435,8 +2435,10 @@ Reply with ONLY a JSON object: {"reply":"...","actions":[]}
 Possible actions (use exact ids from the context; at most 5 per reply; they are confirmed together):
 - {"type":"navigate","page":"<page id>"}
 - {"type":"open_project","project_id":"..."}
-- {"type":"assign_task","assignee_id":"...","assignee_name":"...","title":"...","details":"","priority":"...","days":1,"project_id":""}
-- {"type":"add_my_task","title":"...","details":"","priority":"...","days":1,"project_id":""}
+- {"type":"assign_task","assignee_id":"...","assignee_name":"...","title":"...","details":"","priority":"...","days":1,"project_id":"","parts":[]}
+- {"type":"add_my_task","title":"...","details":"","priority":"...","days":1,"project_id":"","parts":[]}
+  "parts" (optional): when the work has stages done one after another, e.g. "drawing 3 days then simulation 5 days" -> "parts":[{"title":"Drawing","days":3},{"title":"Simulation","days":5}]. Use at least 2 parts; "days" is then the total of the parts. Leave "parts" empty for simple work.
+- {"type":"mark_part_done","task_id":"<id from the user's tasks>","part":"<part name>","note":"what was finished"}   the user finished a part of their own task; ask for a short note if they gave none
 - {"type":"create_project","name":"...","description":"","end":"YYYY-MM-DD or empty","member_ids":[]}
 - {"type":"undo","ref":<number of something you did in this chat>}   delete / cancel it
 - {"type":"edit","ref":<number>,"title":"...","details":"...","priority":"...","days":1}   correct something you did (only include fields to change)
@@ -2448,6 +2450,7 @@ Rules:
 - If the user says something you did was wrong, propose "undo" (and the corrected action if they told you what is right), or ask what it should have been.
 - Priority must be allowed for the current mode. "Emergency" only if they say urgent/emergency/immediately. Default: "Important" for additional work, "Moderate" for the morning plan.
 - days: for a deadline ("by Thursday"), count days from today up to and including that day. Default 1.
+- Work in parts: when asked about progress, say which part someone is on, which parts are done and whether a part is behind its planned dates (from the context).
 Context:
 ${aiContext()}
 ${done ? 'Things done in this chat (ref: what):\n'+done : 'Nothing done in this chat yet.'}
@@ -2467,6 +2470,21 @@ function aiNormalize(a){
   a.days = Math.max(1, Math.min(60, parseInt(a.days,10)||1));
   a.title = String(a.title||'').trim().slice(0,140); a.details = String(a.details||'').trim().slice(0,500);
   if (a.project_id && !canSeeProject(projById(a.project_id), me)) a.project_id = '';
+  if (a.type==='assign_task' || a.type==='add_my_task'){
+    const ps = (Array.isArray(a.parts)?a.parts:[]).map(x=>({ title:String(x&&x.title||'').trim().slice(0,80), days:Math.max(1, Math.min(60, parseInt(x&&x.days,10)||1)) })).filter(x=>x.title);
+    if (ps.length >= 2){ const tot = ps.reduce((s,x)=>s+x.days, 0); if (tot > 60) return { error:'All parts together can be at most 60 days.' }; a.parts = ps; a.days = tot; } else delete a.parts;
+  }
+  if (a.type==='mark_part_done'){
+    const ts = activeTasks(me, n.date).filter(t=>(t.parts||[]).length);
+    const t = ts.find(x=>x.id===a.task_id) || (ts.length===1 ? ts[0] : ts.find(x=>(x.parts||[]).some(p=>!p.done && p.title.toLowerCase()===String(a.part||'').toLowerCase().trim())));
+    if (!t) return { error:'Which task is that part of? I could not find it among your tasks with parts.' };
+    if (!canMarkPart(t)) return { error:'Parts can only be marked done during your working day, before you finish your day.' };
+    const cur = currentPart(t); if (!cur) return { error:'All parts of that task are already done. You can close the task.' };
+    const want = String(a.part||'').toLowerCase().trim();
+    if (want && cur.title.toLowerCase()!==want && !cur.title.toLowerCase().includes(want)) return { error:`The current part of “${t.title}” is “${cur.title}”. Parts are done in order — is it “${cur.title}” you finished?` };
+    a.note = String(a.note||'').trim().slice(0,300); if (words(a.note) < 2) return { error:`What was finished in “${cur.title}”? Tell me in a few words.` };
+    a._t = t; a._p = cur; return a;
+  }
   if (a.type==='assign_task'){
     a.assignee_id = findPerson(a.assignee_id, a.assignee_name, assignableBy(me));
     if (!a.assignee_id) return { error:`I couldn't tell exactly who${a.assignee_name?' “'+a.assignee_name+'” is':' that is for'}. Please say their full name.` };
@@ -2513,16 +2531,20 @@ function undoCheck(it){
   return '';
 }
 function actSummary(a){
+  const r = actSummary0(a); if (a.type==='assign_task' && a.parts) r.splice(3, 0, 'Parts: '+a.parts.map(x=>`${x.title} ${x.days}d`).join(' → ')); return r;
+}
+function actSummary0(a){
   const pj = a.project_id && projById(a.project_id);
   if (a.type==='assign_task') return [`Assign to ${userName(a.assignee_id)}${needsGm(ui.user,a.assignee_id) ? (isGm(a.assignee_id)?' (the GM can accept, pass on or decline)':' (goes to the GM for approval first)') : ''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'} · ${assignMode(now().mins)==='plan'?'morning plan':'additional work'}`, a.details, pj?'Project: '+pj.name:''];
-  if (a.type==='add_my_task') return [`Add to my ${a._mode==='plan'?'morning plan':'additional work'}${a._mode==='extra'?' (locked once added)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'}`, a.details, pj?'Project: '+pj.name:''];
+  if (a.type==='add_my_task') return [`Add to my ${a._mode==='plan'?'morning plan':'additional work'}${a._mode==='extra'?' (locked once added)':''}`, a.title, `${a.priority} · ${a.days} day${a.days===1?'':'s'}`, a.parts?'Parts: '+a.parts.map(x=>`${x.title} ${x.days}d`).join(' → '):'', a.details, pj?'Project: '+pj.name:''];
+  if (a.type==='mark_part_done') return ['Mark a part done', `“${a._p.title}” of “${a._t.title}”`, 'Note: '+a.note];
   if (a.type==='create_project') return ['Create a new project', a.name, a.description, a.end?'Target end: '+fmtShort(a.end):'', a.member_ids.length?'People: '+a.member_ids.map(userName).join(', '):''];
   if (a.type==='undo') return ['Undo', a._it.desc];
   if (a.type==='edit') return ['Correct', a._it.desc, Object.entries(a._ch).map(([k,v])=>`${k}: ${v}`).join(' · ')];
   return [];
 }
 function aiDo(a){
-  const n = now(), me = ui.user, f = { title:a.title, details:a.details, priority:a.priority, days:a.days, projectId:a.project_id||'' };
+  const n = now(), me = ui.user, f = { title:a.title, details:a.details, priority:a.priority, days:a.days, projectId:a.project_id||'', ...(a.parts?{ parts:a.parts }:{}) };
   const log = (kind, id, desc) => { AST.log.push({ n:AST.log.length+1, kind, id, desc, at:new Date().toISOString() }); };
   if (a.type==='assign_task'){
     if (closedToday(a.assignee_id, n.date)) return `${userName(a.assignee_id)} has already finished their day.`;
@@ -2533,8 +2555,13 @@ function aiDo(a){
   if (a.type==='add_my_task'){
     const ph = phaseFor(n.mins, me); if (closedToday(me, n.date) || (ph!=='plan' && ph!=='extra')) return 'It is too late to add work today.';
     const t = { id:uid(), owner:me, assignedBy:null, category:ph==='plan'?'planned':'extra', priority:a.priority, title:a.title, details:a.details, days:a.days,
-      startDate:n.date, dueDate:addDays(n.date, a.days-1), projectId:a.project_id||'', log:{}, completedOn:null, createdAt:new Date().toISOString() };
+      startDate:n.date, dueDate:addDays(n.date, a.days-1), projectId:a.project_id||'', ...(a.parts?{ parts:a.parts.map(x=>({ id:uid(), title:x.title, days:x.days })) }:{}), log:{}, completedOn:null, createdAt:new Date().toISOString() };
     db.tasks.push(t); log('task', t.id, `added “${a.title}” to your day`); return 'Added to your day.';
+  }
+  if (a.type==='mark_part_done'){
+    const t = db.tasks.find(x=>x.id===a._t.id); if (!t || !canMarkPart(t)) return 'That task can no longer be updated today.';
+    const p = (t.parts||[]).find(x=>x.id===a._p.id); if (!p || p.done) return 'That part is already done.';
+    const next = doPartDone(t, p, a.note); return next ? `Marked “${p.title}” done. Next part: ${next.title}.` : `Marked “${p.title}” done — all parts are finished. Close the task when you are ready.`;
   }
   if (a.type==='create_project'){
     const p = { id:uid(), name:a.name, description:a.description, owner:me, members:[], start:n.date, end:a.end, status:'active', milestones:[], createdAt:new Date().toISOString() };
@@ -2602,8 +2629,8 @@ function pagesFor(id){ return allTabs(id).map(t=>[t[0], t[1].replace(/\s*\(\d+\)
 function aiContext(){
   const me = ui.user, u = getUser(me), n = now(), d = n.date, ph = phaseFor(n.mins, me);
   const people = assignableBy(me).map(p=>`${p.id}: ${p.name}, ${p.title}${needsGm(me,p.id)?' [needs GM approval]':''}${closedToday(p.id,d)?' [finished their day]':''}`);
-  const mine = hasOwnReport(me) ? activeTasks(me, d).map(t=>`- ${t.title} (${t.priority}, ${t.category==='extra'?'additional':'planned'}${t.projectId&&projById(t.projectId)?', project '+projById(t.projectId).name:''}, ${progOn(t,d)}% so far)`) : [];
-  const team = subtree(me).filter(p=>hasOwnReport(p.id)).slice(0,30).map(p=>`- ${p.name}: ${activeTasks(p.id,d).length} open tasks, closure ${closedToday(p.id,d)?'submitted':'not submitted'}${isField(p.id)?(loginOf(p.id,d)?', logged in today':', NOT logged in today'):''}`);
+  const mine = hasOwnReport(me) ? activeTasks(me, d).map(t=>`- [${t.id}] ${t.title} (${t.priority}, ${t.category==='extra'?'additional':'planned'}${t.projectId&&projById(t.projectId)?', project '+projById(t.projectId).name:''}, ${progOn(t,d)}% so far)${(t.parts||[]).length?' | parts: '+partsSummary(t, d):''}`) : [];
+  const team = teamOfMgr(me).slice(0,30).map(p=>`- ${p.name}: ${activeTasks(p.id,d).length} open tasks, closure ${closedToday(p.id,d)?'submitted':'not submitted'}${isField(p.id)?(loginOf(p.id,d)?', logged in today':', NOT logged in today'):''}${activeTasks(p.id,d).filter(t=>(t.parts||[]).length).map(t=>`\n    • ${t.title}: ${partsSummary(t, d)}`).join('')}`);
   const projs = myProjects(me).slice(0,20).map(p=>`${p.id}: ${p.name} — ${projProgress(p,d)}% done, ${p.status||'active'}${p.end?', target '+p.end:''}`);
   const pendRev = reportsOf(me).filter(r=>Object.keys(db.closures).some(k=>k.startsWith(r.id+'|') && !db.closures[k].review)).length;
   const lines = [
@@ -3694,15 +3721,19 @@ function partsHtml(t, d, opts){
           : own && now && canMarkPart(t) ? `<button type="button" class="linkbtn tc-btn" data-act="pd-open" data-id="${t.id}" data-p="${p.id}">✓ Mark this part done</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
 const canMarkPart = t => t.owner===ui.user && !closedToday(ui.user, now().date) && ['plan','extra'].includes(phaseFor(now().mins, ui.user)) && !(t.completedOn && t.completedOn < now().date);
+function doPartDone(t, p, note){
+  const d = now().date; p.done = true; p.doneOn = d; p.note = String(note||'').slice(0,300);
+  const next = partsPlan(t).find(x=>!x.done), na = nowAbs();
+  const msg = `${userName(t.owner)} finished part “${p.title}” of “${t.title}”${next?` — next: ${next.title}`:' — all parts done'}.`;
+  [...new Set([t.assignedBy, ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, msg, na, null));
+  save(); return next || null;
+}
 function markPartDone(f){
   const t = db.tasks.find(x=>x.id===f.dataset.id), err = f.querySelector('.err'), note = f.querySelector('.pd-note').value.trim();
   if (!t || !canMarkPart(t)) { ui.pd = null; render(); return; }
   if (words(note) < 2){ err.hidden = false; err.textContent = 'Write a few words about what was finished.'; return; }
   const p = (t.parts||[]).find(x=>x.id===f.dataset.p); if (!p || p.done) return;
-  const d = now().date; p.done = true; p.doneOn = d; p.note = note.slice(0,300);
-  const pl = partsPlan(t), next = pl.find(x=>!x.done), na = nowAbs();
-  const msg = `${userName(t.owner)} finished part “${p.title}” of “${t.title}”${next?` — next: ${next.title}`:' — all parts done'}.`;
-  [...new Set([t.assignedBy, ...mgrIdsOf(t.owner)])].filter(x=>x && x!==ui.user).forEach(x=>notify(x, msg, na, null));
+  const next = doPartDone(t, p, note);
   ui.pd = null; save(); render();
   if (!next){ ui.tc = t.id; render(); tip('All parts done', 'Close the task now: write what was done and the AI will rate it.'); }
   else tip('Part done', `Next part: ${next.title}.`);
