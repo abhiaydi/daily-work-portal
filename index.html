@@ -960,9 +960,28 @@ function staffView(n){
   return h;
 }
 
+/* Assign work: pick one person from the drop-down and see what they are doing on a day (before giving them more work). */
+function assignSeeCard(n, reps){
+  if (!reps.length) return '';
+  const sv = ui.asgSee = ui.asgSee || { who:'', d:n.date }, who = reps.some(u=>u.id===sv.who) ? sv.who : '', d = sv.d || n.date;
+  let h = `<section class="card"><div class="sec-h"><h2>See what someone is doing</h2>
+    <select id="asgSee" class="sel" aria-label="Choose a person"><option value="">Choose a person…</option>${reps.map(u=>`<option value="${u.id}" ${u.id===who?'selected':''}>${esc(u.name)} — ${esc(u.title)}</option>`).join('')}</select></div>`;
+  if (!who) return h + `<p class="hint" style="margin:0">Choose a person to see their tasks, progress, reports and reviews for any day — useful before you give them more work.</p></section>`;
+  const ts = activeTasks(who, d).sort((x,y)=>RANK[x.priority]-RANK[y.priority]), c = db.closures[who+'|'+d];
+  const wait = db.tasks.filter(t=>t.owner===who && t.awaitRev && !t.completedOn && t.awaitRev < d);
+  const late = ts.filter(t=>d > t.dueDate).length, load = ts.reduce((s,t)=>s + (100 - progOn(t, d)), 0);
+  h += `<div class="row" style="align-items:center;gap:8px;margin:0 0 8px"><button type="button" class="btn sm ghost" data-act="asg-day" data-k="-1" aria-label="Previous day">‹</button><b>${d===n.date?'Today':esc(fmtDate(d))}</b><button type="button" class="btn sm ghost" data-act="asg-day" data-k="1" ${d>=n.date?'disabled':''} aria-label="Next day">›</button>${d!==n.date?`<button type="button" class="linkbtn" data-act="asg-day" data-k="0">Back to today</button>`:''}
+      <button type="button" class="linkbtn" data-act="perf-see" data-id="${who}" style="margin-left:auto">Open full dashboard</button></div>
+    <div class="sum" style="margin-bottom:8px"><div><b>${ts.length}</b>tasks</div><div><b>${ts.filter(t=>progOn(t,d)>=100).length}</b>done</div><div><b style="${late?'color:var(--emg)':''}">${late}</b>overdue</div><div><b>${wait.length}</b>waiting review</div><div><b>${c?'Yes':'No'}</b>closure report</div></div>
+    ${ts.length ? ts.map(t=>teamTaskRow(t, d, false)).join('') : note('No tasks on this day.')}
+    ${wait.length?`<h3 class="sub">Finished — waiting for manager review</h3>${wait.map(t=>`<div class="ci"><span style="flex:1;min-width:0">${esc(t.title)}</span>${priBadge(t.priority)}<span class="b">finished ${esc(fmtShort(t.awaitRev))}</span></div>`).join('')}`:''}
+    ${deletedOf([who], d).map(r=>deletedCard(r)).join('')}`;
+  return h + `</section>`;
+}
+document.addEventListener('change', e=>{ if (e.target.id==='asgSee'){ (ui.asgSee = ui.asgSee || {}).who = e.target.value; ui.asgSee.d = now().date; render(); } });
 function assignView(n){
   const me = ui.user, d = n.date, mode = assignMode(n.mins), reps = assignableBy(me);
-  let h = feasRepliesView() + vaCard() + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
+  let h = feasRepliesView() + vaCard() + assignSeeCard(n, reps) + `<section class="card"><div class="sec-h"><h2>Assign work to my team</h2>${
     mode==='plan'?pill('open','Goes to their morning plan'):pill('open','Goes to their additional work')}</div>`;
   h += `<p class="hint" style="margin-top:0">Before ${CONFIG.planClose}, assigned work goes into the person's morning plan (Important, Moderate or Daily Work). After ${CONFIG.planClose}, including after ${CONFIG.closureOpen}, it is added as additional work (Emergency or Important) until that person finishes their day. The person cannot edit or delete work you assign.</p>`;
   const viaGm = reps.filter(u=>needsGm(me, u.id));
@@ -4979,6 +4998,8 @@ document.addEventListener('click', e=>{
     notify(owner, `CEO review of your closure report (${fmtShort(k.split('|')[1])}): ${msg}`, nowAbs(), null);
   }
   else if (act==='tr-save'){ saveTaskReview(a); return; }
+  else if (act==='asg-day'){ const sv = ui.asgSee = ui.asgSee || {}, k = +a.dataset.k, t0 = now().date; sv.d = k===0 ? t0 : addDays(sv.d||t0, k); if (sv.d > t0) sv.d = t0; render(); return; }
+  else if (act==='perf-see'){ ui.view = 'mydash'; const [ka] = ['month']; ui.myd = { ...(ui.myd||{}), person:a.dataset.id, list:false, kind:(ui.myd&&ui.myd.kind)||ka, anchor:now().date }; render(); window.scrollTo({ top:0 }); return; }
   else if (act==='lw-open'){ ui.lw = a.dataset.id; render(); setTimeout(()=>document.querySelector('.lw-t')?.focus(), 50); return; }
   else if (act==='lw-x'){ ui.lw = null; render(); return; }
   else if (act==='lw-save'){ saveLateWaiver(a); return; }
