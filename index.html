@@ -2485,9 +2485,9 @@ async function camSave(form){
   try{
     let img; try{ img = await loadImg(CAMST.url); }catch(_){ throw new Error('This picture format cannot be read here. Please use a JPG or PNG picture.'); }
     const [full, thumb] = await Promise.all([shrink(img, 2000, 0.85), shrink(img, 480, 0.75)]);
-    const id = uid(), path = `${now().date}/${id}.jpg`, tpath = `thumbs/${id}.jpg`, st = sb.storage.from('photos');
-    const a = await st.upload(path, full.blob, { contentType:'image/jpeg', upsert:false }); if (a.error) throw a.error;
-    const b = await st.upload(tpath, thumb.blob, { contentType:'image/jpeg', upsert:false }); if (b.error) throw b.error;
+    const id = uid(), folder = storeFolder({ owners:[ui.user], task:'Photos' }).replace(/\/No project\/Photos$/, ''), nm = storeName(name+'.jpg', '');
+    const path = await storeUpload('photos', folder, nm, full.blob, 'image/jpeg');
+    const tpath = 'thumbs/'+path; { const b = await sb.storage.from('photos').upload(tpath, thumb.blob, { contentType:'image/jpeg', upsert:true }); if (b.error) throw b.error; }
     db.photos.push({ id, name, note:noteTxt, path, thumb:tpath, by:ui.user, at:new Date().toISOString(), w:full.w, h:full.h, size:full.blob.size });
     save(); camClose(); tip('Photo saved', 'It is now in the Photo library for everyone.');
     if (ui.view==='photos') render();
@@ -2952,7 +2952,7 @@ async function submitClosure(){
     const btn = document.querySelector('#closureCard [data-act="submit-closure"]'), old = btn ? btn.textContent : '';
     if (btn){ btn.disabled = true; btn.textContent = `Uploading ${nFiles} file${nFiles===1?'':'s'}…`; }
     try{
-      for (const x of picked){ const ups = await uploadTaskFiles(x.files); BRIEF_WAIT.push(attachFiles(ups, [x.id]));
+      for (const x of picked){ const tt = db.tasks.find(y=>y.id===x.id), ups = await uploadTaskFiles(x.files, tt ? taskCtx(tt, 'Closure report') : null); BRIEF_WAIT.push(attachFiles(ups, [x.id]));
         const t = db.tasks.find(y=>y.id===x.id); if (t && t.assignedBy && t.assignedBy!==u) notify(t.assignedBy, `${userName(u)} attached ${ups.length} file(s) to “${t.title}” with the closure report.`, nowAbs(), null); }
     }catch(e){ if (btn){ btn.disabled = false; btn.textContent = old; } alert('Upload failed: ' + e.message + '\n\nThe report was not submitted. Please try again.'); return; }
     picked.forEach(x=>{ delete CL_FILES[x.id]; });
@@ -3466,13 +3466,37 @@ document.addEventListener('keydown', e=>{
 /* ===== Task attachments (storage bucket "taskfiles") with an AI brief for the manager ===== */
 const CLIP_IC = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.4 7"/></svg>';
 const TF_MAX = 20*1024*1024;
-async function uploadTaskFiles(files){
-  const out = [];
+/* Storage layout (same rule in the server function "files-organize"):
+   <YYYY-MM>/<YYYY-MM-DD>/<Person>/<Project name | No project>/<Task title>/<label - ><original file name>
+   e.g. 2026-11/2026-11-06/Hardik Panchal/Al Ain substation/Mould drawing/Drawing - on finishing - PO-199.pdf */
+const pathSeg = (x, n) => (String(x||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9 _.,&()+-]+/g,' ').replace(/\s+/g,' ').replace(/^[ .]+|[ .]+$/g,'').slice(0, n||60).trim()) || 'Untitled';
+function storeFolder(ctx){
+  const d = now().date, owners = (ctx && ctx.owners || []).filter(Boolean), by = (ctx && ctx.by) || ui.user;
+  const person = owners.length > 1 ? `${userName(by)} - assigned to ${owners.length} people` : userName(owners[0] || by);
+  const pj = ctx && ctx.projectId && projById(ctx.projectId);
+  return `${d.slice(0,7)}/${d}/${pathSeg(person, 60)}/${pj ? pathSeg(pj.name, 60) : 'No project'}/${pathSeg((ctx && ctx.task) || 'General', 70)}`;
+}
+function storeName(name, label){
+  const m = String(name||'file').match(/^(.*?)(\.[A-Za-z0-9]{1,8})?$/), base = pathSeg(m[1], 90), ext = (m[2]||'').toLowerCase();
+  return { base:(label ? pathSeg(label, 50)+' - ' : '') + base, ext };
+}
+async function storeUpload(bucket, folder, nm, body, type){
+  for (let i = 1; i <= 20; i++){
+    const path = `${folder}/${nm.base}${i>1?` (${i})`:''}${nm.ext}`;
+    const r = await sb.storage.from(bucket).upload(path, body, { contentType:type || 'application/octet-stream', upsert:false });
+    if (!r.error) return path;
+    if (!/exist|duplicate|409/i.test(String(r.error.message||r.error.statusCode||''))) throw r.error;
+  }
+  throw new Error('Too many files with the same name.');
+}
+const taskCtx = (t, label) => ({ owners:[t.owner], by:ui.user, projectId:t.projectId, task:t.title, label });
+async function uploadTaskFiles(files, ctx){
+  const out = [], folder = storeFolder(ctx);
   for (const f of [...files]){
     if (f.size > TF_MAX) throw new Error(`${f.name} is larger than 20 MB.`);
-    const id = uid(), safe = f.name.replace(/[^\w.\- ]+/g,'_').slice(-80), path = `${now().date}/${id}-${safe}`;
-    const r = await sb.storage.from('taskfiles').upload(path, f, { contentType:f.type || 'application/octet-stream', upsert:false });
-    if (r.error) throw new Error(`${f.name}: ${r.error.message}`);
+    const id = uid(); let path;
+    try{ path = await storeUpload('taskfiles', folder, storeName(f.name, ctx && ctx.label), f, f.type); }
+    catch(e){ throw new Error(`${f.name}: ${e.message||e}`); }
     out.push({ rec:{ id, name:f.name, path, mime:f.type||'', size:f.size, by:ui.user, at:new Date().toISOString(), brief:'', briefState:'pending' }, file:f });
   }
   return out;
@@ -3572,7 +3596,7 @@ async function retryFailedBriefs(){
 async function addFilesToTask(id, files){
   const t = db.tasks.find(x=>x.id===id); if (!t || !files.length) return;
   tip('Uploading', `${files.length} file${files.length===1?'':'s'}…`);
-  try{ const ups = await uploadTaskFiles(files); attachFiles(ups, [id]); render();
+  try{ const ups = await uploadTaskFiles(files, taskCtx(t, '')); attachFiles(ups, [id]); render();
     if (t.assignedBy && t.owner===ui.user) notify(t.assignedBy, `${userName(ui.user)} attached ${ups.length} file(s) to “${t.title}”.`, nowAbs(), null);
     else if (t.assignedBy===ui.user) notify(t.owner, `${userName(ui.user)} attached ${ups.length} file(s) to your task “${t.title}”.`, nowAbs(), null); }
   catch(e){ tip('Upload failed', e.message); }
@@ -3803,7 +3827,7 @@ async function closeTaskNow(btn){
   let waits = Promise.resolve();
   if (files.length){
     btn.textContent = `Uploading ${files.length} file${files.length===1?'':'s'}…`;
-    try{ const ups = await uploadTaskFiles(files); waits = attachFiles(ups, [id]); delete CL_FILES[k]; }
+    try{ const ups = await uploadTaskFiles(files, taskCtx(t0, 'Task closing')); waits = attachFiles(ups, [id]); delete CL_FILES[k]; }
     catch(e){ btn.disabled = false; btn.textContent = old; return fail('Upload failed: '+e.message); }
   }
   let t = db.tasks.find(x=>x.id===id); if (!t) return;
@@ -3987,7 +4011,7 @@ async function markPartDone(f){
   const fk = 'pd-'+tid+'-'+pid, files = [...(CL_FILES[fk]||[])];
   if (files.length){ const btn = f.querySelector('button[type=submit]'), err = f.querySelector('.err');
     if (btn){ btn.disabled = true; btn.textContent = 'Uploading files…'; }
-    try{ const ups = await uploadTaskFiles(files); delete CL_FILES[fk];
+    try{ const ups = await uploadTaskFiles(files, taskCtx(t, `${p.title} - on finishing`)); delete CL_FILES[fk];
       t = db.tasks.find(x=>x.id===tid); p = t && (t.parts||[]).find(x=>x.id===pid); if (!t || !p) return;
       attachFiles(ups, [tid], [], { partIdx:t.parts.indexOf(p), stage:'done' }); }
     catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } if (err){ err.hidden = false; err.textContent = 'Upload failed: '+e.message; } return; }
@@ -4925,9 +4949,12 @@ async function addOrSaveTask(form){
   const edit = ui.editing ? db.tasks.find(x=>x.id===ui.editing) : null;
   /* files picked for individual parts: uploaded now, attached to that part once the task exists */
   const pfs = (pr.parts ? (pr.fks||[]) : []).map((fk,i)=>({ fk, i, files:[...(CL_FILES[fk]||[])] })).filter(x=>x.files.length);
+  /* who the files belong to, for the storage folder (person / project / task) */
+  const fOwners = edit ? [edit.owner] : kind==='assign' ? (()=>{ const tg = form.targets ? form.targets.value : '', single = form.target ? form.target.value : ''; return [...new Set((tg ? tg.split(',') : []).concat(single ? [single] : []).filter(Boolean))]; })() : [me];
+  const fctx = label => ({ owners:fOwners, by:me, projectId, task:title, label });
   let pups = [];
   if (pfs.length){ const btn = form.querySelector('.row.end .btn:not(.ghost)'), lbl = btn ? btn.textContent : ''; if (btn){ btn.disabled = true; btn.textContent = 'Uploading files…'; }
-    try{ for (const x of pfs){ pups.push({ i:x.i, ups: await uploadTaskFiles(x.files) }); delete CL_FILES[x.fk]; } }
+    try{ for (const x of pfs){ pups.push({ i:x.i, ups: await uploadTaskFiles(x.files, fctx(`${pr.parts[x.i].title} - at start`)) }); delete CL_FILES[x.fk]; } }
     catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); }
     if (btn){ btn.disabled = false; btn.textContent = lbl; } }
   const attachParts = (tids, rids) => pups.forEach(x=>attachFiles(x.ups, tids, rids, { partIdx:x.i, stage:'start' }));
@@ -4952,7 +4979,7 @@ async function addOrSaveTask(form){
   const fkey = `tf-${kind}-${mode}`, files = [...(CL_FILES[fkey]||[])];
   let ups = [];
   if (files.length){ const btn = form.querySelector('.row.end .btn:not(.ghost)'); if (btn){ btn.disabled = true; btn.textContent = 'Uploading files…'; }
-    try{ ups = await uploadTaskFiles(files); delete CL_FILES[fkey]; }catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); } }
+    try{ ups = await uploadTaskFiles(files, fctx('')); delete CL_FILES[fkey]; }catch(e){ if (btn){ btn.disabled = false; btn.textContent = 'Try again'; } return fail('Upload failed: '+e.message); } }
   const cbAll = (CB_PICK[kind+'-'+mode]||[]).slice(); delete CB_PICK[kind+'-'+mode];
   const f = { title, details, priority, days, projectId, ...(pr.parts?{ parts:pr.parts, partsMode:pr.mode }:{}), ...(kind==='assign' && cbAll.length?{ collab:cbAll }:{}) }, taskIds = [], reqIds = [];
   if (kind==='assign'){

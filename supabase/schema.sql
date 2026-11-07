@@ -215,3 +215,25 @@ insert into storage.buckets (id, name, public) values ('registers','registers', 
 --   url := 'https://<project>.supabase.co/functions/v1/meeting-register',
 --   headers := jsonb_build_object('Content-Type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')),
 --   body := '{"action":"refresh"}'::jsonb, timeout_milliseconds := 60000); $$);
+-- Names and upload times of a bucket's files, for the "files-organize" server function (tidies old file names).
+create or replace function public.storage_object_ages(b text)
+returns table(name text, created_at timestamptz) language sql security definer set search_path = '' as $$
+  select o.name, o.created_at from storage.objects o where o.bucket_id = b;
+$$;
+revoke all on function public.storage_object_ages(text) from public, anon, authenticated;
+grant execute on function public.storage_object_ages(text) to service_role;
+-- Easy look-up in Supabase (Table editor → Views): one row per attached file, with person, date, project and task.
+create or replace view public.file_index with (security_invoker = true) as
+  select (f->>'at')::timestamptz at time zone 'Asia/Dubai' as attached_at,
+         to_char((f->>'at')::timestamptz at time zone 'Asia/Dubai', 'YYYY-MM-DD') as day,
+         p.name as person, coalesce(pr.data->>'name', 'No project') as project, t.data->>'title' as task,
+         case when f ? 'partIdx' then (t.data->'parts'->((f->>'partIdx')::int)->>'title') || case when f->>'stage'='done' then ' (on finishing)' else ' (at start)' end end as part,
+         f->>'name' as file_name, round(coalesce((f->>'size')::numeric,0)/1048576, 2) as size_mb,
+         u.name as uploaded_by, f->>'brief' as ai_brief, 'taskfiles' as bucket, f->>'path' as storage_path
+  from public.records t
+  cross join lateral jsonb_array_elements(coalesce(t.data->'files','[]'::jsonb)) f
+  left join public.people p on p.id = t.data->>'owner'
+  left join public.people u on u.id = f->>'by'
+  left join public.records pr on pr.collection = 'projects' and pr.id = t.data->>'projectId'
+  where t.collection = 'tasks';
+revoke all on public.file_index from anon;
