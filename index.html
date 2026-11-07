@@ -220,6 +220,46 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .part .pn{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft,#f3f4f6);color:var(--muted)}
 .part.cur .pn{background:#1a5ed4;color:#fff}.part.done .pn{background:#0f7a3d;color:#fff}.part.late .pn{background:#b42318;color:#fff}.part .pb{flex:1;min-width:0}.part small{color:var(--muted)}
 .perf-on td{background:var(--soft,#eef2ff)}
+/* Team reports */
+.rv-tools{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:flex-end}
+.rv-tool{display:grid;gap:4px;min-width:0}.rv-tool label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rv-tool .sel{min-width:220px;max-width:100%}.rv-day{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}.rv-day .sel{min-width:0;width:auto;flex:1 1 auto}.rv-day .btn{flex:none}
+.rv-count{margin-left:auto;display:flex;align-items:baseline;gap:6px;color:var(--muted);font-size:14px}.rv-count b{font:700 24px var(--f-display);color:var(--ink)}.rv-count.wait b{color:var(--brand)}
+.rv-av{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font:700 14px var(--f-display)}
+.rv-row-t{display:grid;min-width:0;text-align:left}.rv-row-t b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rv-row-t small{color:var(--muted);font-size:13px}
+.rv-ring{--p:0;flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--rc) calc(var(--p)*1%), var(--line) 0);position:relative}
+.rv-ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--card)}.rv-ring b{position:relative;font:700 13px var(--f-display)}
+.rv-ring.full{--rc:var(--ok)}.rv-ring.mid{--rc:var(--accent)}.rv-ring.low{--rc:var(--brand)}.rv-ring.pend{--rc:var(--line)}
+.rv-list{display:grid;gap:8px}
+.rv-row,.rv-person{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);transition:border-color .15s, box-shadow .15s}
+.rv-row:hover,.rv-person:hover,.rv-row:focus-visible,.rv-person:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.rv-row .rv-row-t{flex:1}.rv-go{color:var(--accent);font-weight:600;font-size:14px;white-space:nowrap}
+.rv-people{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.rv-person{flex-direction:column;align-items:stretch;gap:8px}.rv-person-h{display:flex;align-items:center;gap:10px}.rv-person-h .rv-row-t{flex:1}
+.rv-st{align-self:flex-start;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--lock-bg);color:var(--lock);white-space:nowrap}
+.rv-st.wait{background:var(--brand-soft);color:var(--brand)}.rv-st.ok{background:var(--ok-bg);color:var(--ok)}.rv-st.miss{background:var(--emg-bg);color:var(--emg)}.rv-st.soon{background:var(--accent-soft);color:var(--accent)}
+.rv-ph{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}.rv-ph .rv-st{align-self:center}
+.rv-strip{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.rv-dot{all:unset;cursor:pointer;flex:none;display:grid;justify-items:center;gap:2px;width:44px;padding:6px 0;border-radius:10px;border:1px solid var(--line);background:var(--bg);position:relative}
+.rv-dot small{font-size:11px;color:var(--muted)}.rv-dot b{font:700 15px var(--f-display)}
+.rv-dot::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--line)}
+.rv-dot.ok::after{background:var(--ok)}.rv-dot.wait::after{background:var(--brand)}.rv-dot.miss::after{background:var(--emg)}.rv-dot.soon::after{background:var(--accent)}
+.rv-dot.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);background:var(--accent-soft)}
+.rv-dot:focus-visible{outline:2px solid var(--accent)}
+.rv-tasks{display:grid;gap:12px;margin:4px 0 14px}
+.rv-task{border:1px solid var(--line);border-radius:14px;background:var(--bg);padding:14px 16px;display:grid;gap:10px}
+.rv-task-h{display:flex;gap:14px;align-items:flex-start}.rv-task-t{min-width:0;flex:1}.rv-task-t h4{margin:2px 0 6px;font:600 16px/1.35 var(--f-display)}
+.rv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rv-box{background:var(--card);border-radius:10px;padding:10px 12px;min-width:0}.rv-box p{margin:0;white-space:pre-wrap;line-height:1.5}
+.rv-box.ai{background:var(--accent-soft)}
+.rv-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.aipts{margin:4px 0 6px;padding-left:20px;display:grid;gap:4px;line-height:1.5}.aipts li::marker{color:var(--accent)}.aipts.sm{margin:0;font-size:14px}
+.rv-prog{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 4px;font-size:14px;color:var(--muted)}.rv-prog b{color:var(--ink)}
+.rv-bar{flex:0 0 160px;height:8px;border-radius:999px;background:var(--line);overflow:hidden}.rv-bar span{display:block;height:100%;background:var(--ok);border-radius:inherit}
+.rv-overall{margin-top:14px;border:1px solid var(--accent);border-radius:14px;padding:12px 14px;background:var(--accent-soft)}
+.rv-overall textarea{min-height:120px;font-size:15px;line-height:1.5}
+.rv-sum{margin-top:0}
+@media (max-width:640px){ .rv-grid{grid-template-columns:1fr} .rv-count{margin-left:0} .rv-tool > .sel{min-width:0;width:100%} .rv-tool{width:100%} .rv-ring{width:46px;height:46px} .rv-ring b{font-size:11px} .rv-ph .btn{margin-left:0 !important} }
 .lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
@@ -874,28 +914,20 @@ function reportBlock(owner, d, canReview){
   const emg = ts.filter(t=>t.priority==='Emergency').length;
   const extra = ts.filter(t=>t.category==='extra').length;
   const pend = !c.ai || c.ai.status!=='done';
-  let h = aiResultBlock(owner, d) + `<div class="sum">
-    <div><b>${ts.length}</b>tasks</div><div><b>${done}</b>completed</div>
+  let h = aiResultBlock(owner, d) + `<div class="sum rv-sum">
+    <div><b>${ts.length}</b>tasks</div><div class="on"><b>${done}</b>at 100%</div>
     <div><b>${ts.length-done}</b>carried to next day</div><div><b>${pend?'…':avg+'%'}</b>AI progress</div>
-    <div><b>${extra}</b>additional work</div>${emg?`<div><b>${emg}</b>emergency</div>`:''}
+    ${extra?`<div><b>${extra}</b>additional</div>`:''}${emg?`<div><b>${emg}</b>emergency</div>`:''}
   </div>`;
-  if (ts.length){
-    h += `<div class="tscroll"><table class="rep"><thead><tr><th>Task</th><th>Type</th><th>AI rating</th><th>What the employee wrote</th><th>AI note</th></tr></thead><tbody>
-    ${ts.map(t=>{ const l=t.log[d]||{progress:0}; return `<tr>
-      <td><b>${esc(t.title)}</b><br><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?` <span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${filesHtml(t)}</td>
-      <td>${priBadge(t.priority)} <span class="b">${t.category==='extra'?'Additional':'Planned'}</span></td>
-      <td class="pct ${l.pending?'':l.progress>=100?'full':'part'}">${l.pending?'<span class="hint" style="margin:0">pending</span>':l.progress+'%'}${l.reRate==='done'&&l.aiFirst!==undefined&&l.aiFirst!==l.progress?`<div class="hint" style="margin:0;font-weight:400">was ${l.aiFirst}% before review</div>`:''}</td>
-      <td>${l.justification?esc(l.justification):'—'}</td><td>${l.aiNote?esc(l.aiNote):'—'}</td></tr>${(()=>{ const rv = taskRevHtml(t, d); return rv ? `<tr class="trrow"><td colspan="5">${rv}</td></tr>` : ''; })()}`; }).join('')}
-    </tbody></table></div>`;
-  }
+  if (ts.length) h += `<div class="rv-tasks">${ts.map(t=>repTaskCard(t, d)).join('')}</div>`;
   const dels = deletedOf([owner], d);
   if (dels.length) h += `<h3 class="sub" style="color:var(--emg)">Deleted work on this day (${dels.length})</h3>` + dels.map(r=>deletedCard(r)).join('');
-  if (ts.length){ const rv = ts.filter(t=>taskRevList(t, d).length).length; h += `<div class="hint"><b>Tasks reviewed one by one: ${rv} of ${ts.length}.</b>${canReview && rv<ts.length?' Write a review under each task, then your overall review of the day below.':''}</div>`; }
+  if (ts.length){ const rv = ts.filter(t=>taskRevList(t, d).length).length; h += `<div class="rv-prog"><div class="rv-bar"><span style="width:${Math.round(rv/ts.length*100)}%"></span></div><span><b>${rv} of ${ts.length}</b> tasks reviewed one by one${canReview && rv<ts.length?' — review each task above, then the whole day below':''}</span></div>`; }
   h += `<div class="hint">Submitted ${fmtStamp(c.submittedAt)}${c.editedAt?' · last edited '+fmtStamp(c.editedAt):''} · goes to ${esc(mgrNames(owner))}</div>`;
   if (c.review){
     h += `<div class="review"><div class="meta">Review by ${esc(userName(c.review.by))} · ${fmtStamp(c.review.at)}</div><p>${esc(c.review.text)}</p></div>`;
   } else if (canReview){
-    h += `<div style="margin-top:12px"><label class="f">Your review<textarea rows="3" class="revtxt" data-k="${k}" placeholder="Analysis and feedback on this closure report"></textarea></label>
+    h += `<div class="rv-overall"><label class="f"><span class="rv-lbl" style="font-size:14px">Your overall review of the day</span><textarea rows="5" class="revtxt" data-k="${k}" placeholder="Overall analysis and feedback on ${esc(userName(owner))}'s day"></textarea></label>
       <div class="err" hidden></div>
       <div class="row end"><button class="btn" data-act="save-review" data-k="${k}">Submit review</button></div></div>`;
   } else {
@@ -994,56 +1026,89 @@ function assignView(n){
   return h;
 }
 
+/* AI text as points: new summaries come as "- point" lines; older ones are prose, split into sentences. */
+function aiPoints(text, cls){
+  const raw = String(text||'').trim(); if (!raw) return '';
+  let pts = raw.split(/\n+/).map(x=>x.replace(/^\s*(?:[-•*·▪●]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+  if (pts.length < 2) pts = raw.replace(/\s+/g,' ').split(/(?<=[.!?])\s+(?=[A-Z0-9“"(])/).map(x=>x.trim()).filter(Boolean);
+  return `<ul class="aipts ${cls||''}">${pts.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>`;
+}
+const initialsOf = id => { const p = String(userName(id)||'?').replace(/^(Dr|Mr|Mrs|Ms)\.?\s+/i,'').split(/\s+/).filter(Boolean); return ((p[0]||'?')[0] + ((p[1]||'')[0]||'')).toUpperCase(); };
+const avatar = id => `<span class="rv-av" aria-hidden="true">${esc(initialsOf(id))}</span>`;
+const pctRing = (p, pend) => `<span class="rv-ring ${pend?'pend':p>=100?'full':p>=50?'mid':'low'}" style="--p:${pend?0:p}"><b>${pend?'…':p+'%'}</b></span>`;
+/* One task of a closure report, as a card */
+function repTaskCard(t, d){
+  const l = (t.log||{})[d] || { progress:0 }, pend = !!l.pending;
+  return `<article class="rv-task">
+    <div class="rv-task-h">${pctRing(l.progress||0, pend)}<div class="rv-task-t"><h4>${esc(t.title)}</h4>
+      <div class="badges">${priBadge(t.priority)}<span class="b">${t.category==='extra'?'Additional':'Planned'}</span><span class="b">Day ${diffDays(t.startDate,d)+1} of ${t.days}</span>${t.assignedBy?`<span class="b asg">by ${esc(userName(t.assignedBy))}</span>`:''}${d>t.dueDate?'<span class="b emg">Overdue</span>':''}${l.closedEarly?'<span class="b">Closed during the day</span>':''}</div>
+      ${l.reRate==='done'&&l.aiFirst!==undefined&&l.aiFirst!==l.progress?`<div class="hint" style="margin:2px 0 0">AI first rated ${l.aiFirst}% → ${l.progress}% after manager review</div>`:''}</div></div>
+    ${t.details?`<div class="task-det">${esc(t.details)}</div>`:''}
+    <div class="rv-grid">
+      <div class="rv-box"><div class="rv-lbl">What ${esc(userName(t.owner).split(' ')[0])} wrote</div>${l.justification?`<p>${esc(l.justification)}</p>`:'<p class="hint" style="margin:0">Nothing written.</p>'}</div>
+      <div class="rv-box ai"><div class="rv-lbl">AI note</div>${pend?'<p class="hint" style="margin:0">Being rated…</p>':l.aiNote?aiPoints(l.aiNote,'sm'):'<p class="hint" style="margin:0">—</p>'}</div>
+    </div>
+    ${partsHtml(t, d, { readOnly:true })}${filesHtml(t, false, { noParts:true })}
+    ${taskRevHtml(t, d)}
+  </article>`;
+}
+
+/* ===== Team reports: pick a person from the drop-down (or see everyone), move day by day, review each task and the whole day. ===== */
+function repPeople(me){
+  const reps = reportsOf(me).slice(), seen = new Set(reps.map(u=>u.id));
+  if (isCeo(me)) USERS.filter(u=>needsCeoReview(u.id) && !seen.has(u.id)).forEach(u=>{ reps.push(u); seen.add(u.id); });
+  return reps.sort((a,b)=>a.name.localeCompare(b.name));
+}
+function repStatus(u, d, n){
+  const c = db.closures[u.id+'|'+d], me = ui.user;
+  if (c){ const mine = reportsOf(me).some(x=>x.id===u.id);
+    if (mine && !c.review) return { cls:'wait', txt:'Waiting for your review' };
+    if (isCeo(me) && needsCeoReview(u.id) && !c.ceoReview) return { cls:'wait', txt:'Waiting for your OK' };
+    return { cls:'ok', txt:'Reviewed' }; }
+  const missed = d<n.date || (d===n.date && phaseFor(n.mins,u.id)==='over');
+  if (!activeTasks(u.id, d).length) return { cls:'none', txt:'No work' };
+  return missed ? { cls:'miss', txt:'Missed deadline' } : { cls:'soon', txt:'Not submitted yet' };
+}
 function reviewView(n){
-  const me = ui.user, d = ui.reviewDate || n.date, reps = reportsOf(me), ids = reps.map(r=>r.id);
-  /* 1. Everything waiting for my review, any date, oldest first */
+  const me = ui.user, rs = ui.rep = ui.rep || { who:'all' }, ppl = repPeople(me), ids = ppl.map(u=>u.id);
+  const d = ui.reviewDate || n.date, who = rs.who!=='all' && ids.includes(rs.who) ? rs.who : 'all';
+  const isMineRev = (owner, c) => (reportsOf(me).some(x=>x.id===owner) && !c.review) || (isCeo(me) && needsCeoReview(owner) && !c.ceoReview);
   const pending = Object.keys(db.closures).map(k=>{ const [owner,date] = k.split('|'); return { k, owner, date, c:db.closures[k] }; })
-    .filter(x=>ids.includes(x.owner) && !x.c.review)
-    .sort((a,b)=>a.date.localeCompare(b.date) || userName(a.owner).localeCompare(userName(b.owner)));
-  let h = awaitingMgrSection(me) + `<section class="card"><div class="sec-h"><h2>Waiting for your review</h2>${
-    pending.length?pill('locked',`${pending.length} report${pending.length===1?'':'s'}`):pill('open','All reviewed')}</div>`;
-  if (!pending.length) h += note('No reports waiting. A review box appears here as soon as someone in your team finishes their day and submits their closure report.');
-  pending.forEach(x=>{
-    const u = getUser(x.owner);
-    h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span></div>${reportBlock(x.owner,x.date,true)}</div>`;
-  });
-  h += `</section>`;
-
-  /* 1b. CEO: sales heads' reports, with the GM's review */
-  if (isCeo(me)){
-    const sp = Object.keys(db.closures).map(k=>{ const [owner,date] = k.split('|'); return { k, owner, date, c:db.closures[k] }; })
-      .filter(x=>needsCeoReview(x.owner) && !x.c.ceoReview).sort((a,b)=>a.date.localeCompare(b.date));
-    h += `<section class="card"><div class="sec-h"><h2>Sales heads — your review</h2>${sp.length?pill('locked',`${sp.length} report${sp.length===1?'':'s'}`):pill('open','All reviewed')}</div>
-      <p class="hint" style="margin-top:0">Closure reports from the regional sales heads, with the General Manager's review. Say "Okay" or add your comment; they will see it on their report.</p>`;
-    if (!sp.length) h += note('No sales reports waiting for you.');
-    sp.forEach(x=>{ const u = getUser(x.owner);
-      h += `<div class="crow"><div class="ctitle" style="margin-bottom:8px">${esc(u.name)} <span class="b">${esc(u.title)}</span> <span class="b">${fmtDate(x.date)}</span>${x.c.review?pill('open','GM reviewed'):pill('soon','GM review pending')}</div>${reportBlock(x.owner,x.date,false)}</div>`; });
-    h += `</section>`;
+    .filter(x=>ids.includes(x.owner) && isMineRev(x.owner, x.c)).sort((a,b)=>a.date.localeCompare(b.date) || userName(a.owner).localeCompare(userName(b.owner)));
+  /* toolbar */
+  let h = `<section class="card rv-bar-card"><div class="rv-tools">
+      <div class="rv-tool"><label for="repWho">Team member</label><select id="repWho" class="sel"><option value="all" ${who==='all'?'selected':''}>Everyone (${ppl.length})</option>${ppl.map(u=>{ const w = pending.filter(x=>x.owner===u.id).length; return `<option value="${u.id}" ${who===u.id?'selected':''}>${esc(u.name)}${w?` — ${w} to review`:''}</option>`; }).join('')}</select></div>
+      <div class="rv-tool"><label for="revDate">Day</label><div class="rv-day"><button type="button" class="btn sm ghost" data-act="rep-day" data-k="-1" aria-label="Previous day">‹</button><input type="date" id="revDate" value="${d}" max="${n.date}" class="sel"><button type="button" class="btn sm ghost" data-act="rep-day" data-k="1" ${d>=n.date?'disabled':''} aria-label="Next day">›</button>${d!==n.date?`<button type="button" class="linkbtn" data-act="rep-day" data-k="0">Today</button>`:''}</div></div>
+      <div class="rv-count ${pending.length?'wait':''}"><b>${pending.length}</b>${pending.length===1?'report':'reports'} waiting for you</div>
+    </div></section>`;
+  if (who==='all'){
+    h += awaitingMgrSection(me);
+    if (pending.length) h += `<section class="card"><div class="sec-h"><h2>Waiting for your review</h2>${pill('locked', `${pending.length}`)}</div><p class="hint" style="margin-top:0">Oldest first. Open one to review each task and the whole day.</p>
+      <div class="rv-list">${pending.map(x=>{ const ai = x.c.ai && x.c.ai.status==='done' ? x.c.ai.overall : null, nT = (x.c.tasks||[]).length;
+        return `<button type="button" class="rv-row" data-act="rep-open" data-id="${x.owner}" data-d="${x.date}">${avatar(x.owner)}<span class="rv-row-t"><b>${esc(userName(x.owner))}</b><small>${esc(fmtDate(x.date))} · ${nT} task${nT===1?'':'s'}</small></span>${pctRing(ai??0, ai===null)}<span class="rv-go">Review ›</span></button>`; }).join('')}</div></section>`;
+    h += `<section class="card"><div class="sec-h"><h2>${d===n.date?'Today':esc(fmtDate(d))} — everyone</h2></div>
+      <div class="rv-people">${ppl.map(u=>{ const c = db.closures[u.id+'|'+d], st = repStatus(u, d, n), ts = c ? (c.tasks||[]) : activeTasks(u.id, d).map(t=>t.id);
+        const ai = c && c.ai && c.ai.status==='done' ? c.ai.overall : null;
+        return `<button type="button" class="rv-person" data-act="rep-open" data-id="${u.id}" data-d="${d}">
+          <span class="rv-person-h">${avatar(u.id)}<span class="rv-row-t"><b>${esc(u.name)}</b><small>${esc(u.title)}</small></span>${c?pctRing(ai??0, ai===null):''}</span>
+          <span class="rv-st ${st.cls}">${st.txt}</span><span class="hint" style="margin:0">${ts.length} task${ts.length===1?'':'s'}${c&&c.ai&&c.ai.status==='done'?` · ${(c.tasks||[]).filter(id=>(db.tasks.find(t=>t.id===id)?.log||{})[d]?.progress>=100).length} at 100%`:''}</span></button>`; }).join('') || note('No one reports to you yet.')}</div></section>`;
+    return h;
   }
-
-  /* 1c. AI summaries of each person's day */
-  SUM_REQ = { ids:reps.map(r=>r.id), d };
-  h += `<section class="card"><div class="sec-h"><h2>Team work — AI summary</h2><span class="hint" style="margin:0">${fmtDate(d)}</span></div>
-    ${reps.filter(r=>hasOwnReport(r.id)).map(r=>{ const x = daySumHtml(r.id, d); return `<div class="crow"><div class="ctitle" style="margin-bottom:4px">${esc(r.name)} <span class="b">${esc(r.title)}</span></div>${x || '<div class="hint" style="margin:0">No work entered for this date.</div>'}</div>`; }).join('') || note('No team members.')}</section>`;
-
-  /* 2. History by date */
-  h += `<section class="card"><div class="sec-h"><h2>Team reports by date</h2>
-    <label class="who">Date <input type="date" id="revDate" value="${d}" class="sel"></label></div>
-    <div class="hint" style="margin-top:0">${fmtDate(d)} · ${reps.length} direct report${reps.length===1?'':'s'}</div>`;
-  reps.forEach(u=>{
-    const c = db.closures[u.id+'|'+d];
-    const missed = !c && (d<n.date || (d===n.date && phaseFor(n.mins,u.id)==='over'));
-    h += `<div class="crow"><div class="sec-h"><div class="ctitle">${esc(u.name)} <span class="b">${esc(u.title)}</span></div>${
-      c ? (c.review?pill('open','Reviewed'):pill('locked','Awaiting your review'))
-        : missed ? pill('miss','Missed deadline') : pill('soon','Not submitted yet')}</div>`;
-    if (c && c.review) h += reportBlock(u.id,d,false);
-    else if (c) h += `<div class="hint" style="margin-top:0">Write your review in "Waiting for your review" at the top.</div>`;
-    else if (missed) h += note(`No closure report was submitted by the ${deadlineOf(u.id)} deadline.`, false, true);
-    else h += note(`Not finished yet (deadline ${deadlineOf(u.id)}). The review box appears once ${esc(u.name)} presses Finish my day and submits.`);
-    h += `</div>`;
-  });
-  h += `</section>`;
-  return h;
+  /* one person */
+  const u = getUser(who), c = db.closures[who+'|'+d], st = repStatus(u, d, n), canRev = !!c && reportsOf(me).some(x=>x.id===who) && !c.review;
+  const strip = [...Array(14)].map((_,i)=>addDays(d, i-10)).filter(x=>x<=n.date).map(x=>{ const s2 = repStatus(u, x, n); return `<button type="button" class="rv-dot ${s2.cls} ${x===d?'on':''}" data-act="rep-open" data-id="${who}" data-d="${x}" title="${esc(fmtDate(x))}: ${esc(s2.txt)}"><small>${esc(new Date(x+'T00:00:00Z').toLocaleDateString('en-GB',{ weekday:'short', timeZone:'UTC' }))}</small><b>${+x.slice(8)}</b></button>`; }).join('');
+  h += `<section class="card rv-person-card"><div class="rv-ph">${avatar(who)}<div class="rv-row-t"><h2 style="margin:0">${esc(u.name)}</h2><small>${esc(u.title)} · ${esc(fmtDate(d))}</small></div><span class="rv-st ${st.cls}">${st.txt}</span>
+      <button type="button" class="btn sm ghost" data-act="rep-all" style="margin-left:auto">✕ Back to everyone</button></div>
+    <div class="rv-strip" role="group" aria-label="Pick a day">${strip}</div>`;
+  if (c) h += reportBlock(who, d, canRev);
+  else {
+    const ts = activeTasks(who, d);
+    h += st.cls==='miss' ? note(`No closure report was submitted by the ${deadlineOf(who)} deadline.`, false, true) : note(st.cls==='none' ? 'No work on this day.' : `Not finished yet (deadline ${deadlineOf(who)}). The review appears once ${esc(u.name)} presses Finish my day.`);
+    const x = daySumHtml(who, d); if (x) h += x;
+    if (ts.length) h += `<div class="rv-tasks">${ts.map(t=>teamTaskRow(t, d, false)).join('')}</div>`;
+  }
+  setTimeout(()=>{ const on = document.querySelector('.rv-dot.on'); if (on && on.parentElement) on.parentElement.scrollLeft = on.offsetLeft - on.parentElement.clientWidth/2 + on.clientWidth/2; }, 0);
+  return h + `</section>`;
 }
 
 
@@ -2806,7 +2871,7 @@ function scorePrompt(owner, d, items){
 Guidance: if they clearly say it is finished and describe the result, give 100.
 Parts: some tasks are split into parts, either one after another or at the same time (possibly all on the same day), as stated. Weigh each part by its days; finished parts count fully. A part past its planned end and not done means the task is behind plan: say so in the note.
 Attached files: where a task has files, the AI brief of each file is given. Use them as evidence: a file that shows the claimed result (e.g. the sent quotation, a completed sheet, a signed document) supports the score; if the file contradicts the report or does not show the work, score cautiously and say so. Mention the file in the note when it affected the score. Manager review: where a task has a review by the manager, the manager has checked the actual work. Treat it as stronger evidence than the employee's own words: if the manager says something is missing, wrong or must be redone, lower the score to match; if the manager confirms it is complete or good, the score can rise. Mention the review in the note when it changed the score. Partial work gets a proportional score. Vague or unsupported claims ("worked on it") get a cautious score. Never go below the progress already recorded before today unless the employee says work was undone. Use multiples of 5.
-Reply with ONLY JSON: {"tasks":[{"id":"<task id>","pct":0,"note":"one or two short sentences explaining the score, including what the attached files show if any"}],"summary":"3 to 5 sentences summarising the day for the manager: what was achieved (and what the attached files confirm), what is pending and why, anything needing attention"}
+Reply with ONLY JSON: {"tasks":[{"id":"<task id>","pct":0,"note":"one or two short sentences explaining the score, including what the attached files show if any"}],"summary":"4 to 6 short bullet points, each on its own line starting with '- ', summarising the day for the manager: what was achieved (and what the attached files confirm), what is pending and why, anything needing attention"}
 Employee: ${u.name}, ${u.title}. Date: ${fmtDate(d)}.
 Tasks:
 ${items.map(({t,work})=>`[${t.id}] ${t.title}${t.details?' — '+t.details:''} | ${t.priority}, ${t.category==='extra'?'additional work':'planned'} | day ${diffDays(t.startDate,d)+1} of ${t.days} | progress before today: ${prevProgress(t,d)}%${t.assignedBy?' | assigned by '+userName(t.assignedBy):''}
@@ -2933,16 +2998,16 @@ function closureForm(tasks, d, prev){
 function aiResultBlock(owner, d){
   const c = db.closures[owner+'|'+d]; if (!c) return '';
   if (!c.ai || c.ai.status!=='done') return `<div class="ai-sum pend"><b>AI rating pending</b><span>The AI is rating this report. If the AI service is busy, it is rated automatically within a few minutes.</span></div>`;
-  return `<div class="ai-sum"><div class="ai-sum-h"><b>AI summary</b>${c.ai.overall!==null&&c.ai.overall!==undefined?`<span class="ai-pct">${c.ai.overall}% overall</span>`:''}${c.ai.overallFirst!==undefined&&c.ai.overallFirst!==c.ai.overall?`<span class="hint" style="margin:0 0 0 8px">was ${c.ai.overallFirst}% before manager reviews</span>`:''}</div><p>${esc(c.ai.summary)}</p>
+  return `<div class="ai-sum"><div class="ai-sum-h"><b>AI summary</b>${c.ai.overall!==null&&c.ai.overall!==undefined?`<span class="ai-pct">${c.ai.overall}% overall</span>`:''}${c.ai.overallFirst!==undefined&&c.ai.overallFirst!==c.ai.overall?`<span class="hint" style="margin:0 0 0 8px">was ${c.ai.overallFirst}% before manager reviews</span>`:''}</div>${aiPoints(c.ai.summary)}
     <div class="hint" style="margin:0">Rated by AI ${fmtStamp(c.ai.at)}${c.edits?` · edited ${c.edits} time${c.edits===1?'':'s'}`:''}. Percentages are set by the AI only.</div></div>`;
 }
 /* Day / morning-plan summaries (collection "aisum", id "<person>|<date>") */
 const planHash = (id, d) => activeTasks(id, d).map(t=>t.id+':'+t.title+':'+t.priority).join('|');
 function daySumHtml(id, d){
   const c = db.closures[id+'|'+d];
-  if (c && c.ai && c.ai.status==='done') return `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div><p>${esc(c.ai.summary)}</p></div>`;
+  if (c && c.ai && c.ai.status==='done') return `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div>${aiPoints(c.ai.summary)}</div>`;
   const s = db.aisum.find(x=>x.id===id+'|'+d);
-  if (s && s.text) return `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI plan summary</b>${s.hash!==planHash(id,d)?'<span class="hint" style="margin:0">updating…</span>':''}</div><p>${esc(s.text)}</p></div>`;
+  if (s && s.text) return `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI plan summary</b>${s.hash!==planHash(id,d)?'<span class="hint" style="margin:0">updating…</span>':''}</div>${aiPoints(s.text)}</div>`;
   if (!activeTasks(id, d).length) return '';
   return d===now().date && assignMode(now().mins)==='plan' ? `<div class="hint">Plans are summarised by AI after ${CONFIG.planClose}.</div>` : `<div class="hint">AI summary on its way…</div>`;
 }
@@ -2956,7 +3021,7 @@ async function ensureDaySummaries(ids, d){
   if (!stale.length) return;
   SUM_BUSY = true; stale.forEach(id=>SUM_TRY[id+'|'+d] = t);
   try{
-    const txt = await aiAsk(`Summarise each person's work plan for ${fmtDate(d)} for their manager, in 2 to 3 plain sentences each: main focus, anything urgent or emergency, carried-over or overdue work. Do not invent anything.
+    const txt = await aiAsk(`Summarise each person's work plan for ${fmtDate(d)} for their manager, as 2 to 4 short points each (one per line, each starting with '- '): main focus, anything urgent or emergency, carried-over or overdue work. Do not invent anything.
 Reply with ONLY JSON: {"people":[{"id":"...","summary":"..."}]}
 ${stale.map(id=>{ const u = getUser(id); return `[${id}] ${u.name}, ${u.title}:\n` + activeTasks(id, d).map(x=>`- ${x.title}${x.details?' ('+x.details.slice(0,150)+')':''} | ${x.priority} | ${x.category==='extra'?'additional':'planned'}${x.startDate<d?' | carried from '+x.startDate+', '+prevProgress(x,d)+'% done':''}${d>x.dueDate?' | OVERDUE':''}${x.assignedBy?' | from '+userName(x.assignedBy):''}`).join('\n'); }).join('\n\n')}`);
     const j = parseJSONLoose(txt);
@@ -3837,7 +3902,7 @@ function teamTodayView(n){
       if (!ts.length && !c && !deletedOf([u.id], day).length) continue; any = true;
       const i = personInfo(u, day, n);
       h += `<section class="card"><div class="sec-h"><h2 style="font-size:17px">${esc(fmtDate(day))}</h2>${pill(i.cls, i.st)}</div>
-        ${c && c.ai && c.ai.status==='done' ? `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div><p>${esc(c.ai.summary)}</p></div>` : ''}
+        ${c && c.ai && c.ai.status==='done' ? `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div>${aiPoints(c.ai.summary)}</div>` : ''}
         ${c && c.review ? `<div class="review"><div class="meta">Manager's review</div><p>${esc(c.review.text||c.review.comment||'Reviewed')}</p></div>` : ''}
         ${ts.map(t=>dayLogRow(t, day)).join('') || note('No tasks.')}${deletedOf([u.id], day).map(r=>deletedCard(r)).join('')}</section>`;
     }
@@ -3848,7 +3913,7 @@ function teamTodayView(n){
     if (idle.length) h += `<section class="card"><div class="hint" style="margin:0"><b>No tasks ${isToday?'yet today':'on this day'}:</b> ${idle.map(u=>esc(u.name)).join(', ')}</div></section>`;
     withWork.forEach(u=>{ const i = personInfo(u, d, n), c = db.closures[u.id+'|'+d];
       h += `<section class="card tt-person"><div class="sec-h"><h2 style="font-size:17px">${onDot(u.id)}${esc(u.name)} <small class="hint" style="margin:0">${esc(u.title)}</small></h2>${pill(i.cls, i.st)}</div>
-        ${c && c.ai && c.ai.status==='done' ? `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div><p>${esc(c.ai.summary)}</p></div>` : ''}
+        ${c && c.ai && c.ai.status==='done' ? `<div class="ai-sum sm"><div class="ai-sum-h"><b>AI day summary</b><span class="ai-pct">${c.ai.overall??'—'}%</span></div>${aiPoints(c.ai.summary)}</div>` : ''}
         <div class="row" style="margin:-2px 0 6px"><button type="button" class="btn sm ghost" data-act="tt-hist" data-id="${u.id}">Day by day — last 14 days</button></div>
         ${i.act.map(t=>isToday ? teamTaskRow(t, d, false) : dayLogRow(t, d)).join('')}</section>`; });
   } else {
@@ -4998,6 +5063,9 @@ document.addEventListener('click', e=>{
     notify(owner, `CEO review of your closure report (${fmtShort(k.split('|')[1])}): ${msg}`, nowAbs(), null);
   }
   else if (act==='tr-save'){ saveTaskReview(a); return; }
+  else if (act==='rep-open'){ (ui.rep = ui.rep || {}).who = a.dataset.id; ui.reviewDate = a.dataset.d; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
+  else if (act==='rep-all'){ (ui.rep = ui.rep || {}).who = 'all'; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
+  else if (act==='rep-day'){ const t0 = now().date, k = +a.dataset.k, cur = ui.reviewDate || t0; ui.reviewDate = k===0 ? t0 : addDays(cur, k); if (ui.reviewDate > t0) ui.reviewDate = t0; render(); return; }
   else if (act==='asg-day'){ const sv = ui.asgSee = ui.asgSee || {}, k = +a.dataset.k, t0 = now().date; sv.d = k===0 ? t0 : addDays(sv.d||t0, k); if (sv.d > t0) sv.d = t0; render(); return; }
   else if (act==='perf-see'){ ui.view = 'mydash'; const [ka] = ['month']; ui.myd = { ...(ui.myd||{}), person:a.dataset.id, list:false, kind:(ui.myd&&ui.myd.kind)||ka, anchor:now().date }; render(); window.scrollTo({ top:0 }); return; }
   else if (act==='lw-open'){ ui.lw = a.dataset.id; render(); setTimeout(()=>document.querySelector('.lw-t')?.focus(), 50); return; }
@@ -5088,6 +5156,7 @@ document.addEventListener('change', e=>{
   const id = e.target.id;
   if (id==='userSel'){ ui.user = e.target.value; ui.authed = true; ui.view = tabsFor(ui.user)[0][0]; }
   else if (id==='revDate' && e.target.value){ ui.reviewDate = e.target.value; }
+  else if (id==='repWho'){ (ui.rep = ui.rep || {}).who = e.target.value; render(); window.scrollTo({ top:0 }); }
   else if (id==='dDate' && e.target.value){ (ui.dash||(ui.dash={team:'all',status:'all'})).date = e.target.value; }
   else if (id==='dTeam'){ ui.dash.team = e.target.value; }
   else if (id==='dStatus'){ ui.dash.status = e.target.value; }
