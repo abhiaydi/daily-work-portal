@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
   if (!ok) return json({ error: "not allowed" }, 401);
   const body = await req.json().catch(() => ({}));
   const limit = Math.min(200, Number(body.limit) || 60);
+  const minAge = Math.max(0, Number(body.minAgeHours ?? 6)) * 3600e3;   // how long an old copy is kept after the move
 
   const { data: ppl } = await a.from("people").select("id,name");
   const pname = new Map((ppl || []).map((p: Rec) => [p.id, p.name]));
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
     for (const b of ["taskfiles", "photos"]) {
       const { data: meta } = await a.rpc("storage_object_ages", { b });
       const stale = (meta || []).map((m: Rec) => m.name as string).filter((nm: string) =>
-        !used.has(nm) && movedOld.has(nm) && Date.now() - (movedOld.get(nm) || Date.now()) > 6 * 3600e3);
+        !used.has(nm) && movedOld.has(nm) && Date.now() - (movedOld.get(nm) || Date.now()) >= minAge);
       for (let i = 0; i < stale.length; i += 100) {
         const { error: re } = await a.storage.from(b).remove(stale.slice(i, i + 100));
         if (!re) removed.push(...stale.slice(i, i + 100));
