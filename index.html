@@ -260,6 +260,10 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .rv-overall textarea{min-height:120px;font-size:15px;line-height:1.5}
 .rv-sum{margin-top:0}
 @media (max-width:640px){ .rv-grid{grid-template-columns:1fr} .rv-count{margin-left:0} .rv-tool > .sel{min-width:0;width:100%} .rv-tool{width:100%} .rv-ring{width:46px;height:46px} .rv-ring b{font-size:11px} .rv-ph .btn{margin-left:0 !important} }
+.mf-tools{display:flex;flex-wrap:wrap;gap:8px}.mf-tools input{flex:1 1 220px;min-width:0}.mf-tools select{flex:0 1 auto}
+.mf-day{margin-bottom:10px}.mf-row{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);margin:6px 0}
+.mf-row.removed,.mf-row.deleted{border-style:dashed}.mf-main{flex:1;min-width:0;display:grid;gap:4px}.mf-name{font-weight:600;text-align:left;word-break:break-word}
+.mf-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}.mf-st{font-size:12px;color:var(--brand)}.mf-brief summary{cursor:pointer;font-size:13px;color:var(--accent)}
 .lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
@@ -3559,18 +3563,17 @@ async function getTaskFile(path, name, btn){
   catch(e){ tip('Could not open the file', e.message || 'Check the internet connection.'); }
   btn.disabled = false;
 }
-/* The person who attached a file (or the CEO/GM) can remove it: from storage and from every task/request that carries it. */
+/* The person who attached a file (or the CEO/GM) can remove it from every task/request that carries it. The file stays in storage as a backup (My files). */
 async function removeTaskFile(fid, path, name, btn){
   const holders = db.tasks.concat(db.requests).filter(x=>(x.files||[]).some(f=>f.id===fid));
   const f = holders.length ? holders[0].files.find(x=>x.id===fid) : null;
   if (!f || !(f.by===ui.user || isMgmt(ui.user))) return;
   const n = db.tasks.filter(x=>(x.files||[]).some(y=>y.id===fid)).length;
-  if (!confirm(`Remove “${name}”?${n>1?` It is attached to ${n} people's copies of this task and will be removed from all of them.`:''} This cannot be undone.`)) return;
-  btn.disabled = true;
-  const r = await sb.storage.from('taskfiles').remove([path]);
-  if (r.error){ btn.disabled = false; tip('Could not remove', r.error.message); return; }
-  db.tasks.concat(db.requests).forEach(x=>{ if ((x.files||[]).some(y=>y.id===fid)) x.files = x.files.filter(y=>y.id!==fid); });
-  save(); render(); tip('Removed', `“${name}” was removed.`);
+  if (!confirm(`Remove “${name}” from the task?${n>1?` It is attached to ${n} people's copies of this task and will be removed from all of them.`:''} A backup copy stays in My files.`)) return;
+  const at = new Date().toISOString();
+  /* the file itself is kept in storage as a backup: it moves to the task's removedFiles and stays in My files */
+  db.tasks.concat(db.requests).forEach(x=>{ const g = (x.files||[]).find(y=>y.id===fid); if (g){ x.files = x.files.filter(y=>y.id!==fid); x.removedFiles = (x.removedFiles||[]).concat({ ...g, removedBy:ui.user, removedAt:at }); } });
+  save(); render(); tip('Removed', `“${name}” was removed from the task. A backup stays in My files.`);
 }
 /* Briefs that failed (e.g. the AI was busy) are retried by the uploader's open portal, at most every 10 minutes per file. */
 const BRIEF_TRY = {}; let BRIEF_BUSY = false;
@@ -3677,21 +3680,7 @@ function archiveView(n){
 }
 async function zipDay(d, btn){
   const files = allAttachments().filter(f=>uaeDay(f.at)===d); if (!files.length) return;
-  const old = btn.textContent; btn.disabled = true;
-  try{
-    const JZ = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip'), zip = new JZ(), used = {};
-    for (let i=0; i<files.length; i++){
-      const f = files[i]; btn.textContent = `Preparing ${i+1} of ${files.length}…`;
-      const { data, error } = await sb.storage.from('taskfiles').createSignedUrl(f.path, 300); if (error) throw error;
-      const blob = await (await fetch(data.signedUrl)).blob();
-      const folder = (userName(f.owners[0]||f.by)||'Staff').replace(/[\\/:*?"<>|]+/g,' ').trim();
-      let nm = `${folder}/${uaeHM(f.at).replace(':','')} ${f.name}`; while (used[nm]) nm = nm.replace(/(\.[^.]+)?$/, ' (2)$1'); used[nm] = 1;
-      zip.file(nm, blob);
-    }
-    const out = await zip.generateAsync({ type:'blob' }), url = URL.createObjectURL(out), a = document.createElement('a');
-    a.href = url; a.download = `Attachments ${d}.zip`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
-  }catch(e){ tip('Could not make the ZIP', e.message || 'Check the internet connection.'); }
-  btn.disabled = false; btn.textContent = old;
+  zipFiles(files.map(f=>({ path:f.path, zipPath:`${(userName(f.owners[0]||f.by)||'Staff').replace(/[\\/:*?"<>|]+/g,' ').trim()}/${uaeHM(f.at).replace(':','')} ${f.name}` })), `Attachments ${d}.zip`, btn);
 }
 document.addEventListener('change', e=>{ if (e.target.id==='arcDate'){ ui.arcDate = e.target.value; render(); } });
 
@@ -4355,6 +4344,72 @@ function myAwaitingSection(n){
     <p class="hint" style="margin-top:0">The AI rated these 100%. They close once your manager reviews them. If the review finds something missing, the task comes back to your list.</p>
     ${ts.map(t=>`<div class="ci"><span style="flex:1;min-width:0">${esc(t.title)}</span>${priBadge(t.priority)}<span class="b">finished ${esc(fmtShort(t.awaitRev))}</span>${t.awaitRev>t.dueDate?`<span class="b emg">late</span>`:''}</div>`).join('')}</section>`;
 }
+/* ===== My files: everyone's own backup of what they attached (and what is attached to their tasks), kept for good.
+   Files removed from a task or on a deleted task stay here too. ===== */
+function myFileList(me){
+  const by = new Map(), put = (f, t, status, extra) => { if (!f || !f.path) return;
+    const x = by.get(f.id) || { f, tasks:[], status, owner:t && t.owner, projectId:t && t.projectId, part:'', ...(extra||{}) };
+    if (t && t.title && !x.tasks.includes(t.title)) x.tasks.push(t.title);
+    const pp = t && t.parts ? filePart(t, f) : null; if (pp && !x.part) x.part = `${pp.title} · ${f.stage==='done'?'on finishing':'at start'}`;
+    if (status==='active') x.status = 'active'; by.set(f.id, x); };
+  const mine = (f, t) => f.by===me || (t && (t.owner===me || isCollab(t, me)));
+  db.tasks.forEach(t=>{ (t.files||[]).forEach(f=>{ if (mine(f, t)) put(f, t, 'active'); });
+    (t.removedFiles||[]).forEach(f=>{ if (mine(f, t)) put(f, t, 'removed', { removedBy:f.removedBy, removedAt:f.removedAt }); }); });
+  (db.requests||[]).forEach(r=>(r.files||[]).forEach(f=>{ if (f.by===me) put(f, { title:r.title || (r.f&&r.f.title), owner:r.to }, 'active'); }));
+  (db.deleted||[]).forEach(r=>{ const t = r.task || {}; (t.files||[]).concat(t.removedFiles||[]).forEach(f=>{ if (mine(f, t)) put(f, t, 'deleted', { deletedBy:r.by, deletedAt:r.at }); }); });
+  return [...by.values()].sort((a,b)=>String(b.f.at).localeCompare(String(a.f.at)));
+}
+const MF_ST = { active:'', removed:'Removed from the task — kept here as a backup', deleted:'Task was deleted — kept here as a backup' };
+function myFilesView(n){
+  const me = ui.user, all = myFileList(me), mf = ui.mf = ui.mf || { q:'', month:'', who:'all' };
+  const months = [...new Set(all.map(x=>uaeDay(x.f.at).slice(0,7)))].sort().reverse();
+  const q = (mf.q||'').trim().toLowerCase();
+  const list = all.filter(x=>(!mf.month || uaeDay(x.f.at).startsWith(mf.month)) && (mf.who==='all' || (mf.who==='me' ? x.f.by===me : x.f.by!==me))
+    && (!q || [x.f.name, ...x.tasks, x.part, x.f.brief, x.projectId&&projById(x.projectId)?projById(x.projectId).name:''].join(' ').toLowerCase().includes(q)));
+  const mlabel = m => new Date(m+'-01T00:00:00Z').toLocaleDateString('en-GB',{ month:'long', year:'numeric', timeZone:'UTC' });
+  let h = `<section class="card"><div class="sec-h"><h2>My files</h2>${list.length?`<button type="button" class="btn sm" data-act="mf-zip">Download ${list.length===all.length?'all':'these'} (${list.length}) as ZIP</button>`:''}</div>
+    <p class="hint" style="margin-top:0">Every file you attached, and every file attached to your tasks, is kept here for good — even if it was later removed from the task or the task was deleted. Search or pick a month, then download.</p>
+    <div class="mf-tools"><input type="search" id="mfQ" class="sel" placeholder="Search file, task, project…" value="${esc(mf.q||'')}" aria-label="Search files">
+      <select id="mfMonth" class="sel" aria-label="Month"><option value="">All months</option>${months.map(m=>`<option value="${m}" ${mf.month===m?'selected':''}>${esc(mlabel(m))}</option>`).join('')}</select>
+      <select id="mfWho" class="sel" aria-label="Whose files"><option value="all" ${mf.who==='all'?'selected':''}>All my files</option><option value="me" ${mf.who==='me'?'selected':''}>Attached by me</option><option value="others" ${mf.who==='others'?'selected':''}>Attached by others to my tasks</option></select></div></section>`;
+  if (!all.length) return h + `<section class="card">${note('No files yet. Files you attach to tasks, parts or closure reports will appear here.')}</section>`;
+  if (!list.length) return h + `<section class="card">${note('No files match. Clear the search or choose another month.')}</section>`;
+  const days = new Map(); list.forEach(x=>{ const d = uaeDay(x.f.at); if (!days.has(d)) days.set(d, []); days.get(d).push(x); });
+  h += `<section class="card">${[...days].map(([d, xs])=>`<div class="mf-day"><h3 class="sub">${esc(fmtDate(d))} <span class="hint" style="margin:0">· ${xs.length} file${xs.length===1?'':'s'}</span></h3>
+    ${xs.map(x=>{ const f = x.f, pj = x.projectId && projById(x.projectId);
+      return `<div class="mf-row ${x.status}"><div class="mf-main"><button type="button" class="linkbtn mf-name" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">${CLIP_IC}${esc(f.name)}</button>
+        <div class="mf-meta">${x.tasks.length?`<span>Task: <b>${esc(x.tasks.join(', '))}</b></span>`:''}${pj?`<span class="b proj">${esc(pj.name)}</span>`:''}${x.part?`<span class="b">${esc(x.part)}</span>`:''}${x.owner && x.owner!==me?`<span class="b">${esc(userName(x.owner))}'s task</span>`:''}${f.by!==me?`<span class="b asg">attached by ${esc(userName(f.by))}</span>`:''}<span class="hint" style="margin:0">${esc(uaeHM(f.at))}${f.size?' · '+(f.size>1048576?(f.size/1048576).toFixed(1)+' MB':Math.max(1,Math.round(f.size/1024))+' KB'):''}</span></div>
+        ${MF_ST[x.status]?`<div class="mf-st">${esc(MF_ST[x.status])}</div>`:''}
+        ${f.brief?`<details class="mf-brief"><summary>AI brief</summary>${aiPoints(f.brief,'sm')}</details>`:''}</div>
+        <button type="button" class="btn sm ghost" data-act="tf-get" data-path="${esc(f.path)}" data-name="${esc(f.name)}">Download</button></div>`; }).join('')}</div>`).join('')}</section>`;
+  return h;
+}
+async function zipFiles(files, zipName, btn){
+  const old = btn.textContent; btn.disabled = true;
+  try{
+    const JZ = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip'), zip = new JZ(), used = {};
+    for (let i=0; i<files.length; i++){
+      const x = files[i]; btn.textContent = `Preparing ${i+1} of ${files.length}…`;
+      const { data, error } = await sb.storage.from('taskfiles').createSignedUrl(x.path, 300); if (error) throw error;
+      const blob = await (await fetch(data.signedUrl)).blob();
+      let nm = x.zipPath; while (used[nm]) nm = nm.replace(/(\.[^.\/]+)?$/, ' (2)$1'); used[nm] = 1;
+      zip.file(nm, blob);
+    }
+    const out = await zip.generateAsync({ type:'blob' }), url = URL.createObjectURL(out), a = document.createElement('a');
+    a.href = url; a.download = zipName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  }catch(e){ tip('Could not make the ZIP', e.message || 'Check the internet connection.'); }
+  btn.disabled = false; btn.textContent = old;
+}
+function myFilesZip(btn){
+  const me = ui.user, mf = ui.mf || {}, all = myFileList(me), q = (mf.q||'').trim().toLowerCase();
+  const list = all.filter(x=>(!mf.month || uaeDay(x.f.at).startsWith(mf.month)) && (mf.who==='all' || !mf.who || (mf.who==='me' ? x.f.by===me : x.f.by!==me)) && (!q || [x.f.name, ...x.tasks, x.part, x.f.brief].join(' ').toLowerCase().includes(q)));
+  const clean = s => String(s||'').replace(/[\\/:*?"<>|]+/g,' ').trim().slice(0,70) || 'Task';
+  zipFiles(list.map(x=>({ path:x.f.path, zipPath:`${uaeDay(x.f.at)}/${clean(x.tasks[0])}/${(x.part?clean(x.part)+' - ':'')}${x.f.name}` })), `My files ${userName(me)}${mf.month?' '+mf.month:''}.zip`, btn);
+}
+document.addEventListener('change', e=>{ const id = e.target.id; if (id!=='mfMonth' && id!=='mfWho') return; const mf = ui.mf = ui.mf || {}; if (id==='mfMonth') mf.month = e.target.value; else mf.who = e.target.value; render(); });
+let MF_T = null;
+document.addEventListener('input', e=>{ if (e.target.id!=='mfQ') return; const v = e.target.value; clearTimeout(MF_T); MF_T = setTimeout(()=>{ (ui.mf = ui.mf || {}).q = v; render(); const i = document.getElementById('mfQ'); if (i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 300); });
+
 /* ===== Deleting tasks: the work is not lost. A full record (schedule, parts, colleagues, progress, files, comments, who deleted it, when and why)
    is kept in "deleted" and shown on the dashboard, in the person's report, in My team, and on My day of everyone involved. ===== */
 /* Once work has been submitted (reported in a closure report or closed) or a manager has reviewed it, only the person's manager or the admin (GM/CEO) can delete it. */
@@ -4682,7 +4737,7 @@ function allTabs(id){
   if (teamOfMgr(id).length) t.push(['team','My team']);
   if (!hasOwnReport(id) && (db.tasks.some(x=>isCollab(x, id) && (!x.completedOn || x.completedOn>=now().date)) || db.tasks.some(x=>(x.cr||[]).some(c=>(c.who===id && c.status==='pending') || (['declined','escalated'].includes(c.status) && crMgrs(c.who).includes(id)))))) t.push(['collab','Working with colleagues']);
   if (chartTabFor(id)) t.push(['mchart','Meeting chart']);
-  t.push(['proj','Projects']); t.push(['photos','Photo library']);
+  t.push(['proj','Projects']); t.push(['photos','Photo library']); t.push(['myfiles','My files']);
   if (isGm(id)){ const c = gmPendingCount(id); t.push(['appr', c?`Approvals (${c})`:'Approvals']); }
   if (reportsOf(id).length || indirectOf(id).length){ const ids = reportsOf(id).map(r=>r.id); const nP = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length
       + (getUser(id).role==='CEO' ? Object.keys(db.closures).filter(k=>needsCeoReview(k.split('|')[0]) && !db.closures[k].ceoReview).length : 0);
@@ -4710,7 +4765,7 @@ function render(){
   if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
-    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
+    : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='myfiles' ? myFilesView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
     : ui.view==='meet' ? meetingsView(n) : ui.view==='mrev' ? meetingReviewView() : ui.view==='mchart' ? meetingChartView() : ui.view==='team' ? teamTodayView(n) : ui.view==='collab' ? (crBox(n) + (collabSection(n) || `<section class="card">${note('No shared tasks right now.')}</section>`) + myDeleted(n)) : ui.view==='alerts' ? alertsView() : ui.view==='account' ? accountView() : ui.view==='logins' ? loginsView() : reviewView(n);
   tabsEl.innerHTML = tabs.map(t=>`<button data-act="view" data-v="${t[0]}" class="${t[0]===ui.view?'on':''}">${t[1]}</button>`).join('');
   const unread = db.notifications.filter(x=>x.owner===ui.user && !x.read).length, me = getUser(ui.user);
