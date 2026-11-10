@@ -273,6 +273,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .qchev{color:var(--muted);font-size:12px}.qline .task{margin:0 10px 10px}
 .qopt{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 12px}.qopt summary{cursor:pointer}.crow.opt{margin-top:10px}
 .mch tr.mdeleted td{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--emg)}.mch tr.mdeleted td:last-child,.mch tr.mdeleted td:nth-last-child(2){text-decoration:none}
+.mdel-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--emg-bg)}
 .lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
@@ -1699,7 +1700,9 @@ function meetingCard(m, na, mode, reviewer, mgmt){
   if (mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
   if (m.status==='deleted') return h + `<div class="review del-why"><div class="meta"><b>Deleted</b> by ${esc(userName(m.deletedBy))} on ${esc(fmtAbs(m.deletedAt))}${m.prevStatus?` · it was ${esc(MDEL_WAS[m.prevStatus]||m.prevStatus)}`:''}</div><p>${esc(m.deleteReason||'')}</p></div></div>`;
   if (ui.mdel===m.id) h += meetingDeleteForm(m);
-  else if (canDeleteMeeting(m, ui.user)) h += `<div class="row" style="margin-top:6px"><button type="button" class="linkbtn tf-del" style="margin-left:0" data-act="mdel-open" data-id="${m.id}">Delete meeting…</button></div>`;
+  else if (canDeleteMeeting(m, ui.user)) h += mode==='input'
+    ? `<div class="mdel-row"><span class="hint" style="margin:0">Meeting didn't happen, or was entered by mistake?</span><button type="button" class="btn sm ghost danger" data-act="mdel-open" data-id="${m.id}">Delete this meeting</button></div>`
+    : `<div class="row" style="margin-top:6px"><button type="button" class="linkbtn tf-del" style="margin-left:0" data-act="mdel-open" data-id="${m.id}">Delete meeting…</button></div>`;
   if (m.status==='cancelled'){
     const nb = m.rebookedTo && db.meetings.find(x=>x.id===m.rebookedTo);
     h += `<div class="review"><div class="meta">Cancelled ${m.cancelledAt?'on '+fmtAbs(m.cancelledAt):''}</div><p>${esc(m.cancelReason||'')}</p>
