@@ -15,6 +15,7 @@ const durTxt = (m: Rec) => m.allDay ? "Whole day" : (m.dur || 60) < 60 ? `${m.du
 const MGMT = ["CEO", "General Manager"];
 
 function statusTxt(m: Rec, nowMs: number) {
+  if (m.status === "deleted") return "Deleted";
   if (m.status === "cancelled") return "Cancelled";
   if (m.status === "approved") return m.outcome === "postponed" ? "Postponed (approved)" : "Held (approved)";
   if (m.status === "review") return m.outcome === "postponed" ? "Postponed (awaiting approval)" : "Held (awaiting approval)";
@@ -45,6 +46,7 @@ function build(meetings: Rec[], people: Rec[], full: boolean, locs: Record<strin
       "Approvals / sent back": appr,
       "Rescheduled": resched,
       "Cancelled on": absTxt(m.cancelledAt), "Cancellation reason": m.cancelReason || "",
+      "Deleted on": absTxt(m.deletedAt), "Deleted by": m.deletedBy ? name(m.deletedBy) : "", "Deletion reason": m.deleteReason || "",
       "Follow-up": m.status === "cancelled" ? (m.rebookedTo ? "New meeting booked" : "Not rebooked yet") : "",
       "Scheduled on": absTxt(m.createdAt),
     };
@@ -56,15 +58,15 @@ function build(meetings: Rec[], people: Rec[], full: boolean, locs: Record<strin
     return row;
   });
   const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ "Date": "No meetings for this selection" }]);
-  const widths = [11, 7, 7, 10, 20, 22, 24, 30, 10, 28, 20, 22, 70, 40, 45, 50, 18, 45, 45, 18, 35, 18, 18, 14, 22];
+  const widths = [11, 7, 7, 10, 20, 22, 24, 30, 10, 28, 20, 22, 70, 40, 45, 50, 18, 45, 45, 18, 35, 18, 20, 40, 18, 14, 22];
   ws["!cols"] = Object.keys(rows[0] || { a: 1 }).map((_, i) => ({ wch: widths[i] || 18 }));
   ws["!autofilter"] = { ref: ws["!ref"] || "A1" };
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Meetings");
   // Summary by person
   const by: Record<string, Rec> = {};
-  meetings.forEach((m) => { const k = name(m.owner); const s = by[k] = by[k] || { "Employee": k, "Meetings": 0, "Held": 0, "Postponed": 0, "Cancelled": 0, "Upcoming / notes due": 0 };
-    s["Meetings"]++; if (m.status === "cancelled") s["Cancelled"]++; else if (m.outcome === "postponed") s["Postponed"]++; else if (m.outcome === "held") s["Held"]++; else s["Upcoming / notes due"]++; });
+  meetings.forEach((m) => { const k = name(m.owner); const s = by[k] = by[k] || { "Employee": k, "Meetings": 0, "Held": 0, "Postponed": 0, "Cancelled": 0, "Deleted": 0, "Upcoming / notes due": 0 };
+    s["Meetings"]++; if (m.status === "deleted") s["Deleted"]++; else if (m.status === "cancelled") s["Cancelled"]++; else if (m.outcome === "postponed") s["Postponed"]++; else if (m.outcome === "held") s["Held"]++; else s["Upcoming / notes due"]++; });
   const ss = XLSX.utils.json_to_sheet(Object.values(by).length ? Object.values(by) : [{ "Employee": "—" }]);
   ss["!cols"] = [{ wch: 24 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, ss, "By person");

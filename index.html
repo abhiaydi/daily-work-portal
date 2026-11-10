@@ -272,6 +272,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .qt{flex:1;min-width:0;display:grid}.qt b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qt small{color:var(--muted);font-size:13px}
 .qchev{color:var(--muted);font-size:12px}.qline .task{margin:0 10px 10px}
 .qopt{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 12px}.qopt summary{cursor:pointer}.crow.opt{margin-top:10px}
+.mch tr.mdeleted td{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--emg)}.mch tr.mdeleted td:last-child,.mch tr.mdeleted td:nth-last-child(2){text-decoration:none}
 .lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
@@ -1652,7 +1653,7 @@ function doCheckin(btn, kind){
 
 /* ----- meetings (sales staff) ----- */
 const stPill = (m,na) => { const s = mState(m,na);
-  return s==='cancelled'?pill('miss','Cancelled'):s==='upcoming'?pill('soon','Upcoming'):s==='notes'?pill('miss','Notes needed'):s==='returned'?pill('miss','Sent back'):s==='review'?pill('locked','Awaiting approval'):pill('open','Approved'); };
+  return s==='deleted'?pill('miss','Deleted'):s==='cancelled'?pill('miss','Cancelled'):s==='upcoming'?pill('soon','Upcoming'):s==='notes'?pill('miss','Notes needed'):s==='returned'?pill('miss','Sent back'):s==='review'?pill('locked','Awaiting approval'):pill('open','Approved'); };
 function geoLine(m, full){
   if (!m.geo) return `<span class="b emg">Meeting check-in not recorded</span>`;
   return full ? `<span class="b">Meeting check-in ${esc(m.geo.time)}${m.geo.auto?' (automatic)':''}</span> ${locLinks(LOCS[m.id])}`
@@ -1690,12 +1691,15 @@ function meetingCard(m, na, mode, reviewer, mgmt){
       : `<div class="row" style="margin-top:6px"><button type="button" class="btn sm ghost" data-act="rs-open" data-id="${m.id}">Reschedule</button><button type="button" class="btn sm ghost" data-act="cx-open" data-id="${m.id}">Cancel meeting</button></div>`;
     (m.resched||[]).slice(-2).forEach(r=>{ h += `<div class="hint" style="margin:4px 0 0">Moved from ${esc(fmtShort(r.from.date))} ${r.from.allDay?'(whole day)':esc(r.from.time)}${r.from.place&&r.from.place!==m.place?' at '+esc(r.from.place):''} on ${esc(fmtAbs(r.at))}${r.reason?' — '+esc(r.reason):''}</div>`; });
     h += `<div class="badges"><span class="b">Reminders:</span>${offs.length?offs.map(o=>`<span class="b ${m.sent&&m.sent['pre'+o]?'asg':''}">${offShort(o)}${m.sent&&m.sent['pre'+o]?' · sent':''}</span>`).join(''):'<span class="b">none left before the meeting</span>'}</div>`;
-  } else h += `<div class="badges">${geoLine(m, mgmt)}</div>`;
+  } else if (m.status!=='deleted') h += `<div class="badges">${geoLine(m, mgmt)}</div>`;
   if (m.geoErr && !m.geo && mode!=='up' && !mgmt) h += `<div class="err">${esc(m.geoErr)}</div>`;
   if (mode==='input' && !m.geo) h += `<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="mgeo" data-id="${m.id}">Check in at meeting</button></div>`;
   if (!mgmt && diaryOpen(m,na)) h += diaryBox(m);
   else if (!mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
   if (mgmt && (m.diary||[]).length) h += `<h3 class="sub" style="margin-top:12px">Meeting diary</h3>${diaryLog(m)}`;
+  if (m.status==='deleted') return h + `<div class="review del-why"><div class="meta"><b>Deleted</b> by ${esc(userName(m.deletedBy))} on ${esc(fmtAbs(m.deletedAt))}${m.prevStatus?` · it was ${esc(MDEL_WAS[m.prevStatus]||m.prevStatus)}`:''}</div><p>${esc(m.deleteReason||'')}</p></div></div>`;
+  if (ui.mdel===m.id) h += meetingDeleteForm(m);
+  else if (canDeleteMeeting(m, ui.user)) h += `<div class="row" style="margin-top:6px"><button type="button" class="linkbtn tf-del" style="margin-left:0" data-act="mdel-open" data-id="${m.id}">Delete meeting…</button></div>`;
   if (m.status==='cancelled'){
     const nb = m.rebookedTo && db.meetings.find(x=>x.id===m.rebookedTo);
     h += `<div class="review"><div class="meta">Cancelled ${m.cancelledAt?'on '+fmtAbs(m.cancelledAt):''}</div><p>${esc(m.cancelReason||'')}</p>
@@ -1755,6 +1759,8 @@ function meetingsView(n){
   h += `</section><section class="card"><div class="sec-h"><h2>Upcoming</h2></div>${up.length?up.map(m=>meetingCard(m,na,'up')).join(''):'<div class="empty">No upcoming meetings.</div>'}</section>`;
   if (cx.length) h += `<section class="card"><div class="sec-h"><h2>Cancelled — follow up</h2>${pill('miss', cx.filter(m=>!m.rebookedTo).length+' to rebook')}</div><p class="hint" style="margin-top:0">Contact the person to set a new meeting. If none is booked within 7 days, you get a reminder.</p>${cx.map(m=>meetingCard(m,na,'done')).join('')}</section>`;
   h += `<section class="card"><div class="sec-h"><h2>Submitted</h2></div>${done.length?done.map(m=>meetingCard(m,na,'done')).join(''):'<div class="empty">No meeting reports submitted yet.</div>'}</section>`;
+  const dl = all.filter(m=>m.status==='deleted').sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+  if (dl.length) h += `<section class="card"><details><summary><b>Deleted meetings (${dl.length})</b> <span class="hint" style="margin:0">— kept on record with who deleted them, when and why</span></summary>${dl.map(m=>meetingCard(m,na,'done')).join('')}</details></section>`;
   return h;
 }
 async function scheduleMeeting(instant){
@@ -1863,7 +1869,7 @@ function fieldDash(people, d){
   let h = `<section class="card"><div class="sec-h"><h2>Field sales</h2><span class="hint" style="margin:0">${fmtDate(d)}</span></div>`;
   fs.forEach(p=>{
     const lg = loginOf(p.id,d), visits = checkinsOf(p.id,d).filter(c=>c.kind!=='login');
-    const ms = meetingsOf(p.id).filter(m=>m.date===d).sort((a,b)=>mStart(a)-mStart(b));
+    const ms = meetingsOf(p.id).filter(m=>m.date===d && m.status!=='deleted').sort((a,b)=>mStart(a)-mStart(b));
     const lp = lg ? pill(lg.late?'miss':'open',`Login ${lg.time} · ${lg.late?'Late':'On time'}`) : (d<n.date || n.mins>toMins(LOGIN_BY)) ? pill('miss','Not logged in') : pill('soon','Not logged in yet');
     h += `<div class="crow"><div class="sec-h" style="margin-bottom:4px"><div class="ctitle">${esc(p.name)} <span class="b">${esc(p.title)}</span></div>${lp}</div>
       ${lg?ciRow(lg,true):''}${visits.map(c=>ciRow(c,true)).join('')}
@@ -1877,7 +1883,7 @@ function summaryPrompt(){
   const lines = people.map(u=>{ const i = personInfo(u, d, n);
     const t = i.act.map(x=>`${x.title} [${x.priority}${x.category==='extra'?', extra':''}${d>x.dueDate?', OVERDUE':''}, ${progOn(x,d)}%]`).join('; ');
     const lg = isField(u.id) ? (loginOf(u.id,d) ? ` login ${loginOf(u.id,d).time}${loginOf(u.id,d).late?' LATE':''};` : ' no login;') : '';
-    const ms = isField(u.id) ? meetingsOf(u.id).filter(m=>m.date===d).map(m=>`meeting ${m.time} with ${m.withWhom} (${mState(m,na)})`).join('; ') : '';
+    const ms = isField(u.id) ? meetingsOf(u.id).filter(m=>m.date===d && m.status!=='deleted').map(m=>`meeting ${m.time} with ${m.withWhom} (${mState(m,na)})`).join('; ') : '';
     return `- ${u.name} (${u.title}): ${i.st};${lg} tasks: ${t||'none'}${ms?'; '+ms:''}`; }).join('\n');
   return `You are helping the management of a power cable accessories company review the day. Today is ${fmtDate(d)}, time ${n.label} (UAE).
 Write a short plain-text summary (no Markdown symbols) with these parts: 1) Overall picture in two sentences. 2) Needs attention now (emergencies, overdue work, missed plans or closures, late sales logins). 3) Sales meetings today. 4) Suggested follow-ups for the manager. Only use the facts below.
@@ -4541,6 +4547,34 @@ function cancelMeeting(btn){
   ui.cx = null; save(); render(); tip('Meeting cancelled', `Remember to follow up with ${m.withWhom}.`);
 }
 
+/* ===== Delete a meeting: it disappears from the lists and reminders, but stays on record (chart, register, the person's Meetings tab)
+   with who deleted it, when, why and what state it was in. ===== */
+const MDEL_WAS = { scheduled:'scheduled', cancelled:'already cancelled', review:'MoM awaiting approval', returned:'MoM sent back', approved:'approved' };
+function canDeleteMeeting(m, me){
+  if (!m || m.status==='deleted') return false;
+  if (isMgmt(me) || reviewersOf(m.owner).some(r=>r.id===me) || (getUser(m.owner).managers||[]).includes(me)) return true;   // manager / GM / CEO: any meeting of their people
+  return m.owner===me && m.status!=='approved';   // the person: until the minutes are approved
+}
+function meetingDeleteForm(m){
+  return `<form class="tform mdelform" data-id="${m.id}" novalidate style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+    <h3 class="sub" style="margin-top:0">Delete this meeting</h3>
+    <p class="hint" style="margin-top:0">It is removed from the meeting lists and reminders stop. It stays on record in the Meeting chart and the register as <b>Deleted</b>, with your name, the time and the reason${m.owner!==ui.user?`, and ${esc(userName(m.owner))} is told`:''}.</p>
+    <label class="f">Why is it being deleted? <span class="req">(required)</span><textarea name="dr" rows="2" placeholder="e.g. Entered twice by mistake; wrong client name"></textarea></label>
+    <div class="err" hidden></div>
+    <div class="row end"><button type="button" class="btn ghost" data-act="mdel-x">Keep meeting</button><button type="button" class="btn" style="background:#b42318;border-color:#b42318" data-act="mdel-save" data-id="${m.id}">Delete meeting</button></div></form>`;
+}
+function deleteMeeting(btn){
+  const f = btn.closest('form'), err = f.querySelector('.err'), reason = f.dr.value.trim(), me = ui.user;
+  const m = db.meetings.find(x=>x.id===btn.dataset.id);
+  if (!canDeleteMeeting(m, me)){ ui.mdel = null; render(); return; }
+  if (words(reason) < 3){ err.hidden = false; err.textContent = 'Please write why the meeting is being deleted (a few words).'; return; }
+  const na = nowAbs();
+  m.prevStatus = m.status; m.status = 'deleted'; m.deleteReason = reason.slice(0, 1000); m.deletedAt = na; m.deletedBy = me;
+  const txt = `${userName(me)} deleted the meeting with ${m.withWhom} on ${fmtShort(m.date)} ${m.allDay?'(whole day)':m.time}${m.owner!==me?` (${userName(m.owner)}'s meeting)`:''}. Reason: ${reason}`;
+  [...new Set([m.owner, ...reviewersOf(m.owner).map(r=>r.id), ...(getUser(m.owner).managers||[])])].filter(x=>x && x!==me).forEach(x=>notify(x, txt, na, m.id));
+  ui.mdel = null; save(); render(); tip('Meeting deleted', 'It stays on record as deleted in the Meeting chart and the register.');
+}
+
 /* ===== Meeting chart: owner, their manager(s), GM and CEO. Short AI brief here; the full register is an Excel file built on the server. ===== */
 const canSeeMeeting = (m, me) => m.owner===me || isMgmt(me) || (getUser(m.owner).managers||[]).includes(me) || reviewersOf(m.owner).some(r=>r.id===me);
 const chartTabFor = id => hasOwnReport(id) || isMgmt(id) || USERS.some(u=>u.id!==id && (u.managers||[]).includes(id));
@@ -4563,7 +4597,7 @@ ${momText(m0).slice(0,6000)}
   }catch(_){ const m = db.meetings.find(x=>x.id===id); if (m){ m.momBriefTry = Date.now(); save(); } }
   finally{ MOM_BUSY.delete(id); }
 }
-const chartStatus = (m, na) => m.status==='cancelled' ? 'Cancelled' : m.status==='approved' ? (m.outcome==='postponed'?'Postponed · approved':'Held · approved') : m.status==='review' ? (m.outcome==='postponed'?'Postponed · awaiting approval':'Held · awaiting approval') : m.status==='returned' ? 'Sent back' : mState(m,na)==='upcoming' ? 'Upcoming' : 'Notes needed';
+const chartStatus = (m, na) => m.status==='deleted' ? `Deleted by ${userName(m.deletedBy)}` : m.status==='cancelled' ? 'Cancelled' : m.status==='approved' ? (m.outcome==='postponed'?'Postponed · approved':'Held · approved') : m.status==='review' ? (m.outcome==='postponed'?'Postponed · awaiting approval':'Held · awaiting approval') : m.status==='returned' ? 'Sent back' : mState(m,na)==='upcoming' ? 'Upcoming' : 'Notes needed';
 function meetingChartView(){
   const me = ui.user, na = nowAbs(), n = now(), st = ui.mch = ui.mch || { month:n.date.slice(0,7), who:'' };
   const all = (db.meetings||[]).filter(m=>canSeeMeeting(m, me));
@@ -4579,8 +4613,8 @@ function meetingChartView(){
   if (!rows.length) return h + note('No meetings for this selection.') + '</section>';
   h += `<div class="mch-wrap"><table class="mch"><thead><tr><th>Date</th>${people.length>1?'<th>Employee</th>':''}<th>Meeting with</th><th>Place</th><th>Status</th><th>MoM in brief (AI)</th></tr></thead><tbody>`;
   rows.forEach(m=>{
-    const brief = m.status==='cancelled' ? 'Cancelled: '+(m.cancelReason||'') : m.momBrief && m.momBriefFor===momSig(m) ? m.momBrief : momText(m) ? (MOM_BUSY.has(m.id)?'Summarising…':'Summary will appear shortly.') : '—';
-    h += `<tr><td class="nw">${esc(fmtShort(m.date))}<br><small>${m.allDay?'Whole day':esc(m.time)+' · '+durLabel(mDur(m))}</small></td>${people.length>1?`<td>${esc(userName(m.owner))}</td>`:''}
+    const brief = m.status==='deleted' ? `Deleted ${fmtAbs(m.deletedAt)}: ${m.deleteReason||''}` : m.status==='cancelled' ? 'Cancelled: '+(m.cancelReason||'') : m.momBrief && m.momBriefFor===momSig(m) ? m.momBrief : momText(m) ? (MOM_BUSY.has(m.id)?'Summarising…':'Summary will appear shortly.') : '—';
+    h += `<tr class="${m.status==='deleted'?'mdeleted':''}"><td class="nw">${esc(fmtShort(m.date))}<br><small>${m.allDay?'Whole day':esc(m.time)+' · '+durLabel(mDur(m))}</small></td>${people.length>1?`<td>${esc(userName(m.owner))}</td>`:''}
       <td><b>${esc(m.withWhom)}</b><br><small>${esc(m.purpose)}</small></td>
       <td>${(m.mode||'person')==='online'?'Online':m.place?`<a href="${gmapsPlace(m)}" target="_blank" rel="noopener">${esc(m.place)}</a>`:'—'}</td>
       <td class="nw">${esc(chartStatus(m,na))}${(m.resched||[]).length?'<br><small>Rescheduled</small>':''}</td><td>${esc(brief)}</td></tr>`; });
@@ -5153,6 +5187,9 @@ document.addEventListener('click', e=>{
   else if (act==='rs-save'){ rescheduleMeeting(a); return; }
   else if (act==='cx-open'){ ui.cx = a.dataset.id; ui.rs = null; render(); return; }
   else if (act==='cx-close'){ ui.cx = null; render(); return; }
+  else if (act==='mdel-open'){ ui.mdel = a.dataset.id; ui.cx = null; ui.rs = null; render(); setTimeout(()=>document.querySelector('.mdelform textarea')?.focus(), 50); return; }
+  else if (act==='mdel-x'){ ui.mdel = null; render(); return; }
+  else if (act==='mdel-save'){ deleteMeeting(a); return; }
   else if (act==='cx-save'){ cancelMeeting(a); return; }
   else if (act==='cx-rebook'){ ui.rebook = a.dataset.id; ui.view = 'meet'; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
   else if (act==='cx-rebook-x'){ ui.rebook = null; render(); return; }
