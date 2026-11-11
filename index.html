@@ -274,6 +274,30 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .qopt{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 12px}.qopt summary{cursor:pointer}.crow.opt{margin-top:10px}
 .mch tr.mdeleted td{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--emg)}.mch tr.mdeleted td:last-child,.mch tr.mdeleted td:nth-last-child(2){text-decoration:none}
 .mtg-hr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.mdel-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--emg-bg)}
+/* My work side panel */
+#workPanel{position:fixed;z-index:60;right:16px;top:96px;bottom:150px;width:330px;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(15,23,42,.18);overflow:hidden;animation:wpIn .18s ease-out}
+@keyframes wpIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.wp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:14px 16px 10px;border-bottom:1px solid var(--line);background:var(--accent-soft)}
+.wp-head b{display:block;font:700 16px var(--f-display)}.wp-head small{color:var(--muted);font-size:13px}
+.wp-x{all:unset;cursor:pointer;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:var(--muted)}.wp-x:hover,.wp-x:focus-visible{background:var(--card);color:var(--ink)}
+.wp-body{flex:1;overflow:auto;padding:6px 10px 12px}
+.wp-g{margin-top:10px}.wp-gh{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:0 6px 4px;display:flex;justify-content:space-between}
+.wp-it{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;padding:8px;border-radius:10px}
+.wp-it:hover,.wp-it:focus-visible{background:var(--bg);outline:none;box-shadow:inset 0 0 0 1px var(--accent)}
+.wp-it.done .wp-t b{text-decoration:line-through;color:var(--muted)}
+.wp-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent)}.wp-dot.late{background:var(--emg)}.wp-dot.ok{background:var(--ok)}.wp-dot.meet{background:var(--brand)}
+.wp-t{flex:1;min-width:0;display:grid}.wp-t b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wp-t small{font-size:12px;color:var(--muted)}.wp-late{color:var(--emg);font-weight:600}
+#wpTab{position:fixed;z-index:59;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;display:flex;align-items:center;gap:8px;padding:14px 8px;border:1px solid var(--line);border-right:0;border-radius:12px 0 0 12px;background:var(--card);color:var(--ink);font:600 13px var(--f-body,inherit);cursor:pointer;box-shadow:-4px 4px 16px rgba(15,23,42,.12)}
+#wpTab b{writing-mode:horizontal-tb;min-width:20px;height:20px;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;display:grid;place-items:center;padding:0 5px}
+#wpTab .wp-ic{writing-mode:horizontal-tb}#wpTab.pulse{animation:wpPulse 1.2s ease-out 2}@keyframes wpPulse{0%{box-shadow:0 0 0 0 var(--accent)}100%{box-shadow:0 0 0 14px transparent}}#wpTab:focus-visible{outline:2px solid var(--accent)}
+.task.flash,.qline.flash{animation:wpFlash 1.6s ease-out}
+@keyframes wpFlash{0%,40%{box-shadow:0 0 0 4px var(--accent-soft),0 0 0 6px var(--accent)}100%{box-shadow:none}}
+@media (min-width:1180px){ body.wp-on .wrap{margin-right:370px;margin-left:max(16px,calc(100% - 370px - 1000px))} }
+@media (max-width:1179px){
+  #workPanel{z-index:950;left:0;right:0;top:auto;bottom:0;width:auto;max-height:62vh;border-radius:18px 18px 0 0;animation:wpUp .2s ease-out}
+  @keyframes wpUp{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+  #wpTab{top:auto;bottom:16px;right:auto;left:16px;transform:none;writing-mode:horizontal-tb;border-right:1px solid var(--line);border-radius:999px;padding:10px 14px}
+}
 .lw-wrap{margin:-2px 0 8px 0;padding-left:4px}.lw-st{font-size:13px;background:var(--soft,#f3f4f6);border-radius:8px;padding:6px 10px}.lw-f{display:grid;gap:6px;border:1px dashed var(--line);border-radius:10px;padding:8px 10px}.lw-t{width:100%;box-sizing:border-box}
 .rr-line{border-radius:8px;padding:6px 10px;background:var(--soft,#f3f4f6);font-size:14px}
 .trbox{margin:6px 0;display:grid;gap:6px}.trv{border-left:3px solid var(--brand,#1d4ed8);background:rgba(29,78,216,.06);border-radius:8px;padding:8px 12px}.trv p{white-space:pre-wrap}.trv .meta{font-size:13px}.trv p{margin:2px 0 0}
@@ -849,7 +873,7 @@ function timeline(ph, userId){
 function taskCard(t, n, showOwner){
   const d = n.date, dayN = diffDays(t.startDate,d)+1, carried = t.startDate<d, overdue = d>t.dueDate;
   const editable = canEdit(t, ui.user, n);
-  return `<div class="task">
+  return `<div class="task" id="tk-${t.id}">
     <div class="task-top">
       <div class="task-title">${showOwner?`<span class="b">${esc(userName(t.owner))}</span> `:''}${esc(t.title)}</div>
       ${editable
@@ -4450,6 +4474,76 @@ document.addEventListener('change', e=>{ const id = e.target.id; if (id!=='mfMon
 let MF_T = null;
 document.addEventListener('input', e=>{ if (e.target.id!=='mfQ') return; const v = e.target.value; clearTimeout(MF_T); MF_T = setTimeout(()=>{ (ui.mf = ui.mf || {}).q = v; render(); const i = document.getElementById('mfQ'); if (i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 300); });
 
+/* ===== "My work" side panel: opens on the right while someone writes their morning plan, additional work or closure report,
+   so they can see everything else on their list. Tap an item to jump to it. On phones it is a bar at the bottom that opens as a sheet. ===== */
+const WP = { open:false, dismissed:false, sheet:false };
+function wpItems(me, n){
+  const d = n.date, act = activeTasks(me, d), item = (t, extra) => ({ t, ...extra });
+  const carried = act.filter(t=>t.startDate<d), quiet = carried.filter(t=>quietTask(t, d));
+  return {
+    due: carried.filter(t=>!quietTask(t, d)).map(t=>item(t)),
+    planned: act.filter(t=>t.startDate===d && t.category==='planned').map(t=>item(t)),
+    extra: act.filter(t=>t.startDate===d && t.category==='extra').map(t=>item(t)),
+    quiet: quiet.map(t=>item(t)),
+    wait: db.tasks.filter(t=>t.owner===me && t.awaitRev && !t.completedOn && t.awaitRev<d).map(t=>item(t)),
+    meet: meetingsOf(me).filter(m=>m.date===d && ['scheduled','review','returned','approved'].includes(m.status)).sort((a,b)=>(a.allDay?'00:00':a.time).localeCompare(b.allDay?'00:00':b.time)),
+  };
+}
+function wpRow(t, d, sub){
+  const p = progOn(t, d), late = d > t.dueDate, done = p>=100 || t.awaitRev===d;
+  return `<button type="button" class="wp-it ${done?'done':''}" data-act="wp-go" data-id="${t.id}"><span class="wp-dot ${late?'late':done?'ok':''}" aria-hidden="true"></span>
+    <span class="wp-t"><b>${esc(t.title)}</b><small>${sub || ''}${sub?' · ':''}${done?'done':p+'%'}${late?` · <span class="wp-late">${diffDays(t.dueDate, d)}d late</span>`:t.dueDate>d?` · due ${esc(fmtShort(t.dueDate))}`:' · due today'}</small></span>${t.priority==='Emergency'?'<span class="b emg">!</span>':''}</button>`;
+}
+function wpHtml(n){
+  const me = ui.user, d = n.date, w = wpItems(me, n), all = w.due.length + w.planned.length + w.extra.length + w.quiet.length;
+  const left = [...w.due, ...w.planned, ...w.extra].filter(x=>progOn(x.t, d)<100 && x.t.awaitRev!==d).length;
+  const grp = (title, list, sub) => list.length ? `<div class="wp-g"><div class="wp-gh">${title} <span>${list.length}</span></div>${list.map(x=>wpRow(x.t, d, sub && sub(x.t))).join('')}</div>` : '';
+  return `<div class="wp-head"><div><b>My work today</b><small>${all} task${all===1?'':'s'} · ${left} still to do${w.meet.length?` · ${w.meet.length} meeting${w.meet.length===1?'':'s'}`:''}</small></div>
+      <button type="button" class="wp-x" data-act="wp-close" aria-label="Close my work panel">✕</button></div>
+    <div class="wp-body">
+      ${all || w.meet.length || w.wait.length ? '' : '<p class="hint" style="margin:8px 0">Nothing on your list yet. What you add appears here straight away.</p>'}
+      ${grp('Pending from previous days', w.due, t=>`day ${diffDays(t.startDate, d)+1} of ${t.days}`)}
+      ${grp('Planned today', w.planned)}
+      ${grp('Additional work', w.extra)}
+      ${w.meet.length?`<div class="wp-g"><div class="wp-gh">Meetings today <span>${w.meet.length}</span></div>${w.meet.map(m=>`<button type="button" class="wp-it" data-act="view" data-v="meet"><span class="wp-dot meet" aria-hidden="true"></span><span class="wp-t"><b>${esc(m.withWhom)}</b><small>${m.allDay?'Whole day':esc(m.time)}${m.place?' · '+esc(m.place):''}</small></span></button>`).join('')}</div>`:''}
+      ${grp('Ongoing — not due yet', w.quiet, t=>`${daysLeft(t, d)} days left`)}
+      ${grp('Finished — waiting for review', w.wait)}
+    </div>`;
+}
+function wpShouldShow(){ return ui.authed && ui.view==='staff' && (WP.open || WP.sheet); }
+function paintWorkPanel(){
+  let el = document.getElementById('workPanel'), tab = document.getElementById('wpTab');
+  const onDay = ui.authed && ui.view==='staff' && !(isField(ui.user) && !loginOf(ui.user, now().date));
+  if (!onDay){ if (el) el.remove(); if (tab) tab.remove(); document.body.classList.remove('wp-on'); return; }
+  if (!tab){ tab = document.createElement('button'); tab.id = 'wpTab'; tab.type = 'button'; tab.dataset.act = 'wp-open'; document.body.appendChild(tab); }
+  const n = now(), w = wpItems(ui.user, n), cnt = [...w.due, ...w.planned, ...w.extra].filter(x=>progOn(x.t, n.date)<100 && x.t.awaitRev!==n.date).length;
+  tab.innerHTML = `<span class="wp-ic" aria-hidden="true">☰</span><span>My work</span>${cnt?`<b>${cnt}</b>`:''}`; tab.setAttribute('aria-label', `Show my work list, ${cnt} still to do`);
+  tab.hidden = WP.open;
+  if (!WP.open){ if (el) el.remove(); document.body.classList.remove('wp-on'); return; }
+  if (!el){ el = document.createElement('aside'); el.id = 'workPanel'; el.setAttribute('aria-label', 'My work today'); document.body.appendChild(el); }
+  const sc = el.querySelector('.wp-body')?.scrollTop || 0;
+  el.innerHTML = wpHtml(n); const b = el.querySelector('.wp-body'); if (b) b.scrollTop = sc;
+  document.body.classList.add('wp-on');
+}
+/* On a computer it opens beside the form. On a phone it would cover what is being typed, so the "My work" button pulses instead. */
+function wpOpen(auto){
+  if (auto && WP.dismissed) return;
+  if (auto && matchMedia('(max-width: 1179px)').matches){ const tb = document.getElementById('wpTab'); if (tb){ tb.classList.remove('pulse'); void tb.offsetWidth; tb.classList.add('pulse'); } return; }
+  if (!WP.open){ WP.open = true; paintWorkPanel(); }
+}
+/* opens by itself when the person starts writing a task, additional work or the closure report */
+document.addEventListener('focusin', e=>{
+  const f = e.target.closest && e.target.closest('form.tform[data-kind="self"], #closureCard');
+  if (f && ui.view==='staff') wpOpen(true);
+});
+function wpGo(id){
+  const d = now().date, t = db.tasks.find(x=>x.id===id); if (!t) return;
+  if (quietTask(t, d)){ (ui.qOpen = ui.qOpen || {})[id] = true; render(); }
+  if (matchMedia('(max-width: 1179px)').matches){ WP.open = false; paintWorkPanel(); }
+  const el = document.getElementById('tk-'+id) || document.getElementById('q-'+id);
+  if (el){ el.scrollIntoView({ behavior:'smooth', block:'center' }); el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'), 1600); }
+}
+
 /* ===== Deleting tasks: the work is not lost. A full record (schedule, parts, colleagues, progress, files, comments, who deleted it, when and why)
    is kept in "deleted" and shown on the dashboard, in the person's report, in My team, and on My day of everyone involved. ===== */
 /* Once work has been submitted (reported in a closure report or closed) or a manager has reviewed it, only the person's manager or the admin (GM/CEO) can delete it. */
@@ -4834,7 +4928,7 @@ function render(){
   const gate = ui.authed && isField(ui.user) && !loginOf(ui.user, n.date);
   tabsEl.hidden = !ui.authed || gate;
   ensureFab(ui.authed && !gate); ensureChatFab(ui.authed && !gate); if (!ui.authed && CHAT.open){ CHAT.open = false; paintChat(); }
-  if (!ui.authed){ who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
+  if (!ui.authed){ paintWorkPanel(); who.innerHTML = ''; main.innerHTML = !sb ? setupView() : ui.noAccess ? noAccessView() : loginView(); flushFresh(); return; }
   SUM_REQ = null;
   main.innerHTML = gate ? gateView(n)
     : ui.view==='dash' ? dashView(n) : ui.view==='appr' ? approvalsView(n) : ui.view==='activity' ? activityView(n) : ui.view==='files' ? archiveView(n) : ui.view==='myfiles' ? myFilesView(n) : ui.view==='mydash' ? myDashView(n) : ui.view==='proj' ? projectsView(n) : ui.view==='photos' ? photosView() : ui.view==='staff' ? staffView(n) : ui.view==='assign' ? assignView(n)
@@ -4848,6 +4942,7 @@ function render(){
     <button class="btn sm ghost bell" data-act="view" data-v="alerts" aria-label="Notifications">${BELL}${unread?`<span class="cnt">${unread}</span>`:''}</button>
     <button class="btn sm ghost" data-act="logout">Log out</button>`;
   flushFresh();
+  paintWorkPanel();
   decorateSTT(); fillImgs(); if (SUM_REQ) setTimeout(()=>ensureDaySummaries(SUM_REQ.ids, SUM_REQ.d), 0); document.querySelectorAll(".pchat").forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
 
@@ -5221,6 +5316,9 @@ document.addEventListener('click', e=>{
     notify(owner, `CEO review of your closure report (${fmtShort(k.split('|')[1])}): ${msg}`, nowAbs(), null);
   }
   else if (act==='tr-save'){ saveTaskReview(a); return; }
+  else if (act==='wp-open'){ WP.dismissed = false; WP.open = true; paintWorkPanel(); return; }
+  else if (act==='wp-close'){ WP.open = false; WP.dismissed = true; paintWorkPanel(); return; }
+  else if (act==='wp-go'){ wpGo(a.dataset.id); return; }
   else if (act==='rep-open'){ (ui.rep = ui.rep || {}).who = a.dataset.id; ui.reviewDate = a.dataset.d; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
   else if (act==='rep-all'){ (ui.rep = ui.rep || {}).who = 'all'; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
   else if (act==='rep-day'){ const t0 = now().date, k = +a.dataset.k, cur = ui.reviewDate || t0; ui.reviewDate = k===0 ? t0 : addDays(cur, k); if (ui.reviewDate > t0) ui.reviewDate = t0; render(); return; }
