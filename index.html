@@ -286,7 +286,7 @@ tr.row-on td{background:rgba(22,163,74,.06)}.dgrp summary{cursor:pointer}
 .wp-it:hover,.wp-it:focus-visible{background:var(--bg);outline:none;box-shadow:inset 0 0 0 1px var(--accent)}
 .wp-it.done .wp-t b{text-decoration:line-through;color:var(--muted)}
 .wp-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent)}.wp-dot.late{background:var(--emg)}.wp-dot.ok{background:var(--ok)}.wp-dot.meet{background:var(--brand)}
-.wp-t{flex:1;min-width:0;display:grid}.wp-t b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wp-t small{font-size:12px;color:var(--muted)}.wp-late{color:var(--emg);font-weight:600}
+.wp-t{flex:1;min-width:0;display:grid}.wp-t b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wp-t small{font-size:12px;color:var(--muted)}.wp-late{color:var(--emg);font-weight:600}.wp-go{color:var(--muted);font-size:18px}
 #wpTab{position:fixed;z-index:59;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;display:flex;align-items:center;gap:8px;padding:14px 8px;border:1px solid var(--line);border-right:0;border-radius:12px 0 0 12px;background:var(--card);color:var(--ink);font:600 13px var(--f-body,inherit);cursor:pointer;box-shadow:-4px 4px 16px rgba(15,23,42,.12)}
 #wpTab b{writing-mode:horizontal-tb;min-width:20px;height:20px;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;display:grid;place-items:center;padding:0 5px}
 #wpTab .wp-ic{writing-mode:horizontal-tb}#wpTab.pulse{animation:wpPulse 1.2s ease-out 2}@keyframes wpPulse{0%{box-shadow:0 0 0 0 var(--accent)}100%{box-shadow:0 0 0 14px transparent}}#wpTab:focus-visible{outline:2px solid var(--accent)}
@@ -4476,7 +4476,9 @@ document.addEventListener('input', e=>{ if (e.target.id!=='mfQ') return; const v
 
 /* ===== "My work" side panel: opens on the right while someone writes their morning plan, additional work or closure report,
    so they can see everything else on their list. Tap an item to jump to it. On phones it is a bar at the bottom that opens as a sheet. ===== */
-const WP = { open:false, dismissed:false, sheet:false };
+const WP_OFF_VIEWS = ['mydash','photos','alerts','account'];   // every other menu shows the panel
+const WP = { open:(()=>{ try{ return matchMedia('(min-width: 1180px)').matches && localStorage.getItem('wpClosed')!=='1'; }catch(_){ return false; } })(), dismissed:false, sheet:false };
+const wpRemember = closed => { try{ closed ? localStorage.setItem('wpClosed','1') : localStorage.removeItem('wpClosed'); }catch(_){ } };
 function wpItems(me, n){
   const d = n.date, act = activeTasks(me, d), item = (t, extra) => ({ t, ...extra });
   const carried = act.filter(t=>t.startDate<d), quiet = carried.filter(t=>quietTask(t, d));
@@ -4494,14 +4496,28 @@ function wpRow(t, d, sub){
   return `<button type="button" class="wp-it ${done?'done':''}" data-act="wp-go" data-id="${t.id}"><span class="wp-dot ${late?'late':done?'ok':''}" aria-hidden="true"></span>
     <span class="wp-t"><b>${esc(t.title)}</b><small>${sub || ''}${sub?' · ':''}${done?'done':p+'%'}${late?` · <span class="wp-late">${diffDays(t.dueDate, d)}d late</span>`:t.dueDate>d?` · due ${esc(fmtShort(t.dueDate))}`:' · due today'}</small></span>${t.priority==='Emergency'?'<span class="b emg">!</span>':''}</button>`;
 }
+/* Things waiting for this person as a manager / reviewer, each one tap away */
+function wpAttention(me){
+  const out = [], ids = reportsOf(me).map(r=>r.id);
+  const nRep = Object.keys(db.closures).filter(k=>ids.includes(k.split('|')[0]) && !db.closures[k].review).length + (isCeo(me) ? Object.keys(db.closures).filter(k=>needsCeoReview(k.split('|')[0]) && !db.closures[k].ceoReview).length : 0);
+  if (nRep) out.push({ v:'review', t:`${nRep} closure report${nRep===1?'':'s'} to review` });
+  const nFin = awaitingForMgr(me).length; if (nFin) out.push({ v:'review', t:`${nFin} finished task${nFin===1?'':'s'} waiting for your review` });
+  const nMt = (db.meetings||[]).filter(m=>m.status==='review' && canReviewMeeting(m, me)).length; if (nMt) out.push({ v:'mrev', t:`${nMt} meeting minute${nMt===1?'':'s'} to approve` });
+  const nCr = db.tasks.reduce((s,t)=>s + (t.cr||[]).filter(c=>(c.who===me && c.status==='pending') || (['declined','escalated'].includes(c.status) && crMgrs(c.who).includes(me))).length, 0);
+  if (nCr) out.push({ v: hasOwnReport(me) ? 'staff' : 'collab', t:`${nCr} collaboration request${nCr===1?'':'s'} to answer` });
+  if (isGm(me)){ const c = gmPendingCount(me); if (c) out.push({ v:'appr', t:`${c} approval${c===1?'':'s'} waiting` }); }
+  const unread = db.notifications.filter(x=>x.owner===me && !x.read).length; if (unread) out.push({ v:'alerts', t:`${unread} unread notification${unread===1?'':'s'}` });
+  return out.filter(x=>allTabs(me).some(t=>t[0]===x.v) || x.v==='alerts');
+}
 function wpHtml(n){
-  const me = ui.user, d = n.date, w = wpItems(me, n), all = w.due.length + w.planned.length + w.extra.length + w.quiet.length;
+  const me = ui.user, d = n.date, w = hasOwnReport(me) ? wpItems(me, n) : { due:[], planned:[], extra:[], quiet:[], wait:[], meet:[] }, all = w.due.length + w.planned.length + w.extra.length + w.quiet.length, att = wpAttention(me);
   const left = [...w.due, ...w.planned, ...w.extra].filter(x=>progOn(x.t, d)<100 && x.t.awaitRev!==d).length;
   const grp = (title, list, sub) => list.length ? `<div class="wp-g"><div class="wp-gh">${title} <span>${list.length}</span></div>${list.map(x=>wpRow(x.t, d, sub && sub(x.t))).join('')}</div>` : '';
-  return `<div class="wp-head"><div><b>My work today</b><small>${all} task${all===1?'':'s'} · ${left} still to do${w.meet.length?` · ${w.meet.length} meeting${w.meet.length===1?'':'s'}`:''}</small></div>
+  return `<div class="wp-head"><div><b>${hasOwnReport(me)?'My work today':'What needs you'}</b><small>${hasOwnReport(me)?`${all} task${all===1?'':'s'} · ${left} still to do${w.meet.length?` · ${w.meet.length} meeting${w.meet.length===1?'':'s'}`:''}`:`${att.length} item${att.length===1?'':'s'}`}</small></div>
       <button type="button" class="wp-x" data-act="wp-close" aria-label="Close my work panel">✕</button></div>
     <div class="wp-body">
-      ${all || w.meet.length || w.wait.length ? '' : '<p class="hint" style="margin:8px 0">Nothing on your list yet. What you add appears here straight away.</p>'}
+      ${att.length?`<div class="wp-g"><div class="wp-gh">Needs your attention <span>${att.length}</span></div>${att.map(x=>`<button type="button" class="wp-it" data-act="view" data-v="${x.v}"><span class="wp-dot late" aria-hidden="true"></span><span class="wp-t"><b>${esc(x.t)}</b></span><span class="wp-go" aria-hidden="true">›</span></button>`).join('')}</div>`:''}
+      ${all || w.meet.length || w.wait.length || att.length ? '' : `<p class="hint" style="margin:8px 0">${hasOwnReport(me)?'Nothing on your list yet. What you add appears here straight away.':'Nothing waiting for you right now.'}</p>`}
       ${grp('Pending from previous days', w.due, t=>`day ${diffDays(t.startDate, d)+1} of ${t.days}`)}
       ${grp('Planned today', w.planned)}
       ${grp('Additional work', w.extra)}
@@ -4513,10 +4529,10 @@ function wpHtml(n){
 function wpShouldShow(){ return ui.authed && ui.view==='staff' && (WP.open || WP.sheet); }
 function paintWorkPanel(){
   let el = document.getElementById('workPanel'), tab = document.getElementById('wpTab');
-  const onDay = ui.authed && ui.view==='staff' && !(isField(ui.user) && !loginOf(ui.user, now().date));
+  const onDay = ui.authed && !WP_OFF_VIEWS.includes(ui.view) && !(isField(ui.user) && !loginOf(ui.user, now().date));
   if (!onDay){ if (el) el.remove(); if (tab) tab.remove(); document.body.classList.remove('wp-on'); return; }
   if (!tab){ tab = document.createElement('button'); tab.id = 'wpTab'; tab.type = 'button'; tab.dataset.act = 'wp-open'; document.body.appendChild(tab); }
-  const n = now(), w = wpItems(ui.user, n), cnt = [...w.due, ...w.planned, ...w.extra].filter(x=>progOn(x.t, n.date)<100 && x.t.awaitRev!==n.date).length;
+  const n = now(), w = wpItems(ui.user, n), cnt = (hasOwnReport(ui.user) ? [...w.due, ...w.planned, ...w.extra].filter(x=>progOn(x.t, n.date)<100 && x.t.awaitRev!==n.date).length : 0) + wpAttention(ui.user).length;
   tab.innerHTML = `<span class="wp-ic" aria-hidden="true">☰</span><span>My work</span>${cnt?`<b>${cnt}</b>`:''}`; tab.setAttribute('aria-label', `Show my work list, ${cnt} still to do`);
   tab.hidden = WP.open;
   if (!WP.open){ if (el) el.remove(); document.body.classList.remove('wp-on'); return; }
@@ -4534,11 +4550,13 @@ function wpOpen(auto){
 /* opens by itself when the person starts writing a task, additional work or the closure report */
 document.addEventListener('focusin', e=>{
   const f = e.target.closest && e.target.closest('form.tform[data-kind="self"], #closureCard');
-  if (f && ui.view==='staff') wpOpen(true);
+  if (f && !WP_OFF_VIEWS.includes(ui.view)) wpOpen(true);
 });
 function wpGo(id){
   const d = now().date, t = db.tasks.find(x=>x.id===id); if (!t) return;
-  if (quietTask(t, d)){ (ui.qOpen = ui.qOpen || {})[id] = true; render(); }
+  if (ui.view!=='staff'){ ui.view = 'staff'; if (isAdminUser(ui.user)) ui.portal = 'work'; }
+  if (quietTask(t, d)) (ui.qOpen = ui.qOpen || {})[id] = true;
+  render();
   if (matchMedia('(max-width: 1179px)').matches){ WP.open = false; paintWorkPanel(); }
   const el = document.getElementById('tk-'+id) || document.getElementById('q-'+id);
   if (el){ el.scrollIntoView({ behavior:'smooth', block:'center' }); el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'), 1600); }
@@ -5245,7 +5263,7 @@ document.addEventListener('submit', e=>{
 document.addEventListener('click', e=>{
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
-  if (act==='view'){ ui.view = a.dataset.v; ui.editing=null; }
+  if (act==='view'){ ui.view = a.dataset.v; ui.editing=null; if (a.closest('#workPanel') && matchMedia('(max-width: 1179px)').matches) WP.open = false; }
   else if (act==='portal'){ if (!isAdminUser(ui.user)) return; ui.portal = a.dataset.p; ui.view = tabsFor(ui.user)[0][0]; ui.editing = null; ui.proj = null; save(); render(); window.scrollTo(0,0); return; }
   else if (act==='edit'){ ui.editing = a.dataset.id; render(); document.querySelector('.tform input[name=title]')?.focus(); return; }
   else if (act==='cancel-edit'){ ui.editing = null; }
@@ -5316,8 +5334,8 @@ document.addEventListener('click', e=>{
     notify(owner, `CEO review of your closure report (${fmtShort(k.split('|')[1])}): ${msg}`, nowAbs(), null);
   }
   else if (act==='tr-save'){ saveTaskReview(a); return; }
-  else if (act==='wp-open'){ WP.dismissed = false; WP.open = true; paintWorkPanel(); return; }
-  else if (act==='wp-close'){ WP.open = false; WP.dismissed = true; paintWorkPanel(); return; }
+  else if (act==='wp-open'){ WP.dismissed = false; WP.open = true; wpRemember(false); paintWorkPanel(); return; }
+  else if (act==='wp-close'){ WP.open = false; WP.dismissed = true; wpRemember(true); paintWorkPanel(); return; }
   else if (act==='wp-go'){ wpGo(a.dataset.id); return; }
   else if (act==='rep-open'){ (ui.rep = ui.rep || {}).who = a.dataset.id; ui.reviewDate = a.dataset.d; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
   else if (act==='rep-all'){ (ui.rep = ui.rep || {}).who = 'all'; render(); window.scrollTo({ top:0, behavior:'smooth' }); return; }
